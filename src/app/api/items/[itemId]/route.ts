@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireSession, requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
+import { ItemPatchSchema, ITEM_TRANSITIONS, badRequest } from "@/lib/schemas";
 import Item from "@/models/Item";
-import "@/models/Vendor"; // registers the Vendor schema so .populate("vendorId") resolves
 import { Types } from "mongoose";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 
@@ -12,8 +11,8 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ itemId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireSession();
+  if (isAuthFail(gate)) return gate.response;
 
   const { itemId } = await params;
   await connectDB();
@@ -31,18 +30,22 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ itemId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.items);
+  if (isAuthFail(gate)) return gate.response;
+  const { session } = gate;
 
   const { itemId } = await params;
-  const body = await req.json();
+  const parsed = ItemPatchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return badRequest(parsed.error);
+  const body = parsed.data;
+
   await connectDB();
 
   const item = await Item.findById(itemId);
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
 
   if (body.reviewDecision) {
-    const { decision, note } = body.reviewDecision as { decision: string; note?: string };
+    const { decision, note } = body.reviewDecision;
     item.reviewDecision = {
       decision,
       note: note ?? "",
@@ -59,6 +62,15 @@ export async function PATCH(
   }
 
   if (body.status) {
+    // Guard the lifecycle: only declared transitions from the item's
+    // current status are allowed — the field used to be assigned verbatim.
+    const allowed = ITEM_TRANSITIONS[item.status as string] ?? [];
+    if (body.status !== item.status && !allowed.includes(body.status)) {
+      return NextResponse.json(
+        { error: `Cannot move item from "${item.status}" to "${body.status}"` },
+        { status: 400 }
+      );
+    }
     item.status = body.status;
   }
 
@@ -76,11 +88,7 @@ export async function PATCH(
   }
 
   if (body.pricing) {
-    const { costPerUnit, msrp, ruePrice } = body.pricing as {
-      costPerUnit?: number;
-      msrp?: number;
-      ruePrice?: number;
-    };
+    const { costPerUnit, msrp, ruePrice } = body.pricing;
     item.pricingHistory.push({ costPerUnit, msrp, ruePrice, source: "manual_update" });
   }
 

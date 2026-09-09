@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
+import { PaymentCreateSchema, badRequest } from "@/lib/schemas";
+import { PAYMENT_STATUSES } from "@/lib/enums";
 import Payment from "@/models/Payment";
 import Vendor from "@/models/Vendor";
 import PurchaseOrder from "@/models/PurchaseOrder";
 
 // GET: list payments, most recently updated first. Supports ?status=... filter.
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.payables);
+  if (isAuthFail(gate)) return gate.response;
 
   await connectDB();
-  const status = req.nextUrl.searchParams.get("status");
+  const statusParam = req.nextUrl.searchParams.get("status");
+  const status =
+    statusParam && (PAYMENT_STATUSES as readonly string[]).includes(statusParam)
+      ? statusParam
+      : undefined;
   const query = status ? { status } : {};
   const payments = await Payment.find(query)
     .populate("vendorId", "name")
@@ -28,15 +33,13 @@ export async function GET(req: NextRequest) {
 // or credit. Due date defaults from the vendor's paymentTermsDays when not
 // given explicitly, per the blueprint's "due-date calc from vendor terms".
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.payables);
+  if (isAuthFail(gate)) return gate.response;
+  const { session } = gate;
 
-  const body = await req.json();
-  const { poId, vendorId, tranche, invoiceRef, amountDue, dueDate, creditAppliedFrom } = body;
-
-  if (!poId || !vendorId || !tranche) {
-    return NextResponse.json({ error: "poId, vendorId and tranche are required" }, { status: 400 });
-  }
+  const parsed = PaymentCreateSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return badRequest(parsed.error);
+  const { poId, vendorId, tranche, invoiceRef, amountDue, dueDate, creditAppliedFrom } = parsed.data;
 
   await connectDB();
 

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { Types } from "mongoose";
-import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
+import { ImportRowPatchSchema, badRequest } from "@/lib/schemas";
 import ImportBatch from "@/models/ImportBatch";
 import ImportBatchRow from "@/models/ImportBatchRow";
 
@@ -14,16 +14,14 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ batchId: string; rowId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.adminOnly);
+  if (isAuthFail(gate)) return gate.response;
+  const { session } = gate;
 
   const { batchId, rowId } = await params;
-  const body = await req.json();
-  const { reviewStatus, coercedOverrides, reviewNote } = body as {
-    reviewStatus?: "approved" | "rejected" | "needs_review";
-    coercedOverrides?: Record<string, unknown>;
-    reviewNote?: string;
-  };
+  const parsed = ImportRowPatchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return badRequest(parsed.error);
+  const { reviewStatus, coercedOverrides, reviewNote } = parsed.data;
 
   await connectDB();
   const batch = await ImportBatch.findById(batchId);

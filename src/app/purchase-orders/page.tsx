@@ -1,10 +1,10 @@
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import PurchaseOrder from "@/models/PurchaseOrder";
-import "@/models/Vendor"; // registers the Vendor schema so .populate("vendorId") resolves
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { StatCard } from "@/components/ui/StatCard";
+import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { ClipboardList, Ship, TriangleAlert, DollarSign } from "lucide-react";
 import { PO_STATUS_LABEL, PO_STATUS_TONE } from "@/lib/statusDisplay";
 
@@ -12,19 +12,32 @@ const TH_CLASS =
   "text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap";
 const TD_CLASS = "px-4 py-3 text-[0.85rem]";
 
-export default async function PurchaseOrdersPage() {
+export default async function PurchaseOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
   await connectDB();
 
-  const pos = await PurchaseOrder.find({})
-    .select("poNumber vendorId status orderPurpose priority poTotal updatedAt")
-    .populate("vendorId", "name")
-    .sort({ updatedAt: -1 })
-    .limit(200)
-    .lean();
+  const [pos, total, shippedCount, highPriorityCount, valueAgg] = await Promise.all([
+    PurchaseOrder.find({})
+      .select("poNumber vendorId status orderPurpose priority poTotal updatedAt")
+      .populate("vendorId", "name")
+      .sort({ updatedAt: -1 })
+      .skip((page - 1) * PAGE_SIZE)
+      .limit(PAGE_SIZE)
+      .lean(),
+    PurchaseOrder.countDocuments({}),
+    PurchaseOrder.countDocuments({ status: "shipment_received" }),
+    PurchaseOrder.countDocuments({ priority: "high" }),
+    PurchaseOrder.aggregate<{ _id: null; total: number }>([
+      { $group: { _id: null, total: { $sum: "$poTotal" } } },
+    ]),
+  ]);
 
-  const shippedCount = pos.filter((po) => po.status === "shipment_received").length;
-  const highPriorityCount = pos.filter((po) => po.priority === "high").length;
-  const totalValue = pos.reduce((sum, po) => sum + (po.poTotal ?? 0), 0);
+  const totalValue = valueAgg[0]?.total ?? 0;
 
   return (
     <AppShell activeHref="/purchase-orders" eyebrow="Vendor pipeline" title="Purchase Orders">
@@ -34,13 +47,13 @@ export default async function PurchaseOrdersPage() {
       </p>
 
       <div className="grid grid-cols-4 gap-3.5 mb-7">
-        <StatCard label="Total POs" value={pos.length} icon={ClipboardList} tone="brass" />
+        <StatCard label="Total POs" value={total} icon={ClipboardList} tone="brass" />
         <StatCard label="Shipped" value={shippedCount} icon={Ship} tone="good" />
         <StatCard label="High priority" value={highPriorityCount} icon={TriangleAlert} tone="warn" />
         <StatCard label="Pipeline value" value={`$${totalValue.toLocaleString()}`} icon={DollarSign} tone="neutral" />
       </div>
 
-      {pos.length === 0 ? (
+      {total === 0 ? (
         <Card>
           <p className="text-ink-faint m-0 text-[0.88rem]">
             None yet — create one from an item&apos;s detail page once it has a sample SKU.
@@ -83,6 +96,9 @@ export default async function PurchaseOrdersPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="px-4 pb-3">
+            <Pagination page={page} total={total} basePath="/purchase-orders" />
           </div>
         </Card>
       )}

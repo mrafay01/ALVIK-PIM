@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, XCircle, TriangleAlert, CheckCheck, Database } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { Select, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { Pagination } from "@/components/app/Pagination";
 
 type FieldFlag = {
   field: string;
@@ -24,45 +26,67 @@ type StagedRow = {
   committedItemId?: string | null;
 };
 
-export function ReviewTable({ batchId, rows: initialRows }: { batchId: string; rows: StagedRow[] }) {
-  const [rows, setRows] = useState(initialRows);
-  const [filter, setFilter] = useState<"all" | "flagged" | "needs_review">("flagged");
+type Filter = "all" | "flagged" | "needs_review";
+
+export function ReviewTable({
+  batchId,
+  rows,
+  filter,
+  page,
+  filteredTotal,
+  approvedPendingCount,
+  unflaggedPendingCount,
+}: {
+  batchId: string;
+  rows: StagedRow[];
+  filter: Filter;
+  page: number;
+  filteredTotal: number;
+  approvedPendingCount: number;
+  unflaggedPendingCount: number;
+}) {
+  const router = useRouter();
   const [committing, setCommitting] = useState(false);
   const [commitResult, setCommitResult] = useState<string | null>(null);
+  const [bulkApproving, setBulkApproving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const visibleRows = rows.filter((r) => {
-    if (filter === "flagged") return r.flags.length > 0;
-    if (filter === "needs_review") return r.reviewStatus === "needs_review";
-    return true;
-  });
+  function setFilter(next: Filter) {
+    // Filter and page live in the URL so only the matching page of rows is
+    // fetched server-side — going to page 1 whenever the filter changes.
+    router.push(`/admin/import-review/${batchId}?filter=${next}`);
+  }
 
   async function decide(
     rowId: string,
     reviewStatus: "approved" | "rejected",
     overrides?: Record<string, unknown>
   ) {
+    setActionError(null);
     const res = await fetch(`/api/admin/import-review/${batchId}/rows/${rowId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reviewStatus, coercedOverrides: overrides }),
     });
-    if (!res.ok) return;
-    const data = await res.json();
-    setRows((prev) => prev.map((r) => (r._id === rowId ? { ...r, ...data.row } : r)));
-  }
-
-  async function editField(rowId: string, field: string, value: string) {
-    setRows((prev) =>
-      prev.map((r) => (r._id === rowId ? { ...r, coerced: { ...r.coerced, [field]: value } } : r))
-    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setActionError(data.error ?? "Could not save that decision.");
+      return;
+    }
+    router.refresh();
   }
 
   async function saveEdit(rowId: string, field: string, value: string) {
-    await fetch(`/api/admin/import-review/${batchId}/rows/${rowId}`, {
+    setActionError(null);
+    const res = await fetch(`/api/admin/import-review/${batchId}/rows/${rowId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ coercedOverrides: { [field]: value } }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setActionError(data.error ?? "Could not save that edit.");
+    }
   }
 
   async function commitApproved() {
@@ -75,27 +99,38 @@ export function ReviewTable({ batchId, rows: initialRows }: { batchId: string; r
         setCommitResult(`Error: ${data.error ?? "commit failed"}`);
         return;
       }
+      const errorTail =
+        data.errors.length > 0
+          ? ` ${data.errors.length} failed: ${data.errors
+              .slice(0, 3)
+              .map((e: { message: string }) => e.message)
+              .join("; ")}${data.errors.length > 3 ? "…" : ""}`
+          : "";
       setCommitResult(
         `Committed ${data.committed} rows (${data.created} new, ${data.merged} merged into existing items).` +
-          (data.errors.length > 0 ? ` ${data.errors.length} failed — see console.` : "")
+          errorTail
       );
-      if (data.errors.length > 0) console.error("Commit errors:", data.errors);
+      router.refresh();
     } finally {
       setCommitting(false);
     }
   }
 
   async function bulkApproveUnflagged() {
-    const targets = rows.filter((r) => r.flags.length === 0 && r.reviewStatus === "needs_review");
-    for (const row of targets) {
-      await decide(row._id, "approved");
+    setBulkApproving(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/admin/import-review/${batchId}/rows/bulk-approve`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setActionError(data.error ?? "Bulk approve failed.");
+        return;
+      }
+      router.refresh();
+    } finally {
+      setBulkApproving(false);
     }
   }
-
-  const approvedCount = rows.filter((r) => r.reviewStatus === "approved" && !r.committedItemId).length;
-  const unflaggedPendingCount = rows.filter(
-    (r) => r.flags.length === 0 && r.reviewStatus === "needs_review"
-  ).length;
 
   return (
     <div>
@@ -103,27 +138,32 @@ export function ReviewTable({ batchId, rows: initialRows }: { batchId: string; r
         <div className="flex gap-3.5 items-end flex-wrap">
           <label className="flex flex-col gap-1.5">
             <span className="text-[0.72rem] font-semibold text-ink-faint uppercase tracking-wide">Show</span>
-            <Select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} className="!w-[160px]">
+            <Select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as Filter)}
+              className="!w-[160px]"
+            >
               <option value="flagged">Flagged rows</option>
               <option value="needs_review">Needs review</option>
               <option value="all">All rows</option>
             </Select>
           </label>
-          <Button disabled={unflaggedPendingCount === 0} onClick={bulkApproveUnflagged}>
+          <Button disabled={unflaggedPendingCount === 0 || bulkApproving} onClick={bulkApproveUnflagged}>
             <span className="flex items-center gap-1.5">
-              <CheckCheck size={14} /> Approve all {unflaggedPendingCount} unflagged
+              <CheckCheck size={14} /> {bulkApproving ? "Approving…" : `Approve all ${unflaggedPendingCount} unflagged`}
             </span>
           </Button>
-          <Button variant="primary" disabled={committing || approvedCount === 0} onClick={commitApproved}>
+          <Button variant="primary" disabled={committing || approvedPendingCount === 0} onClick={commitApproved}>
             <span className="flex items-center gap-1.5">
-              <Database size={14} /> {committing ? "Committing…" : `Commit ${approvedCount} approved row(s)`}
+              <Database size={14} /> {committing ? "Committing…" : `Commit ${approvedPendingCount} approved row(s)`}
             </span>
           </Button>
           {commitResult && <span className="text-[0.83rem] text-ink-soft">{commitResult}</span>}
+          {actionError && <span className="text-[0.83rem] text-critical">{actionError}</span>}
         </div>
       </Card>
 
-      {visibleRows.length === 0 ? (
+      {filteredTotal === 0 ? (
         <Card>
           <p className="text-ink-faint m-0 text-[0.88rem]">No rows match this filter.</p>
         </Card>
@@ -136,6 +176,7 @@ export function ReviewTable({ batchId, rows: initialRows }: { batchId: string; r
                   {["Row", "SKU", "Flags", "Status", "Actions"].map((h) => (
                     <th
                       key={h}
+                      scope="col"
                       className="text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap"
                     >
                       {h}
@@ -144,7 +185,7 @@ export function ReviewTable({ batchId, rows: initialRows }: { batchId: string; r
                 </tr>
               </thead>
               <tbody>
-                {visibleRows.map((row) => (
+                {rows.map((row) => (
                   <tr key={row._id} className="border-b border-border align-top">
                     <td className="px-4 py-3 font-mono text-[0.82rem]">{row.rowNumber}</td>
                     <td className="px-4 py-3 font-mono text-[0.82rem] font-semibold">{String(row.coerced.itemNumber ?? "—")}</td>
@@ -167,7 +208,6 @@ export function ReviewTable({ batchId, rows: initialRows }: { batchId: string; r
                                     <br />
                                     <Input
                                       defaultValue={String(row.coerced[f.field] ?? "")}
-                                      onChange={(e) => editField(row._id, f.field, e.target.value)}
                                       onBlur={(e) => saveEdit(row._id, f.field, e.target.value)}
                                       className="!w-[150px] mt-1"
                                     />
@@ -208,6 +248,14 @@ export function ReviewTable({ batchId, rows: initialRows }: { batchId: string; r
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="px-4 pb-3">
+            <Pagination
+              page={page}
+              total={filteredTotal}
+              basePath={`/admin/import-review/${batchId}`}
+              query={{ filter }}
+            />
           </div>
         </Card>
       )}

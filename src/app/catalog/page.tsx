@@ -1,9 +1,9 @@
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import Item from "@/models/Item";
-import "@/models/Vendor"; // registers the Vendor schema so .populate("vendorId") resolves
 import { checkMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { Card } from "@/components/ui/Card";
+import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { CheckCircle2, XCircle, ShieldCheck } from "lucide-react";
 
 const TH_CLASS =
@@ -13,18 +13,23 @@ const TD_CLASS = "px-4 py-3 text-[0.85rem]";
 export default async function CatalogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ filter?: string; page?: string }>;
 }) {
-  const { filter } = await searchParams;
+  const { filter, page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
   await connectDB();
 
   const query = filter === "incomplete" ? { masterRecordComplete: false } : {};
-  const items = await Item.find(query)
-    .select("itemNumber vendorSku sampleSku category specs pricingHistory imageCompleteness masterRecordComplete vendorId status")
-    .populate("vendorId", "name")
-    .sort({ updatedAt: -1 })
-    .limit(300)
-    .lean();
+  const [items, total] = await Promise.all([
+    Item.find(query)
+      .select("itemNumber vendorSku sampleSku category specs pricingHistory imageCompleteness masterRecordComplete vendorId status")
+      .populate("vendorId", "name")
+      .sort({ updatedAt: -1 })
+      .skip((page - 1) * PAGE_SIZE)
+      .limit(PAGE_SIZE)
+      .lean(),
+    Item.countDocuments(query),
+  ]);
 
   return (
     <AppShell activeHref="/catalog" eyebrow="Publish gate" title="Catalog">
@@ -64,7 +69,7 @@ export default async function CatalogPage({
         </a>
       </div>
 
-      {items.length === 0 ? (
+      {total === 0 ? (
         <Card>
           <p className="text-ink-faint m-0 text-[0.88rem]">No items match this filter.</p>
         </Card>
@@ -112,6 +117,9 @@ export default async function CatalogPage({
                 })}
               </tbody>
             </table>
+          </div>
+          <div className="px-4 pb-3">
+            <Pagination page={page} total={total} basePath="/catalog" query={{ filter }} />
           </div>
         </Card>
       )}

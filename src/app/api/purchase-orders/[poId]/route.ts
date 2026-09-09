@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { Types } from "mongoose";
-import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
+import { PoPatchSchema, isValidPoTransition, badRequest } from "@/lib/schemas";
 import PurchaseOrder from "@/models/PurchaseOrder";
-import "@/models/Vendor"; // registers the Vendor schema so .populate("vendorId") resolves
-import "@/models/Item"; // registers the Item schema so .populate("lineItems.itemId") resolves
 
 // GET: single PO detail, with line-item and vendor references populated.
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ poId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.purchaseOrders);
+  if (isAuthFail(gate)) return gate.response;
 
   const { poId } = await params;
   await connectDB();
@@ -34,11 +32,15 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ poId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.purchaseOrders);
+  if (isAuthFail(gate)) return gate.response;
+  const { session } = gate;
 
   const { poId } = await params;
-  const body = await req.json();
+  const parsed = PoPatchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return badRequest(parsed.error);
+  const body = parsed.data;
+
   await connectDB();
 
   const po = await PurchaseOrder.findById(poId);
@@ -49,6 +51,14 @@ export async function PATCH(
   }
 
   if (body.status) {
+    // Only forward-by-one pipeline moves (or a no-op) are allowed — the
+    // field used to be assigned verbatim.
+    if (!isValidPoTransition(po.status as string, body.status)) {
+      return NextResponse.json(
+        { error: `Cannot move PO from "${po.status}" to "${body.status}"` },
+        { status: 400 }
+      );
+    }
     // The blueprint notes every PO on the real "Ready to Ship" board has
     // all six checklist fields complete with zero exceptions — a hard
     // gate, not an informal one. Block the transition server-side rather

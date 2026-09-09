@@ -1,12 +1,12 @@
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import Payment from "@/models/Payment";
-import "@/models/Vendor";
-import "@/models/PurchaseOrder";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { StatCard } from "@/components/ui/StatCard";
+import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { TriangleAlert, Wallet, Clock, CheckCircle2 } from "lucide-react";
+import { PAYMENT_STATUSES } from "@/lib/enums";
 import { PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "@/lib/statusDisplay";
 import { PaymentRow } from "./PaymentRow";
 
@@ -25,23 +25,38 @@ const TD_CLASS = "px-4 py-3 text-[0.85rem]";
 export default async function PayablesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; page?: string }>;
 }) {
-  const { status } = await searchParams;
+  const { status: statusParam, page: pageParam } = await searchParams;
+  const status =
+    statusParam && (PAYMENT_STATUSES as readonly string[]).includes(statusParam)
+      ? statusParam
+      : undefined;
+  const page = parsePage(pageParam);
   await connectDB();
 
+  const now = new Date();
   const query = status ? { status } : {};
-  const payments = await Payment.find(query)
-    .populate("vendorId", "name")
-    .populate("poId", "poNumber")
-    .sort({ updatedAt: -1 })
-    .limit(200)
-    .lean();
 
-  const now = Date.now();
-  const openTotal = payments.filter((p) => p.status === "open").reduce((sum, p) => sum + (p.amountDue ?? 0), 0);
-  const overdueCount = payments.filter((p) => p.status === "open" && p.dueDate && new Date(p.dueDate).getTime() < now).length;
-  const paidCount = payments.filter((p) => p.status === "paid").length;
+  const [payments, total, openAgg, overdueCount, paidCount] = await Promise.all([
+    Payment.find(query)
+      .populate("vendorId", "name")
+      .populate("poId", "poNumber")
+      .sort({ updatedAt: -1 })
+      .skip((page - 1) * PAGE_SIZE)
+      .limit(PAGE_SIZE)
+      .lean(),
+    Payment.countDocuments(query),
+    Payment.aggregate<{ _id: null; total: number }>([
+      { $match: { status: "open" } },
+      { $group: { _id: null, total: { $sum: "$amountDue" } } },
+    ]),
+    Payment.countDocuments({ status: "open", dueDate: { $lt: now } }),
+    Payment.countDocuments({ status: "paid" }),
+  ]);
+
+  const openTotal = openAgg[0]?.total ?? 0;
+  const nowMs = now.getTime();
 
   return (
     <AppShell activeHref="/payables" eyebrow="Vendor finance" title="Payables">
@@ -73,7 +88,7 @@ export default async function PayablesPage({
         })}
       </div>
 
-      {payments.length === 0 ? (
+      {total === 0 ? (
         <Card>
           <p className="text-ink-faint m-0 text-[0.88rem]">No payments recorded yet.</p>
         </Card>
@@ -92,7 +107,7 @@ export default async function PayablesPage({
               </thead>
               <tbody>
                 {payments.map((p) => {
-                  const overdue = p.status === "open" && p.dueDate ? new Date(p.dueDate).getTime() < now : false;
+                  const overdue = p.status === "open" && p.dueDate ? new Date(p.dueDate).getTime() < nowMs : false;
                   return (
                     <tr key={String(p._id)} className="czc-row border-b border-border">
                       <td className={`${TD_CLASS} font-mono font-semibold`}>
@@ -124,6 +139,14 @@ export default async function PayablesPage({
                 })}
               </tbody>
             </table>
+          </div>
+          <div className="px-4 pb-3">
+            <Pagination
+              page={page}
+              total={total}
+              basePath="/payables"
+              query={{ status }}
+            />
           </div>
         </Card>
       )}

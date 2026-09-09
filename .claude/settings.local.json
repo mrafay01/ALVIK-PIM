@@ -35,7 +35,10 @@
       "Bash(rm -f src/scripts/gen-test-masterfile.ts src/scripts/cleanup-stress-test.ts stress-test-masterfile.xlsx)",
       "Bash(rm -f /tmp/import_cookies.txt /tmp/signin_result.json /tmp/upload_result.json /tmp/batch_detail.json /tmp/patch_result.json /tmp/commit_result.json /tmp/port_import.txt)",
       "Bash(rm -f \"C:/Users/cw/AppData/Local/Temp/batch_detail.json\" \"C:/Users/cw/AppData/Local/Temp/patch_result.json\" \"C:/Users/cw/AppData/Local/Temp/commit_result.json\")",
-      "Bash(mkdir -p \"C:\\\\Users\\\\cw\\\\Documents\\\\PIM\\\\.artifact-work\" *)"
+      "Bash(mkdir -p \"C:\\\\Users\\\\cw\\\\Documents\\\\PIM\\\\.artifact-work\" *)",
+      "Bash(dir -s .)",
+      "Bash(npm ls *)",
+      "Bash(xargs wc -l)"
     ],
     "additionalDirectories": [
       "\\tmp",

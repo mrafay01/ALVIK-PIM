@@ -22,15 +22,28 @@ export function StatCard({
   const t = TONE_CLASSES[tone];
 
   return (
-    <div className="bg-surface-raised border border-border rounded-md shadow-sm px-5 py-[18px] flex items-center gap-3.5 min-w-0">
+    // suppressHydrationWarning: browser extensions (Bitdefender's
+    // Anti-tracker being the common one) inject a bis_skin_checked
+    // attribute onto plain wrapper divs after they scan the page, which
+    // React otherwise flags as a hydration mismatch even though the actual
+    // rendered content is identical. Cosmetic-only; real mismatches still
+    // surface normally.
+    <div
+      className="bg-surface-raised border border-border rounded-md shadow-sm px-5 py-[18px] flex items-center gap-3.5 min-w-0"
+      suppressHydrationWarning
+    >
       {Icon && (
         <span className={`flex items-center justify-center w-10 h-10 rounded-sm shrink-0 ${t.bg}`}>
           <Icon size={19} className={t.icon} strokeWidth={2} />
         </span>
       )}
-      <div className="min-w-0">
-        <div className="text-[0.72rem] font-bold text-ink-faint uppercase tracking-wide mb-0.5">{label}</div>
-        <div className="text-2xl font-bold text-ink font-mono leading-tight">{value}</div>
+      <div className="min-w-0" suppressHydrationWarning>
+        <div className="text-[0.72rem] font-bold text-ink-faint uppercase tracking-wide mb-0.5" suppressHydrationWarning>
+          {label}
+        </div>
+        <div className="text-2xl font-bold text-ink font-mono leading-tight" suppressHydrationWarning>
+          {value}
+        </div>
       </div>
     </div>
   );

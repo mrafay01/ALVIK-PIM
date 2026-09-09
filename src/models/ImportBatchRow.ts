@@ -39,6 +39,10 @@ const ImportBatchRowSchema = new Schema(
   { timestamps: true }
 );
 
+// The commit + bulk-approve routes query by (batchId, reviewStatus) and the
+// commit route also filters committedItemId — compound covers all three.
+ImportBatchRowSchema.index({ batchId: 1, reviewStatus: 1, committedItemId: 1 });
+
 export type ImportBatchRowDoc = InferSchemaType<typeof ImportBatchRowSchema>;
 export default (models.ImportBatchRow as Model<ImportBatchRowDoc>) ||
   model<ImportBatchRowDoc>("ImportBatchRow", ImportBatchRowSchema);

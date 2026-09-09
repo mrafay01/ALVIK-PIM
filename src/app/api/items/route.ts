@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireSession, requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
+import { ItemCreateSchema, badRequest } from "@/lib/schemas";
+import { ITEM_STATUSES } from "@/lib/enums";
 import Item from "@/models/Item";
-import "@/models/Vendor"; // registers the Vendor schema so .populate("vendorId") resolves
 
 // GET: list items (most recently updated first). Supports ?status=... filter.
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireSession();
+  if (isAuthFail(gate)) return gate.response;
 
   await connectDB();
-  const status = req.nextUrl.searchParams.get("status");
+  const statusParam = req.nextUrl.searchParams.get("status");
+  // Validate against the enum so a `?status[$ne]=` style value can't reach
+  // the query as an operator object.
+  const status =
+    statusParam && (ITEM_STATUSES as readonly string[]).includes(statusParam)
+      ? statusParam
+      : undefined;
   const query = status ? { status } : {};
   const items = await Item.find(query)
     .select("status sampleSku itemNumber vendorId vendorSku category updatedAt")
@@ -25,15 +31,12 @@ export async function GET(req: NextRequest) {
 
 // POST: intake a new quoted item — the start of the pilot lifecycle.
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.items);
+  if (isAuthFail(gate)) return gate.response;
 
-  const body = await req.json();
-  const { vendorId, vendorSku, category, costPerUnit, msrp, notes } = body;
-
-  if (!vendorId || !vendorSku) {
-    return NextResponse.json({ error: "vendorId and vendorSku are required" }, { status: 400 });
-  }
+  const parsed = ItemCreateSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return badRequest(parsed.error);
+  const { vendorId, vendorSku, category, costPerUnit, msrp, notes } = parsed.data;
 
   await connectDB();
   const item = await Item.create({

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import ImportBatch from "@/models/ImportBatch";
 import ImportBatchRow from "@/models/ImportBatchRow";
 import Item from "@/models/Item";
@@ -9,8 +8,8 @@ import { parseMasterFileBuffer } from "@/lib/import/parseMasterFile";
 
 // GET: list all import batches (most recent first).
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.adminOnly);
+  if (isAuthFail(gate)) return gate.response;
 
   await connectDB();
   const batches = await ImportBatch.find({})
@@ -28,14 +27,35 @@ export async function GET() {
 // (batchId-referenced) rather than embedded in the ImportBatch document —
 // embedding every row's raw + coerced values in one document can exceed
 // MongoDB's 16MB document-size limit on a large Master File.
+// The whole file is buffered and parsed in memory in one request, so cap
+// it to avoid a single large upload exhausting the instance. A real Master
+// File is well under this; anything larger should be split.
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB
+const MAX_ROWS = 50_000;
+
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.adminOnly);
+  if (isAuthFail(gate)) return gate.response;
+  const { session } = gate;
+
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: `File too large — the limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
+      { status: 413 }
+    );
+  }
 
   const formData = await req.formData();
   const file = formData.get("file");
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: `File too large — the limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
+      { status: 413 }
+    );
   }
 
   let rows;
@@ -50,6 +70,12 @@ export async function POST(req: NextRequest) {
 
   if (rows.length === 0) {
     return NextResponse.json({ error: "No rows found in the uploaded file" }, { status: 400 });
+  }
+  if (rows.length > MAX_ROWS) {
+    return NextResponse.json(
+      { error: `Too many rows (${rows.length}) — the limit per file is ${MAX_ROWS}. Split the file and upload in parts.` },
+      { status: 413 }
+    );
   }
 
   await connectDB();

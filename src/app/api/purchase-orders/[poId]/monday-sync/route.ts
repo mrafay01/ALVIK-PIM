@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import PurchaseOrder from "@/models/PurchaseOrder";
 import { syncPurchaseOrderToMonday } from "@/lib/monday/sync";
 import { MondayApiError } from "@/lib/monday/client";
@@ -13,8 +12,8 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ poId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.purchaseOrders);
+  if (isAuthFail(gate)) return gate.response;
 
   const { poId } = await params;
   await connectDB();

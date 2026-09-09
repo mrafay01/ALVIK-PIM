@@ -27,11 +27,13 @@ const SUBFOLDER_LABEL: Record<Completeness extends never ? never : keyof Complet
 export function MediaUpload({
   itemId,
   folderKey,
+  canUpload = true,
   initialMedia,
   initialCompleteness,
 }: {
   itemId: string;
   folderKey: string | null;
+  canUpload?: boolean;
   initialMedia: MediaEntry[];
   initialCompleteness: Completeness;
 }) {
@@ -95,19 +97,23 @@ export function MediaUpload({
         <h2 className="text-[0.95rem] flex items-center gap-1.5">
           <ImageIcon size={15} /> Images
         </h2>
-        <Button size="sm" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
-          <span className="flex items-center gap-1.5">
-            <Upload size={13} /> {uploading ? "Uploading…" : "Upload"}
-          </span>
-        </Button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept="image/*"
-          hidden
-          onChange={(e) => handleFiles(e.target.files)}
-        />
+        {canUpload && (
+          <>
+            <Button size="sm" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+              <span className="flex items-center gap-1.5">
+                <Upload size={13} /> {uploading ? "Uploading…" : "Upload"}
+              </span>
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*"
+              hidden
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+          </>
+        )}
       </div>
       <p className="text-[0.78rem] text-ink-faint mb-3">
         Name files <code className="font-mono">{folderKey}.jpg</code> for the main shot,{" "}

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { mondayRequest, MondayApiError } from "@/lib/monday/client";
 
 interface UpdatesResult {
@@ -19,10 +18,14 @@ interface UpdatesResult {
 // PO's detail page can show the vendor/staff conversation without it ever
 // being copied into PIM's own database — always current, never stale.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ mondayItemId: string }> }) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.purchaseOrders);
+  if (isAuthFail(gate)) return gate.response;
 
   const { mondayItemId } = await params;
+
+  if (!/^\d+$/.test(mondayItemId)) {
+    return NextResponse.json({ error: "Invalid item id" }, { status: 400 });
+  }
   const query = `
     query ($ids: [ID!]!) {
       items(ids: $ids) {

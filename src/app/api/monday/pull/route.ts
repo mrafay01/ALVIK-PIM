@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import SyncLog from "@/models/SyncLog";
 import { buildPullPlan, commitPullPlan, type PullPlanRow } from "@/lib/monday/pull";
 
 // GET: dry-run preview only. Reads the live Monday board and reports what
 // a pull would create/update/skip — never writes to the DB or to Monday.
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.user?.role !== "administrator") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const gate = await requireRole(ROLE_SETS.adminOnly);
+  if (isAuthFail(gate)) return gate.response;
 
   await connectDB();
   const plan = await buildPullPlan();
@@ -23,11 +19,8 @@ export async function GET() {
 // same `rows` array back (not re-fetched from Monday blind) so what gets
 // committed matches what was shown on screen.
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.user?.role !== "administrator") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const gate = await requireRole(ROLE_SETS.adminOnly);
+  if (isAuthFail(gate)) return gate.response;
 
   const body = (await req.json()) as { rows?: PullPlanRow[] };
   if (!body.rows || !Array.isArray(body.rows)) {

@@ -3,8 +3,6 @@ import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import PurchaseOrder from "@/models/PurchaseOrder";
 import Payment from "@/models/Payment";
-import "@/models/Vendor"; // registers the Vendor schema so .populate("vendorId") resolves
-import "@/models/Item"; // registers the Item schema so .populate("lineItems.itemId") resolves
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { CheckCircle2, Circle, MessageSquareCheck, MessageSquare, Ship, FileSpreadsheet } from "lucide-react";

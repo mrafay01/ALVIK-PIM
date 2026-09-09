@@ -66,6 +66,7 @@ export async function syncPurchaseOrderToMonday(
     if (!id) throw new Error("Monday create_item did not return an id");
 
     po.mondayItemId = id;
+    po.lastPushedToMondayAt = new Date();
     await po.save();
     return { mondayItemId: id, created: true };
   }
@@ -83,30 +84,60 @@ export async function syncPurchaseOrderToMonday(
     columnValues: JSON.stringify(columnValues),
   });
 
+  po.lastPushedToMondayAt = new Date();
+  await po.save();
+
   return { mondayItemId: po.mondayItemId, created: false };
 }
 
-// Syncs every PO that either has no mondayItemId yet, or whose updatedAt
-// is newer than its last sync — used by the manual "sync now" endpoint and
-// eventually a scheduled job. Returns per-row results for a sync_logs entry.
+// Runs `worker` over `items` with at most `concurrency` in flight at once —
+// keeps a bulk operation from firing hundreds of Monday API calls in a
+// single unbounded burst while still being much faster than one-at-a-time.
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  let cursor = 0;
+  async function run(): Promise<void> {
+    while (cursor < items.length) {
+      const index = cursor++;
+      await worker(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
+}
+
+// Syncs every PO that has no mondayItemId yet, or whose content changed
+// since it was last pushed (updatedAt newer than lastPushedToMondayAt) —
+// used by the manual "sync now" endpoint and eventually a scheduled job.
+// Runs with bounded concurrency rather than one PO at a time. Returns
+// per-row results for a sync_logs entry.
 export async function syncAllPurchaseOrders(): Promise<{
   processed: number;
   changed: number;
   errored: number;
   errors: { poId: string; message: string }[];
 }> {
-  const pos = await PurchaseOrder.find({});
+  const pos = await PurchaseOrder.find({
+    $or: [
+      { mondayItemId: null },
+      { lastPushedToMondayAt: null },
+      { $expr: { $gt: ["$updatedAt", "$lastPushedToMondayAt"] } },
+    ],
+  });
+
   let changed = 0;
   const errors: { poId: string; message: string }[] = [];
 
-  for (const po of pos) {
+  await mapWithConcurrency(pos, 4, async (po) => {
     try {
       await syncPurchaseOrderToMonday(po);
       changed++;
     } catch (err) {
       errors.push({ poId: String(po._id), message: err instanceof Error ? err.message : String(err) });
     }
-  }
+  });
 
   return { processed: pos.length, changed, errored: errors.length, errors };
 }

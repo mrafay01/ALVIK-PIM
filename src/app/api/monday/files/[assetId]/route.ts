@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { mondayRequest, MondayApiError } from "@/lib/monday/client";
 
 interface AssetResult {
@@ -12,10 +11,18 @@ interface AssetResult {
 // resolves a fresh short-lived signed S3 link (public_url) on every request
 // and redirects to it — nothing is copied or cached in PIM.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ assetId: string }> }) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.purchaseOrders);
+  if (isAuthFail(gate)) return gate.response;
 
   const { assetId } = await params;
+
+  // assetId is interpolated into a Monday GraphQL query — only ever a
+  // numeric asset id. Reject anything else rather than passing arbitrary
+  // caller input to the upstream API.
+  if (!/^\d+$/.test(assetId)) {
+    return NextResponse.json({ error: "Invalid asset id" }, { status: 400 });
+  }
+
   const query = `query ($ids: [ID!]!) { assets(ids: $ids) { id name public_url } }`;
 
   try {

@@ -24,6 +24,12 @@ const PaymentSchema = new Schema(
   { timestamps: true }
 );
 
+// PO detail page: Payment.find({ poId }). Payables list filters by status
+// and sorts by updatedAt desc.
+PaymentSchema.index({ poId: 1, createdAt: -1 });
+PaymentSchema.index({ status: 1, updatedAt: -1 });
+PaymentSchema.index({ vendorId: 1 });
+
 export type PaymentDoc = InferSchemaType<typeof PaymentSchema>;
 export default (models.Payment as Model<PaymentDoc>) ||
   model<PaymentDoc>("Payment", PaymentSchema);

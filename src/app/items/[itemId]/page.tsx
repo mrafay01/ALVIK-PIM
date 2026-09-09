@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
+import { getSessionRole, roleCan, ROLE_SETS } from "@/lib/authz";
 import Item from "@/models/Item";
 import PurchaseOrder from "@/models/PurchaseOrder";
-import "@/models/Vendor"; // registers the Vendor schema so .populate("vendorId") resolves
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { ITEM_STATUS_LABEL, ITEM_STATUS_TONE, PO_STATUS_LABEL, PO_STATUS_TONE } from "@/lib/statusDisplay";
@@ -17,6 +17,10 @@ export default async function ItemDetailPage({
 }) {
   const { itemId } = await params;
   await connectDB();
+
+  const role = await getSessionRole();
+  const canEditItem = roleCan(role, ROLE_SETS.items);
+  const canUploadMedia = roleCan(role, ROLE_SETS.media);
 
   const item = await Item.findById(itemId).populate("vendorId", "name").lean();
   if (!item) notFound();
@@ -91,6 +95,7 @@ export default async function ItemDetailPage({
         <MediaUpload
           itemId={String(item._id)}
           folderKey={item.itemNumber || item.sampleSku || null}
+          canUpload={canUploadMedia}
           initialMedia={(item.media ?? []).map((m) => ({
             sharePointItemId: m.sharePointItemId,
             url: m.url,
@@ -104,15 +109,17 @@ export default async function ItemDetailPage({
         />
       </div>
 
-      <div className="mt-5">
-        <ItemActions
-          itemId={String(item._id)}
-          vendorId={String(item.vendorId && typeof item.vendorId === "object" ? (item.vendorId as { _id: unknown })._id : item.vendorId)}
-          status={item.status}
-          hasReviewDecision={!!item.reviewDecision?.decision}
-          hasSampleSku={!!item.sampleSku}
-        />
-      </div>
+      {canEditItem && (
+        <div className="mt-5">
+          <ItemActions
+            itemId={String(item._id)}
+            vendorId={String(item.vendorId && typeof item.vendorId === "object" ? (item.vendorId as { _id: unknown })._id : item.vendorId)}
+            status={item.status}
+            hasReviewDecision={!!item.reviewDecision?.decision}
+            hasSampleSku={!!item.sampleSku}
+          />
+        </div>
+      )}
     </AppShell>
   );
 }

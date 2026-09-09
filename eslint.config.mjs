@@ -5,6 +5,11 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  {
+    // Generated / build output — never lint these. Without this, `eslint .`
+    // walks .next/ and reports thousands of errors in minified bundles.
+    ignores: [".next/**", "node_modules/**", "next-env.d.ts", "out/**"],
+  },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
 

@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { Types } from "mongoose";
-import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
+import { PaymentPatchSchema, badRequest } from "@/lib/schemas";
 import Payment from "@/models/Payment";
-import "@/models/Vendor"; // registers the Vendor schema so .populate("vendorId") resolves
-import "@/models/PurchaseOrder"; // registers the PurchaseOrder schema so .populate("poId") resolves
 
 // GET: single payment detail.
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ paymentId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.payables);
+  if (isAuthFail(gate)) return gate.response;
 
   const { paymentId } = await params;
   await connectDB();
@@ -31,11 +29,14 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ paymentId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.payables);
+  if (isAuthFail(gate)) return gate.response;
+  const { session } = gate;
 
   const { paymentId } = await params;
-  const body = await req.json();
+  const parsed = PaymentPatchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return badRequest(parsed.error);
+  const body = parsed.data;
   await connectDB();
 
   const payment = await Payment.findById(paymentId);

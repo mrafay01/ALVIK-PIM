@@ -10,3 +10,4 @@ export { default as SyncLog } from "./SyncLog";
 export { default as PlatformTemplate } from "./PlatformTemplate";
 export { default as ImportBatch } from "./ImportBatch";
 export { default as ImportBatchRow } from "./ImportBatchRow";
+export { default as MarketplaceListing } from "./MarketplaceListing";

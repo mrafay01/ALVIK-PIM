@@ -5,6 +5,7 @@ import Vendor from "@/models/Vendor";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { StatCard } from "@/components/ui/StatCard";
+import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { Gem, CircleCheck, CircleDashed, ImageOff } from "lucide-react";
 import { ITEM_STATUS_LABEL, ITEM_STATUS_TONE } from "@/lib/statusDisplay";
 import { IntakeForm } from "./IntakeForm";
@@ -13,22 +14,29 @@ const TH_CLASS =
   "text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap";
 const TD_CLASS = "px-4 py-3 text-[0.85rem]";
 
-export default async function ItemsPage() {
+export default async function ItemsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
   await connectDB();
 
-  const [items, vendors] = await Promise.all([
+  const [items, total, pendingCount, approvedCount, noSkuCount, vendors] = await Promise.all([
     Item.find({})
       .select("status sampleSku itemNumber vendorId vendorSku category updatedAt")
       .populate("vendorId", "name")
       .sort({ updatedAt: -1 })
-      .limit(200)
+      .skip((page - 1) * PAGE_SIZE)
+      .limit(PAGE_SIZE)
       .lean(),
+    Item.countDocuments({}),
+    Item.countDocuments({ status: "review_pending" }),
+    Item.countDocuments({ status: "approved" }),
+    Item.countDocuments({ sampleSku: { $in: [null, undefined] }, itemNumber: { $in: [null, undefined] } }),
     Vendor.find({}).select("name").sort({ name: 1 }).lean(),
   ]);
-
-  const pendingCount = items.filter((it) => it.status === "review_pending").length;
-  const approvedCount = items.filter((it) => it.status === "approved").length;
-  const noSkuCount = items.filter((it) => !it.sampleSku && !it.itemNumber).length;
 
   return (
     <AppShell activeHref="/items" eyebrow="Product spine" title="Items">
@@ -38,7 +46,7 @@ export default async function ItemsPage() {
       </p>
 
       <div className="grid grid-cols-4 gap-3.5 mb-7">
-        <StatCard label="Total items" value={items.length} icon={Gem} tone="brass" />
+        <StatCard label="Total items" value={total} icon={Gem} tone="brass" />
         <StatCard label="Pending review" value={pendingCount} icon={CircleDashed} tone="warn" />
         <StatCard label="Approved" value={approvedCount} icon={CircleCheck} tone="good" />
         <StatCard label="No SKU yet" value={noSkuCount} icon={ImageOff} tone="neutral" />
@@ -49,8 +57,8 @@ export default async function ItemsPage() {
         <IntakeForm vendors={vendors.map((v) => ({ id: String(v._id), name: v.name }))} />
       </Card>
 
-      <h2 className="text-[0.95rem] mb-3.5">All items ({items.length})</h2>
-      {items.length === 0 ? (
+      <h2 className="text-[0.95rem] mb-3.5">All items ({total.toLocaleString()})</h2>
+      {total === 0 ? (
         <Card>
           <p className="text-ink-faint m-0 text-[0.88rem]">No items yet — intake one above.</p>
         </Card>
@@ -92,6 +100,9 @@ export default async function ItemsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="px-4 pb-3">
+            <Pagination page={page} total={total} basePath="/items" />
           </div>
         </Card>
       )}

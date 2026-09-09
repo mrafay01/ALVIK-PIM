@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { Types } from "mongoose";
-import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import Item from "@/models/Item";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { getSharePointContext, ensureItemFolders, uploadItemImage } from "@/lib/sharepoint/client";
@@ -16,8 +15,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ itemId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireRole(ROLE_SETS.media);
+  if (isAuthFail(gate)) return gate.response;
+  const { session } = gate;
 
   const { itemId } = await params;
   await connectDB();
@@ -33,10 +33,31 @@ export async function POST(
     );
   }
 
+  // SharePoint's simple PUT upload path used here is for files <4MB; larger
+  // ones need the resumable session API which isn't wired up. Cap per-file
+  // and per-request so one call can't buffer an unbounded amount in memory.
+  const MAX_FILE_BYTES = 4 * 1024 * 1024;
+  const MAX_FILES = 20;
+
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_FILE_BYTES * MAX_FILES) {
+    return NextResponse.json({ error: "Upload too large" }, { status: 413 });
+  }
+
   const formData = await req.formData();
   const files = formData.getAll("files").filter((f): f is File => f instanceof File);
   if (files.length === 0) {
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
+  }
+  if (files.length > MAX_FILES) {
+    return NextResponse.json({ error: `Too many files — max ${MAX_FILES} per upload` }, { status: 413 });
+  }
+  const oversized = files.find((f) => f.size > MAX_FILE_BYTES);
+  if (oversized) {
+    return NextResponse.json(
+      { error: `"${oversized.name}" exceeds the ${MAX_FILE_BYTES / 1024 / 1024} MB per-image limit` },
+      { status: 413 }
+    );
   }
 
   let ctx;

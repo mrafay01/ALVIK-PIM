@@ -1,6 +1,6 @@
-# PIM 2.0
+# PIM (Product Inventory Management)
 
-Next.js + MongoDB replacement for the Master File spreadsheet and Monday.com boards. See the full architecture writeup in the PIM 2.0 System Blueprint artifact for the reasoning behind every model here.
+Next.js + MongoDB replacement for the Master File spreadsheet and Monday.com boards. See the full architecture writeup in the PIM System Blueprint artifact for the reasoning behind every model here.
 
 ## What's in this scaffold
 

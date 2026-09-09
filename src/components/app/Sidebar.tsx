@@ -9,6 +9,7 @@ import {
   BookOpenCheck,
   FileSpreadsheet,
   RefreshCw,
+  Store,
   ChevronsLeft,
   ChevronsRight,
   Sparkles,
@@ -29,6 +30,7 @@ const ICONS = {
   BookOpenCheck,
   FileSpreadsheet,
   RefreshCw,
+  Store,
 };
 
 export type NavIconName = keyof typeof ICONS;
@@ -83,9 +85,12 @@ export function Sidebar({
         collapsed ? "w-[76px]" : "w-[248px]"
       } ${mounted ? "transition-[width] duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]" : ""}`}
     >
-      <div className={`flex items-center gap-2 pb-6 px-1 ${collapsed ? "justify-center" : "justify-between"}`}>
+      <div
+        className={`flex items-center gap-2 pb-6 px-1 ${collapsed ? "justify-center" : "justify-between"}`}
+        suppressHydrationWarning
+      >
         <Link href="/" className="no-underline overflow-hidden">
-          <div className="flex items-center gap-2.5 font-display font-bold text-xl text-ink whitespace-nowrap">
+          <div className="flex items-center gap-2.5 font-display font-bold text-xl text-ink whitespace-nowrap" suppressHydrationWarning>
             <span
               className="flex items-center justify-center w-[34px] h-[34px] rounded-sm shrink-0"
               style={{
@@ -101,7 +106,9 @@ export function Sidebar({
       </div>
 
       {!collapsed && (
-        <div className="text-[0.66rem] font-bold text-ink-faint uppercase tracking-wider px-3 pb-2">Workspace</div>
+        <div className="text-[0.66rem] font-bold text-ink-faint uppercase tracking-wider px-3 pb-2" suppressHydrationWarning>
+          Workspace
+        </div>
       )}
 
       <nav className="flex flex-col gap-[3px] flex-1 overflow-y-auto">
@@ -137,11 +144,12 @@ export function Sidebar({
         {!collapsed && "Collapse"}
       </button>
 
-      <div className={`mt-3.5 ${collapsed ? "p-0" : "px-0.5"}`}>
+      <div className={`mt-3.5 ${collapsed ? "p-0" : "px-0.5"}`} suppressHydrationWarning>
         <div
           className={`flex items-center gap-2.5 border-t border-border pt-3.5 ${
             collapsed ? "justify-center" : "justify-start"
           }`}
+          suppressHydrationWarning
         >
           <span
             title={collapsed ? name : undefined}
@@ -150,11 +158,13 @@ export function Sidebar({
             {initials || "?"}
           </span>
           {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <div className="text-[0.82rem] font-semibold text-ink overflow-hidden text-ellipsis whitespace-nowrap">
+            <div className="min-w-0 flex-1" suppressHydrationWarning>
+              <div className="text-[0.82rem] font-semibold text-ink overflow-hidden text-ellipsis whitespace-nowrap" suppressHydrationWarning>
                 {name}
               </div>
-              <div className="text-[0.7rem] text-ink-faint capitalize">{role?.replace(/_/g, " ") ?? "—"}</div>
+              <div className="text-[0.7rem] text-ink-faint capitalize" suppressHydrationWarning>
+                {role?.replace(/_/g, " ") ?? "—"}
+              </div>
             </div>
           )}
         </div>

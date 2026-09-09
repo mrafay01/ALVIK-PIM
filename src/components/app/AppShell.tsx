@@ -8,6 +8,12 @@ const NAV: (NavItem & { roles: Role[] | null })[] = [
   { href: "/purchase-orders", label: "Purchase Orders", icon: "ClipboardList", roles: null },
   { href: "/payables", label: "Payables", icon: "Wallet", roles: ["administrator", "accounts_finance"] as Role[] },
   { href: "/catalog", label: "Catalog", icon: "BookOpenCheck", roles: null },
+  {
+    href: "/marketplace-export",
+    label: "Marketplace Export",
+    icon: "Store",
+    roles: ["administrator", "marketplace_listing"] as Role[],
+  },
   { href: "/admin/import-review", label: "Legacy Import", icon: "FileSpreadsheet", roles: ["administrator"] as Role[] },
   { href: "/admin/monday-pull", label: "Monday Import", icon: "RefreshCw", roles: ["administrator"] as Role[] },
 ];
@@ -36,10 +42,18 @@ export async function AppShell({
   const visibleNav = NAV.filter((item) => !item.roles || role === "administrator" || (role && item.roles.includes(role)));
 
   return (
-    <div className="flex min-h-screen">
+    // suppressHydrationWarning here (and on the wrapper divs inside Sidebar):
+    // browser extensions that scan the DOM on load — Bitdefender's
+    // Anti-tracker/Traffic Light is the common one — inject a
+    // bis_skin_checked attribute onto plain wrapper <div>s before React
+    // hydrates, which React otherwise (correctly, but noisily) flags as a
+    // hydration mismatch even though nothing about the actual rendered
+    // content differs. This only silences that one cosmetic warning class,
+    // not real content/structure mismatches, which still surface normally.
+    <div className="flex min-h-screen" suppressHydrationWarning>
       <Sidebar nav={visibleNav} activeHref={activeHref} name={name} role={role ?? ""} initials={initials} />
 
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0" suppressHydrationWarning>
         <header className="px-10 py-5 border-b border-border bg-surface sticky top-0 z-10 backdrop-blur-sm">
           {eyebrow && (
             <div className="text-xs font-bold text-brass uppercase tracking-wider mb-1">{eyebrow}</div>

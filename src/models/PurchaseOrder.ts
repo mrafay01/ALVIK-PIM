@@ -88,9 +88,20 @@ const PurchaseOrderSchema = new Schema(
     mondayItemId: { type: String, default: null },
     mondayFiles: [MondayFileSchema],
     lastPulledFromMondayAt: Date,
+    // Set after a successful push to Monday; used by the bulk sync to skip
+    // POs that haven't changed since they were last pushed.
+    lastPushedToMondayAt: Date,
   },
   { timestamps: true }
 );
+
+// List page filters by status, sorts by updatedAt desc.
+PurchaseOrderSchema.index({ status: 1, updatedAt: -1 });
+PurchaseOrderSchema.index({ vendorId: 1 });
+// Item detail page: PurchaseOrder.find({ "lineItems.itemId": itemId }).
+PurchaseOrderSchema.index({ "lineItems.itemId": 1 });
+// Monday pull matches board items to POs by mondayItemId.
+PurchaseOrderSchema.index({ mondayItemId: 1 }, { sparse: true });
 
 export type PurchaseOrderDoc = InferSchemaType<typeof PurchaseOrderSchema>;
 export default (models.PurchaseOrder as Model<PurchaseOrderDoc>) ||

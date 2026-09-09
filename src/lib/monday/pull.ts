@@ -220,14 +220,47 @@ const CHECKLIST_LABEL_TO_VALUE: Record<string, Record<string, string>> = {
 // checklist / totals / file references from the board, and creates new
 // POs for unmatched board items whose status has a confident mapping.
 // Deliberately never writes back to Monday — this is inbound-only.
+//
+// The board is re-read once here (so a stale plan can't apply data that
+// changed since the preview), then every DB write is batched into two
+// bulkWrite calls instead of one round-trip per row.
 export async function commitPullPlan(rows: PullPlanRow[]): Promise<PullCommitResult> {
   const items = await fetchAllBoardItems();
   const itemById = new Map(items.map((i) => [i.id, i]));
+
+  // Pre-resolve every vendor a "create" row needs in one query rather than
+  // a findOne per row.
+  const createVendorNames = [
+    ...new Set(
+      rows
+        .filter((r) => r.action === "create" && r.vendorName)
+        .map((r) => r.vendorName as string)
+    ),
+  ];
+  const vendors = createVendorNames.length
+    ? await Vendor.find({ name: { $in: createVendorNames } }).select("name").lean()
+    : [];
+  const vendorIdByName = new Map(vendors.map((v) => [v.name, v._id]));
 
   let updated = 0;
   let created = 0;
   let skipped = 0;
   const errors: { mondayItemId: string; message: string }[] = [];
+
+  type UpdateOp = { updateOne: { filter: Record<string, unknown>; update: Record<string, unknown> } };
+  type InsertOp = { insertOne: { document: Record<string, unknown> } };
+  const ops: (UpdateOp | InsertOp)[] = [];
+  const now = new Date();
+
+  function checklistFrom(item: MondayItem): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [field, columnId] of Object.entries(CHECKLIST_COLUMNS)) {
+      const text = colText(item, columnId);
+      const value = text ? CHECKLIST_LABEL_TO_VALUE[field]?.[text] : null;
+      if (value) out[field] = value;
+    }
+    return out;
+  }
 
   for (const row of rows) {
     const item = itemById.get(row.mondayItemId);
@@ -235,65 +268,76 @@ export async function commitPullPlan(rows: PullPlanRow[]): Promise<PullCommitRes
       errors.push({ mondayItemId: row.mondayItemId, message: "Item no longer found on board" });
       continue;
     }
+    if (row.action === "skip_no_status") {
+      skipped++;
+      continue;
+    }
 
+    const files = parseFiles(item);
+    const poTotalText = colText(item, MONDAY_COLUMN_IDS.poTotal);
+    const checklist = checklistFrom(item);
+
+    if (row.action === "update" && row.poId) {
+      const setFields: Record<string, unknown> = {
+        mondayItemId: item.id,
+        mondayFiles: files,
+        lastPulledFromMondayAt: now,
+      };
+      for (const [field, value] of Object.entries(checklist)) {
+        setFields[`backOfficeChecklist.${field}`] = value;
+      }
+      if (row.mappedStatus) setFields.status = row.mappedStatus;
+      if (poTotalText) setFields.poTotal = Number(poTotalText);
+
+      ops.push({ updateOne: { filter: { _id: row.poId }, update: { $set: setFields } } });
+      updated++;
+      continue;
+    }
+
+    if (row.action === "create") {
+      if (!row.vendorMatched || !row.vendorName) {
+        errors.push({ mondayItemId: row.mondayItemId, message: `Cannot create — vendor "${row.vendorName ?? "(none)"}" not found in PIM` });
+        continue;
+      }
+      const vendorId = vendorIdByName.get(row.vendorName);
+      if (!vendorId) {
+        errors.push({ mondayItemId: row.mondayItemId, message: `Vendor "${row.vendorName}" disappeared during commit` });
+        continue;
+      }
+
+      ops.push({
+        insertOne: {
+          document: {
+            poNumber: row.mondayItemName,
+            vendorId,
+            orderPurpose: { category: "stock" },
+            status: row.mappedStatus,
+            poTotal: poTotalText ? Number(poTotalText) : undefined,
+            backOfficeChecklist: checklist,
+            mondayItemId: item.id,
+            mondayFiles: files,
+            lastPulledFromMondayAt: now,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+      });
+      created++;
+    }
+  }
+
+  if (ops.length > 0) {
     try {
-      if (row.action === "skip_no_status") {
-        skipped++;
-        continue;
-      }
-
-      const files = parseFiles(item);
-      const poTotalText = colText(item, MONDAY_COLUMN_IDS.poTotal);
-      const checklistUpdate: Record<string, string> = {};
-      for (const [field, columnId] of Object.entries(CHECKLIST_COLUMNS)) {
-        const text = colText(item, columnId);
-        const value = text ? CHECKLIST_LABEL_TO_VALUE[field]?.[text] : null;
-        if (value) checklistUpdate[`backOfficeChecklist.${field}`] = value;
-      }
-
-      if (row.action === "update" && row.poId) {
-        const setFields: Record<string, unknown> = {
-          ...checklistUpdate,
-          mondayItemId: item.id,
-          mondayFiles: files,
-          lastPulledFromMondayAt: new Date(),
-        };
-        if (row.mappedStatus) setFields.status = row.mappedStatus;
-        if (poTotalText) setFields.poTotal = Number(poTotalText);
-
-        await PurchaseOrder.updateOne({ _id: row.poId }, { $set: setFields });
-        updated++;
-        continue;
-      }
-
-      if (row.action === "create") {
-        if (!row.vendorMatched || !row.vendorName) {
-          errors.push({ mondayItemId: row.mondayItemId, message: `Cannot create — vendor "${row.vendorName ?? "(none)"}" not found in PIM` });
-          continue;
-        }
-        const vendor = await Vendor.findOne({ name: row.vendorName }).lean();
-        if (!vendor) {
-          errors.push({ mondayItemId: row.mondayItemId, message: `Vendor "${row.vendorName}" disappeared during commit` });
-          continue;
-        }
-
-        await PurchaseOrder.create({
-          poNumber: row.mondayItemName,
-          vendorId: vendor._id,
-          orderPurpose: { category: "stock" },
-          status: row.mappedStatus,
-          poTotal: poTotalText ? Number(poTotalText) : undefined,
-          backOfficeChecklist: Object.fromEntries(
-            Object.entries(checklistUpdate).map(([k, v]) => [k.replace("backOfficeChecklist.", ""), v])
-          ),
-          mondayItemId: item.id,
-          mondayFiles: files,
-          lastPulledFromMondayAt: new Date(),
-        });
-        created++;
-      }
+      await PurchaseOrder.bulkWrite(ops as never, { ordered: false });
     } catch (err) {
-      errors.push({ mondayItemId: row.mondayItemId, message: err instanceof Error ? err.message : String(err) });
+      // bulkWrite with ordered:false still applies the writes it can; report
+      // the ones it couldn't without failing the whole run.
+      const writeErrors = (err as { writeErrors?: { errmsg?: string }[] }).writeErrors ?? [];
+      if (writeErrors.length === 0) throw err;
+      for (const we of writeErrors) {
+        errors.push({ mondayItemId: "(batch)", message: we.errmsg ?? "write failed" });
+      }
+      updated = Math.max(0, updated - writeErrors.length);
     }
   }
 

@@ -1,8 +1,14 @@
 import mongoose from "mongoose";
+// Side-effect import: registers every Mongoose model so any code path that
+// opens a connection can .populate() refs without a per-file registration
+// import. See src/models/register.ts.
+import "@/models/register";
 
-// DNS resolver override for mongodb+srv:// lookups lives in
-// src/instrumentation.ts, which Next.js guarantees runs before any
-// request handling — see that file for why it's needed.
+// This machine has had intermittent DNS-SRV resolution failures for
+// mongodb+srv:// strings (see PROJECT-REPORT.md §10). The supported config
+// is therefore an explicit non-SRV MONGODB_URI that names the shard hosts
+// and replica set directly — no runtime DNS workaround is required or
+// installed.
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -28,9 +34,22 @@ export async function connectDB(): Promise<typeof mongoose> {
   if (!cache.promise) {
     cache.promise = mongoose.connect(MONGODB_URI as string, {
       bufferCommands: false,
+      // Fail fast instead of hanging on the 30s driver default when a
+      // shard host can't be reached, so request handlers surface a clean
+      // error (see app/error.tsx) rather than timing out.
+      serverSelectionTimeoutMS: 5000,
+      // Serverless/edge instances don't need the default pool of 100.
+      maxPoolSize: 10,
     });
   }
 
-  cache.conn = await cache.promise;
+  try {
+    cache.conn = await cache.promise;
+  } catch (err) {
+    // Don't cache a rejected promise — the next request should retry the
+    // connection rather than re-throwing this same failure forever.
+    cache.promise = null;
+    throw err;
+  }
   return cache.conn;
 }

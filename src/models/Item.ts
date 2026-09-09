@@ -116,6 +116,12 @@ const ItemSchema = new Schema(
 );
 
 ItemSchema.index({ vendorId: 1, vendorSku: 1 });
+// List/detail pages filter by status and always sort by updatedAt desc.
+ItemSchema.index({ status: 1, updatedAt: -1 });
+// /catalog?filter=incomplete queries this directly.
+ItemSchema.index({ masterRecordComplete: 1, updatedAt: -1 });
+// Item detail resolves POs for an item; buildPullPlan matches by mondayItemId.
+ItemSchema.index({ mondayItemId: 1 }, { sparse: true });
 
 export type ItemDoc = InferSchemaType<typeof ItemSchema>;
 export default (models.Item as Model<ItemDoc>) ||
