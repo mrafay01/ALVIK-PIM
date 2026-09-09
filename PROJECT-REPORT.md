@@ -1,11 +1,11 @@
-# PIM 2.0 — Project Report
+# CZC PIM — Project Report
 
 ## 1. What This Project Is
 
-PIM 2.0 is a purpose-built web application replacing two systems the jewelry wholesale business currently runs on: an Excel "Master File" workbook (the product catalog) and a set of Monday.com boards (purchase order / vendor pipeline tracking). The goal is not a like-for-like port — it's a proper relational-style database with real workflow enforcement, review steps, and an audit trail, built on Next.js and MongoDB.
+CZC PIM is a purpose-built web application replacing two systems the jewelry wholesale business currently runs on: an Excel "Master File" workbook (the product catalog) and a set of Monday.com boards (purchase order / vendor pipeline tracking). The goal is not a like-for-like port — it's a proper relational-style database with real workflow enforcement, review steps, and an audit trail, built on Next.js and MongoDB.
 
 **Explicitly out of scope for this build:**
-- **Jm** — a third-party system built separately on request, which already handles pricing, stock, and invoices. **Confirmed:** no integration with Jm is planned. Where a Monday.com board references Jm (e.g. the "save in JM" flag in §4a), PIM 2.0 only records that the hand-off happened — it never reads from or writes to Jm itself.
+- **Jm** — a third-party system built separately on request, which already handles pricing, stock, and invoices. **Confirmed:** no integration with Jm is planned. Where a Monday.com board references Jm (e.g. the "save in JM" flag in §4a), CZC PIM only records that the hand-off happened — it never reads from or writes to Jm itself.
 - **Live marketplace integrations** (Shopify, Amazon, Macy's) — the app produces filled export spreadsheets in each platform's exact format for manual upload. No live API sync.
 
 **No longer out of scope — now live:** SharePoint (image storage) and Monday.com (board sync) integrations were blocked on credentials; both were supplied on 2026-09-01 and are now built and verified against the real systems. See §7 and §14.
@@ -15,6 +15,7 @@ PIM 2.0 is a purpose-built web application replacing two systems the jewelry who
 | Layer | Choice | Why |
 |---|---|---|
 | Framework | Next.js 15 (App Router), React 19, TypeScript (strict) | Single codebase for UI + API routes |
+| Styling | Tailwind CSS | Utility-first, fully migrated from ad hoc inline styles; theme-aware dark/light modes with CSS custom properties |
 | Database | MongoDB Atlas, via Mongoose 8.x | Matches the semi-structured, evolving-schema nature of the legacy Excel data (open `specs` fields, append-only history arrays) |
 | Auth | NextAuth v4, Credentials provider, JWT sessions | Role-based access without a separate identity provider |
 | Password hashing | bcryptjs | Standard, no external dependency |
@@ -81,7 +82,7 @@ Within "Proposals working on," each item/subitem carries several independently-t
 | **Tags → "reviewing samples"** | Whether the sample has been reviewed at all | `Done` / `Waiting for joel` |
 | **Tags** (category) | Free-text category labels, not a closed enum | `KidsJewelry`, `MensJewelry`, `GemStones`, `MensRings`, `Moissaniteitems`, etc. |
 | **create Item/Box no#** | Permanent JAM item-number + warehouse box-number assignment | `Done` / `Working on it` / `Needs editing` / `Stuck` |
-| **save in JM** | Confirms the item was saved into Jm — **confirmed out of scope**: Jm is a separate, purpose-built third-party system and PIM 2.0 has no integration with it planned. This column is tracked here only as a flag so a human knows the hand-off happened, not as something PIM 2.0 needs to read from or write to. | `Done` / blank |
+| **save in JM** | Confirms the item was saved into Jm — **confirmed out of scope**: Jm is a separate, purpose-built third-party system and CZC PIM has no integration with it planned. This column is tracked here only as a flag so a human knows the hand-off happened, not as something CZC PIM needs to read from or write to. | `Done` / blank |
 | **Item ID (auto generated)** | The Jm-side auto-generated ID once saved | Numeric string, e.g. `12835818176` |
 
 **What this means for the schema:** the existing `Item.status` enum already has `quoted` as its first value, and `sampleSku` already exists — so the collection doesn't need new fields to represent this stage, but it does mean **`quoted` needs to be reached by a richer intake process than the current pilot's plain intake form**, and the single `reviewDecision` field needs to account for *two* separate human approvals now confirmed on the real board (an image reviewer and "molly's approval"), not one. This is a real gap the current Phase 3 pilot doesn't cover — flagged in §11 below as new Phase 3b scope.
@@ -200,6 +201,7 @@ This project has been built with a policy of *functional* verification — actua
 9. **`mondayFiles` silently failing to save** — the array field on `PurchaseOrder` was defined with its subdocument options (`_id: false`) nested incorrectly as a sibling of the `name`/`assetId` fields, rather than as the schema's actual options argument. Mongoose accepted this without error at startup but never persisted the array on write — 316 already-imported POs had `mondayItemId` saved but an empty `mondayFiles`, discovered only because you noticed a file link wasn't showing on a real PO. Fixed by extracting a proper `MondayFileSchema` (matching the pattern already used for `LineItemSchema`/`StatusHistoryEntrySchema`), then backfilling all 316 affected POs directly from the live board — 77 of them actually had a file attached and now show it correctly.
 10. **File-fetch endpoint 500'd on every request** — `GET /api/monday/files/[assetId]` asks Monday's API for a fresh signed download URL, but the GraphQL query declared its `ids` argument as nullable (`[ID!]`) when Monday's schema requires it non-nullable (`[ID!]!`) — every call failed Monday-side validation, and the route had no error handling, so it surfaced as a raw unhandled 500 instead of a usable error. Fixed the query signature and added a try/catch that returns a clean JSON error if Monday can't resolve the file.
 11. **Master File import crashed on a real upload — MongoDB's 16MB document limit** — you hit this directly: uploading a real Master File.xlsx failed with a driver-level `RangeError: offset ... out of range`, not a clean app error. Root cause: every staged row (raw values + coerced values + validation flags) was embedded as one array inside a single `import_batches` document — MongoDB caps any one document at 16MB regardless of how many logical rows make it up, and a large enough file's parsed-and-duplicated-per-row data crossed that line even though the original `.xlsx` file itself was much smaller (Excel is compressed; the parsed, tripled-up JSON representation is not). Fixed by splitting rows into their own `import_batch_rows` collection (§4), one document per row — no single document grows with file size anymore. Verified with a synthetic 6,000-row file: upload, row approval, and commit all confirmed working end-to-end against the live database, then the test data was removed. See §5 for the full explanation and the two real (not yet hit) scaling limits that remain.
+12. **"Approve all unflagged" taking ~43 minutes on a 4,000-row batch (2026-09-09)** — the bulk-approve action was calling the single-row PATCH endpoint in a loop (~650ms per row), and the commit-to-items step was doing six sequential database round-trips per item. Fixed: dedicated bulk-approve endpoint using `updateMany` (7.1 sec for 4,000 rows) and rewritten commit route using batched `bulkWrite` instead of per-row saves (12.4 sec for 4,000 rows). Both verified end-to-end: items sharing one new SKU within a batch merge correctly into a single item rather than colliding on the unique index.
 
 ## 11. Current Status by Phase
 
@@ -213,12 +215,12 @@ The project follows an 11-phase plan, plus one newly identified sub-phase (3b) s
 | 3b | Sample-purchasing intake pipeline — vendor proposal file attach, two-stage approval (image review + "molly's approval"), Pass/Done-Ordered outcome, permanent item/box number assignment | **Not started** — scope identified 2026-08-31, not yet requested |
 | 4 | Receiving + photography + SharePoint image pipeline | **Done** — SharePoint credentials received 2026-09-01, image pipeline built and verified live same day. Receiving log + warehouse QC screens (content/packaging checks) still to build. |
 | 5 | Master DB completion gate | **Done** |
-| 6 | Marketplace export generator | Blocked — needs sample format files (Shopify/Amazon/Macy's) |
+| 6 | Marketplace export generator | **Done** — real Target, Macy's, Belk, and Kohl's bulk-import templates supplied 2026-09-09; export-review UI built and verified live for all four platforms. Shopify/Amazon still blocked on template files. |
 | 7 | Payables + payment recording | **Done** |
 | 8 | Role hardening + Monday.com sync + dashboard | Mostly done — role gating exists (and its `/items`/`/catalog`/`/` gap was fixed, §10 item 7), Monday.com sync built and verified live both directions (push §12, pull §12 "Inbound pull") 2026-09-01. `/dashboard` aggregation views not yet built. |
 | 9–11 | UAT → deployment/training → post-launch support | Not started |
 
-**Seven of twelve phases are complete and function-verified against the live database** (up from five — Phase 4's image pipeline and Phase 8's Monday.com sync both went live 2026-09-01, the day SharePoint and Monday.com credentials were supplied). What's left: Phase 3b (scoped, not requested), Phase 6 (blocked on marketplace sample files), the `/dashboard` view within Phase 8, and Phases 9–11 (depend on everything above being live first).
+**Eight of twelve phases are complete and function-verified against the live database** (up from seven as of 2026-09-08 — Phase 6's marketplace export went live 2026-09-09 with Target/Macy's/Belk/Kohl's templates verified, though Shopify/Amazon templates remain blocked). What's left: Phase 3b (scoped, not requested), the remaining marketplaces for Phase 6 (Shopify/Amazon, blocked on template files), the `/dashboard` view within Phase 8, and Phases 9–11 (depend on everything above being live first).
 
 ## 12. Monday.com Sync Engine (Phase 8, sync portion)
 
@@ -252,8 +254,11 @@ The sync above is one-way (PIM → Monday). A second, independent pull direction
 - **No pagination on the import-review screen** — the 16MB document-size crash (§10 item 11) is fixed and batches of any size now insert correctly, but the review table still renders every staged row client-side at once. A batch in the low thousands of rows (what's been seen from real usage so far) is fine; tens of thousands of rows would be sluggish to review in the browser even though the backend handles it. Worth adding if larger files become routine.
 - **No upload size/row-count cap** — nothing currently stops an arbitrarily large file from being uploaded and parsed in memory in one request. Not a data-corruption risk after the §10 item 11 fix, but a resource-exhaustion one worth guarding against with a sane cap and a clear rejection message.
 - **Monday.com status vocabulary gap** (§12) — roughly 20 real board-status labels have no equivalent in this app's `PoStatus` enum. Worth a conversation with Joel; not currently blocking anything.
+- **Marketplace export files don't yet replicate dropdown validation from real templates** — generated Macy's/Belk/Kohl's/Target files match every column exactly but don't carry the Excel data-validation pick-lists and conditional formatting from your native templates. Adding these is technically straightforward (exceljs supports it) but requires listing which columns have restricted values and what those values are.
 
-## 14. Visual Design System & UI Audit (2026-09-01)
+## 14. Visual Design System & UI Audit (2026-09-09)
+
+A full redesign and rebrand from "PIM 2.0" to "CZC PIM," completed 2026-09-09, migrating the entire app onto Tailwind CSS (from ad hoc inline styles) and introducing a polished, consistent visual identity.
 
 A full pass over everything built so far, requested to confirm three things before client presentation: the DB schema is fully covered, every API endpoint actually works, and the UI for completed phases is presentation-ready.
 

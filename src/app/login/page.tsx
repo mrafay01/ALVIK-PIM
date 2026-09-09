@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogIn, Gem, ClipboardList, ShieldCheck, Workflow } from "lucide-react";
+import Image from "next/image";
+import { LogIn, Gem, ClipboardList, ShieldCheck, Workflow } from "lucide-react";
 import { Field, Input, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 
@@ -94,18 +95,14 @@ export default function LoginPage() {
 
         <div className="relative w-full max-w-[460px] px-2 py-16 flex flex-col flex-1">
           <div>
-            <div className="flex items-center gap-3">
-              <span
-                className="flex items-center justify-center w-[42px] h-[42px] rounded-sm shrink-0"
-                style={{
-                  background: "linear-gradient(135deg, var(--brass) 0%, var(--brass-soft) 130%)",
-                  boxShadow: "0 4px 20px var(--brass-glow)",
-                }}
-              >
-                <Sparkles size={22} strokeWidth={2.25} color="#1a1409" />
-              </span>
-              <span className="font-display font-bold text-2xl text-ink">CZC PIM</span>
-            </div>
+            <Image
+              src="/logos/horizontal logo.png"
+              alt="CZC PIM"
+              width={936}
+              height={348}
+              priority
+              className="h-[42px] w-auto object-contain"
+            />
 
             <h1 className="mt-14 text-[2.35rem] leading-[1.22] text-ink">
               One system for every product, vendor, and order.

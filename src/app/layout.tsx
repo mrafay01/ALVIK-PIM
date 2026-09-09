@@ -28,6 +28,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "CZC PIM",
   description: "Product & purchase order management",
+  icons: { icon: "/logos/favicon.svg" },
 };
 
 export default function RootLayout({

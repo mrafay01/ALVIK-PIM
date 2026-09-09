@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Gem,
   ClipboardList,
@@ -12,7 +13,6 @@ import {
   Store,
   ChevronsLeft,
   ChevronsRight,
-  Sparkles,
 } from "lucide-react";
 import { SignOutButton } from "./SignOutButton";
 
@@ -91,14 +91,8 @@ export function Sidebar({
       >
         <Link href="/" className="no-underline overflow-hidden">
           <div className="flex items-center gap-2.5 font-display font-bold text-xl text-ink whitespace-nowrap" suppressHydrationWarning>
-            <span
-              className="flex items-center justify-center w-[34px] h-[34px] rounded-sm shrink-0"
-              style={{
-                background: "linear-gradient(135deg, var(--brass) 0%, var(--brass-soft) 130%)",
-                boxShadow: "0 0 0 1px var(--border), 0 4px 12px var(--brass-glow)",
-              }}
-            >
-              <Sparkles size={17} strokeWidth={2.25} color="#1a1409" />
+            <span className="flex items-center justify-center w-[34px] h-[34px] shrink-0">
+              <Image src="/logos/only logo.png" alt="" width={306} height={333} priority className="w-full h-full object-contain" />
             </span>
             {!collapsed && <span>CZC PIM</span>}
           </div>
