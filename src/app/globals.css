@@ -1,0 +1,220 @@
+/* ---------------------------------------------------------------
+   CZC PIM — Design tokens & base styles
+   Palette: deep ink navy ground, muted brass accent (jewelry trade
+   without going full gold-on-black), semantic status colors kept
+   separate from the accent hue. Dark is the primary experience;
+   light is available via [data-theme="light"].
+   Type: Fraunces (display, sparing) + Manrope (UI) + JetBrains Mono (data)
+
+   Tailwind utilities read these tokens via tailwind.config.ts (colors,
+   fonts, radii, shadows all resolve through var(--token)) — this file
+   stays the single source of truth for both the raw CSS below and
+   every Tailwind class used across the app.
+--------------------------------------------------------------- */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #eceaf0;
+  --ink-soft: #b7bccb;
+  --ink-faint: #767e91;
+
+  --surface: #12141b;
+  --surface-sunken: #0b0c11;
+  --surface-raised: #191d27;
+  --surface-overlay: #1f2430;
+  --border: #262b38;
+  --border-strong: #383f52;
+
+  --brass: #d9b077;
+  --brass-soft: #4a3a22;
+  --brass-bg: #241d13;
+  --brass-glow: rgba(217, 176, 119, 0.18);
+
+  --navy-deep: #b7c6e6;
+  --navy-soft: #8fa3c7;
+
+  --good: #7fd4a8;
+  --good-bg: #142a20;
+  --warn: #eba572;
+  --warn-bg: #2e2015;
+  --critical: #ef8a8a;
+  --critical-bg: #2e1717;
+  --neutral-pill-bg: #232837;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.45), 0 24px 64px rgba(0, 0, 0, 0.35);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-body: var(--font-manrope), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+:root[data-theme="light"] {
+  --ink: #12151c;
+  --ink-soft: #4a5266;
+  --ink-faint: #8b93a4;
+
+  --surface: #ffffff;
+  --surface-sunken: #f5f4f0;
+  --surface-raised: #ffffff;
+  --surface-overlay: #ffffff;
+  --border: #e4e1d8;
+  --border-strong: #cdc8b8;
+
+  --brass: #a97c42;
+  --brass-soft: #eee0c9;
+  --brass-bg: #faf3e6;
+  --brass-glow: rgba(169, 124, 66, 0.12);
+
+  --navy-deep: #1c2b4a;
+  --navy-soft: #3a4d74;
+
+  --good: #3f7d5c;
+  --good-bg: #e3efe7;
+  --warn: #b8622f;
+  --warn-bg: #f6e6da;
+  --critical: #af3131;
+  --critical-bg: #f6dfdf;
+  --neutral-pill-bg: #eceae3;
+
+  --shadow-sm: 0 1px 2px rgba(18, 21, 28, 0.06);
+  --shadow-md: 0 2px 8px rgba(18, 21, 28, 0.08), 0 8px 24px rgba(18, 21, 28, 0.05);
+  --shadow-lg: 0 6px 20px rgba(18, 21, 28, 0.1), 0 20px 48px rgba(18, 21, 28, 0.08);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ink: #12151c;
+    --ink-soft: #4a5266;
+    --ink-faint: #8b93a4;
+
+    --surface: #ffffff;
+    --surface-sunken: #f5f4f0;
+    --surface-raised: #ffffff;
+    --surface-overlay: #ffffff;
+    --border: #e4e1d8;
+    --border-strong: #cdc8b8;
+
+    --brass: #a97c42;
+    --brass-soft: #eee0c9;
+    --brass-bg: #faf3e6;
+    --brass-glow: rgba(169, 124, 66, 0.12);
+
+    --navy-deep: #1c2b4a;
+    --navy-soft: #3a4d74;
+
+    --good: #3f7d5c;
+    --good-bg: #e3efe7;
+    --warn: #b8622f;
+    --warn-bg: #f6e6da;
+    --critical: #af3131;
+    --critical-bg: #f6dfdf;
+    --neutral-pill-bg: #eceae3;
+
+    --shadow-sm: 0 1px 2px rgba(18, 21, 28, 0.06);
+    --shadow-md: 0 2px 8px rgba(18, 21, 28, 0.08), 0 8px 24px rgba(18, 21, 28, 0.05);
+    --shadow-lg: 0 6px 20px rgba(18, 21, 28, 0.1), 0 20px 48px rgba(18, 21, 28, 0.08);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin: 0;
+  text-wrap: balance;
+  color: var(--ink);
+}
+
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: var(--brass-glow);
+  color: var(--ink);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+.czc-row {
+  transition: background 0.12s;
+}
+
+.czc-row:hover {
+  background: var(--surface-overlay);
+}
+
+.czc-card-link {
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.czc-card-link:hover {
+  border-color: var(--brass-glow);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

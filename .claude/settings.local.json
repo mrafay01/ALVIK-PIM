@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(where chrome *)",
+      "Read(//c/Program Files/Google/Chrome/Application/**)",
+      "Read(//c/Program Files \\\\\\(x86\\\\\\)/Microsoft/Edge/Application/**)",
+      "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless --disable-gpu --screenshot=/tmp/shots/login2.png --window-size=1920,960 http://localhost:3001/login)",
+      "Bash(taskkill //F //IM chrome.exe)",
+      "Bash(npm install *)",
+      "Bash(npx tailwindcss *)",
+      "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless --disable-gpu --screenshot=/tmp/shots/login-tw.png --window-size=1920,960 http://localhost:3000/login)",
+      "Bash(xargs grep -l 'style={{')",
+      "Bash(node -e ' *)",
+      "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless --disable-gpu --screenshot=/tmp/shots/final-login.png --window-size=1920,960 http://localhost:3000/login)",
+      "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless --disable-gpu --screenshot=/tmp/shots/final-404.png --window-size=1600,1000 http://localhost:3000/no-such-page)",
+      "Read(//c/Users/cw/**)",
+      "Read(//c/Users/cw//**)",
+      "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless --disable-gpu --screenshot=/tmp/shots/fonts-check.png --window-size=1920,960 http://localhost:3000/login)",
+      "Bash(JAR=/tmp/cookies.txt *)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -b /tmp/cookies.txt http://localhost:3000/items -o /tmp/items_page.html -w 'HTTP %{http_code}\\\\n')",
+      "Bash(grep -o \"Purchase Orders\\\\|Payables\\\\|CZC PIM\" /tmp/items_page.html | sort -u *)",
+      "Bash(taskkill //F //IM node.exe 2>/dev/null; rm -f /tmp/login_test.js /tmp/cookies.txt /tmp/signin_body.txt /tmp/items_page.html /tmp/port*.txt; echo done)",
+      "Bash(npx tsx *)",
+      "Bash(curl -s -o /dev/null -w \"priming: %{http_code}\\\\n\" \"http://localhost:3000/login\")",
+      "Bash(curl -s -o /dev/null -w \"auth csrf: %{http_code}\\\\n\" \"http://localhost:3000/api/auth/csrf\")",
+      "Bash(time curl -s -b /tmp/import_cookies.txt http://localhost:3000/api/admin/import-review -X POST -F file=@stress-test-masterfile.xlsx -o /tmp/upload_result.json -w 'upload http: %{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/import_cookies.txt http://localhost:3000/api/admin/import-review/6aa026a0279c0bcfefc3d8a3 -o /tmp/batch_detail.json -w 'detail http: %{http_code}\\\\n')",
+      "Bash(node -e \"console.log\\(require\\('C:/Users/cw/AppData/Local/Temp/batch_detail.json'\\).batch.rows[0]._id\\)\")",
+      "Bash(curl -s -b /tmp/import_cookies.txt -X PATCH http://localhost:3000/api/admin/import-review/6aa026a0279c0bcfefc3d8a3/rows/__CMDSUB_OUTPUT__ -H 'Content-Type: application/json' -d '{\"reviewStatus\":\"approved\"}' -o /tmp/patch_result.json -w 'patch http: %{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/import_cookies.txt -X POST http://localhost:3000/api/admin/import-review/6aa026a0279c0bcfefc3d8a3/commit -o /tmp/commit_result.json -w 'commit http: %{http_code}\\\\n')",
+      "Bash(rm -f src/scripts/gen-test-masterfile.ts src/scripts/cleanup-stress-test.ts stress-test-masterfile.xlsx)",
+      "Bash(rm -f /tmp/import_cookies.txt /tmp/signin_result.json /tmp/upload_result.json /tmp/batch_detail.json /tmp/patch_result.json /tmp/commit_result.json /tmp/port_import.txt)",
+      "Bash(rm -f \"C:/Users/cw/AppData/Local/Temp/batch_detail.json\" \"C:/Users/cw/AppData/Local/Temp/patch_result.json\" \"C:/Users/cw/AppData/Local/Temp/commit_result.json\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\cw\\\\Documents\\\\PIM\\\\.artifact-work\" *)"
+    ],
+    "additionalDirectories": [
+      "\\tmp",
+      "C:\\Users\\cw\\.claude\\projects\\c--Users-cw-Documents-PIM\\1a197cc3-533e-4dd9-930b-3228e778f282\\tool-results"
+    ]
+  }
+}
