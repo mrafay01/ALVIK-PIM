@@ -2,6 +2,7 @@ export { default as User } from "./User";
 export { default as Vendor } from "./Vendor";
 export { default as Item } from "./Item";
 export { default as Quotation } from "./Quotation";
+export { default as QuotationRow } from "./QuotationRow";
 export { default as PurchaseOrder } from "./PurchaseOrder";
 export { default as Shipment } from "./Shipment";
 export { default as ReceivingLog } from "./ReceivingLog";

@@ -12,6 +12,9 @@ const PAGE_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
   ["/receiving", ["warehouse_receiving"]],
   ["/admin", []], // administrator only
   ["/marketplace-export", ["marketplace_listing"]],
+  // /catalog itself is read-only for any signed-in user; only the
+  // hand-entry form is gated.
+  ["/catalog/new", ["marketplace_listing"]],
 ];
 
 // Middleware runs before the handler and can't see request bodies or
@@ -27,8 +30,12 @@ const API_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
   ["/api/monday", ["buying_purchasing"]],
   ["/api/payables", ["accounts_finance"]],
   ["/api/purchase-orders", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
+  ["/api/quotations", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
   ["/api/items", ["buyer_merchandiser", "buying_purchasing", "marketplace_listing", "photography"]],
   ["/api/marketplace-export", ["marketplace_listing"]],
+  // /api/catalog: create is marketplace_listing; the approve sub-route is
+  // admin-only, enforced in the handler itself.
+  ["/api/catalog", ["marketplace_listing"]],
 ];
 
 function firstMatch(
@@ -90,7 +97,9 @@ export const config = {
     "/admin/:path*",
     "/marketplace-export/:path*",
     "/api/items/:path*",
+    "/api/catalog/:path*",
     "/api/purchase-orders/:path*",
+    "/api/quotations/:path*",
     "/api/payables/:path*",
     "/api/monday/:path*",
     "/api/admin/:path*",

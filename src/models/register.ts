@@ -12,6 +12,7 @@ import User from "./User";
 import Vendor from "./Vendor";
 import Item from "./Item";
 import Quotation from "./Quotation";
+import QuotationRow from "./QuotationRow";
 import PurchaseOrder from "./PurchaseOrder";
 import Shipment from "./Shipment";
 import ReceivingLog from "./ReceivingLog";
@@ -28,6 +29,7 @@ export const MODELS = {
   Vendor,
   Item,
   Quotation,
+  QuotationRow,
   PurchaseOrder,
   Shipment,
   ReceivingLog,

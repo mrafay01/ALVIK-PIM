@@ -87,6 +87,11 @@ export const ItemPatchSchema = z
     status: z.enum(ITEM_STATUSES).optional(),
     itemNumber: shortText.optional(),
     category: z.string().trim().max(200).optional(),
+    title: z.string().trim().max(500).optional(),
+    description: z.string().trim().max(5000).optional(),
+    brand: z.string().trim().max(200).optional(),
+    upc: z.string().trim().max(200).optional(),
+    bulletFeatures: z.array(z.string().trim().max(500)).max(10).optional(),
     specs: ItemSpecsSchema.optional(),
     pricing: z
       .object({
@@ -97,6 +102,37 @@ export const ItemPatchSchema = z
       .optional(),
   })
   .refine((b) => Object.keys(b).length > 0, "empty update");
+
+// --------------------------------------------------------------- catalog
+
+// One hand-entered catalog product: a base SKU plus optional variations
+// (same design, hyphen-suffixed SKU — different plating / stone / size).
+const catalogText = z.string().trim().min(1).max(200);
+const CatalogVariationSchema = z.object({
+  suffix: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40)
+    .regex(/^[A-Za-z0-9-]+$/, "letters, digits and hyphens only"),
+  plating: z.string().trim().max(300).optional(),
+  upc: z.string().trim().max(200).optional(),
+  msrp: money.optional(),
+});
+
+export const CatalogItemCreateSchema = z.object({
+  sku: catalogText,
+  title: z.string().trim().min(1).max(500),
+  description: z.string().trim().max(5000).optional(),
+  category: z.string().trim().min(1).max(200),
+  brand: z.string().trim().max(200).optional(),
+  metal: z.string().trim().max(200).optional(),
+  plating: z.string().trim().max(300).optional(),
+  msrp: money.optional(),
+  upc: z.string().trim().max(200).optional(),
+  bulletFeatures: z.array(z.string().trim().max(500)).max(10).optional(),
+  variations: z.array(CatalogVariationSchema).max(20).optional(),
+});
 
 // ------------------------------------------------------- purchase orders
 
@@ -164,6 +200,44 @@ export const PaymentPatchSchema = z
 // --------------------------------------------------- import review rows
 
 export const ImportRowPatchSchema = z
+  .object({
+    reviewStatus: z.enum(["approved", "rejected", "needs_review"]).optional(),
+    coercedOverrides: z.record(z.string().max(100), z.unknown()).optional(),
+    reviewNote: z.string().trim().max(2000).optional(),
+  })
+  .refine((b) => Object.keys(b).length > 0, "empty update");
+
+// ------------------------------------------------------------ quotations
+
+// One manually-entered line item: `fields` is an open map of QUOTE_FIELDS
+// keys to the raw string the person typed; `custom` is an open map of the
+// quote-level custom column labels to their value. Kept as strings here —
+// the same coercion the file parser uses runs server-side (stageManualRow)
+// so the two intake paths stage identical row shapes.
+const quoteItemValue = z.string().trim().max(500);
+const quoteStringMap = z
+  .record(z.string().max(60), quoteItemValue)
+  .refine((o) => Object.keys(o).length <= 60, "too many fields on one item");
+
+const QuoteManualItemSchema = z.object({
+  fields: quoteStringMap,
+  custom: quoteStringMap.optional(),
+});
+
+export const QuotationManualSchema = z.object({
+  vendorId: objectId,
+  poNumber: z.string().trim().max(200).optional(),
+  receivedDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  season: z.string().trim().max(120).optional(),
+  // Labels of the quote-level custom columns, for reference/echo.
+  customColumns: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+  items: z.array(QuoteManualItemSchema).min(1, "add at least one item").max(200),
+});
+
+export const QuotationRowPatchSchema = z
   .object({
     reviewStatus: z.enum(["approved", "rejected", "needs_review"]).optional(),
     coercedOverrides: z.record(z.string().max(100), z.unknown()).optional(),

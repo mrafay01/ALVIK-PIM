@@ -7,6 +7,7 @@ import ImportBatchRow from "@/models/ImportBatchRow";
 import Item from "@/models/Item";
 import { setDotPath } from "@/lib/import/setDotPath";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
+import { splitSku } from "@/lib/catalog/sku";
 
 const PRICING_FIELD_MAP: Record<string, string> = {
   "pricing.msrp": "msrp",
@@ -123,6 +124,12 @@ export async function POST(
         Object.assign(existing, update);
         if (hasPricingData) existing.pricingHistory.push(pricingEntry);
       }
+      // Backfill the SKU family fields on older docs that predate them.
+      if (existing.itemNumber && !existing.baseSku) {
+        const s = splitSku(existing.itemNumber);
+        existing.baseSku = s.baseSku;
+        existing.variantSuffix = s.variantSuffix;
+      }
       existing.masterRecordComplete = isMasterRecordComplete(existing);
       for (const row of groupRows) rowCommitTarget.set(row._id.toString(), existing._id);
       merged += 1;
@@ -137,9 +144,18 @@ export async function POST(
     } else {
       // Brand-new item: fold every row in this group into one document
       // before inserting, same merge order as above.
+      const { baseSku, variantSuffix } = splitSku(itemNumber);
+      const now = new Date();
       const doc: Record<string, unknown> = {
         itemNumber,
+        baseSku,
+        variantSuffix,
         status: "live", // legacy import — these are existing catalog items, not new intake
+        // Master File rows are the finalized company database — in the
+        // catalog directly, no human approval step needed.
+        origin: "master_file",
+        inCatalog: true,
+        catalogApproval: { status: "approved", approvedAt: now },
         pricingHistory: [] as Record<string, unknown>[],
       };
       for (const row of groupRows) {

@@ -38,11 +38,18 @@
       "Bash(mkdir -p \"C:\\\\Users\\\\cw\\\\Documents\\\\PIM\\\\.artifact-work\" *)",
       "Bash(dir -s .)",
       "Bash(npm ls *)",
-      "Bash(xargs wc -l)"
+      "Bash(xargs wc -l)",
+      "Bash(cd \"C:/Users/cw/Documents/PIM\" && sed -n '1,25p' src/app/items/[itemId]/page.tsx && echo \"...\" && grep -n \"isMasterRecordComplete\\\\|masterRecordComplete\\\\|checkMasterRecordComplete\" src/app/items/[itemId]/page.tsx)",
+      "Bash(powershell -NoProfile -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force\")",
+      "Bash(rm -rf .next)",
+      "Bash(npx next *)",
+      "Bash(cp \"C:/Users/cw/.claude/projects/c--Users-cw-Documents-PIM/1a197cc3-533e-4dd9-930b-3228e778f282/tool-results/artifact-4bfebdd3-1789042939-f2c7.html\" \"C:/Users/cw/AppData/Local/Temp/claude/c--Users-cw-Documents-PIM/1a197cc3-533e-4dd9-930b-3228e778f282/scratchpad/blueprint.html\" && wc -l \"C:/Users/cw/AppData/Local/Temp/claude/c--Users-cw-Documents-PIM/1a197cc3-533e-4dd9-930b-3228e778f282/scratchpad/blueprint.html\")",
+      "Bash(python -c ' *)"
     ],
     "additionalDirectories": [
       "\\tmp",
-      "C:\\Users\\cw\\.claude\\projects\\c--Users-cw-Documents-PIM\\1a197cc3-533e-4dd9-930b-3228e778f282\\tool-results"
+      "C:\\Users\\cw\\.claude\\projects\\c--Users-cw-Documents-PIM\\1a197cc3-533e-4dd9-930b-3228e778f282\\tool-results",
+      "C:\\Users\\cw\\Documents\\PIM\\src\\app\\items\\[itemId]"
     ]
   }
 }

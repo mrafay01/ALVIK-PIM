@@ -82,6 +82,12 @@ export async function PATCH(
     item.category = body.category;
   }
 
+  if (body.title !== undefined) item.title = body.title;
+  if (body.description !== undefined) item.description = body.description;
+  if (body.brand !== undefined) item.brand = body.brand;
+  if (body.upc !== undefined) item.upc = body.upc;
+  if (body.bulletFeatures !== undefined) item.bulletFeatures = body.bulletFeatures;
+
   if (body.specs) {
     if (!item.specs) item.set("specs", {});
     Object.assign(item.specs!, body.specs);

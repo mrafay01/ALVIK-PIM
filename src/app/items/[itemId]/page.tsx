@@ -7,8 +7,10 @@ import PurchaseOrder from "@/models/PurchaseOrder";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { ITEM_STATUS_LABEL, ITEM_STATUS_TONE, PO_STATUS_LABEL, PO_STATUS_TONE } from "@/lib/statusDisplay";
+import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { ItemActions } from "./ItemActions";
 import { MediaUpload } from "./MediaUpload";
+import { SubmitToCatalog } from "./SubmitToCatalog";
 
 export default async function ItemDetailPage({
   params,
@@ -31,6 +33,19 @@ export default async function ItemDetailPage({
     .lean();
 
   const latestPricing = item.pricingHistory?.[item.pricingHistory.length - 1];
+
+  const canManageCatalog = roleCan(role, ["marketplace_listing"]);
+  const catalogState: "eligible" | "pending" | "approved" | "incomplete" | null = !canManageCatalog
+    ? null
+    : item.inCatalog
+      ? item.catalogApproval?.status === "pending"
+        ? "pending"
+        : "approved"
+      : item.origin === "quotation"
+        ? isMasterRecordComplete(item)
+          ? "eligible"
+          : "incomplete"
+        : null;
 
   return (
     <AppShell activeHref="/items" eyebrow="Item detail" title={item.vendorSku || "Item"}>
@@ -108,6 +123,12 @@ export default async function ItemDetailPage({
           }}
         />
       </div>
+
+      {catalogState && (
+        <div className="mt-5">
+          <SubmitToCatalog itemId={String(item._id)} state={catalogState} />
+        </div>
+      )}
 
       {canEditItem && (
         <div className="mt-5">

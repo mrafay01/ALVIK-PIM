@@ -39,7 +39,7 @@ Eight roles exist, matching the departments that touch this workflow in real lif
 
 ## 4. Database Schema
 
-Twelve MongoDB collections, defined as Mongoose models in [`src/models/`](src/models/). `Item` is the spine — almost everything else references it.
+Fourteen MongoDB collections, defined as Mongoose models in [`src/models/`](src/models/) (`import_batches` split into two 2026-09-08; `marketplace_listings` added 2026-09-09; `quotation_rows` added 2026-09-10 alongside the extended `quotations`). `Item` is the spine — almost everything else references it.
 
 ### `users`
 Name, email (unique), bcrypt password hash, role, active flag.
@@ -58,7 +58,11 @@ Tracks a product through its entire life, from an incoming vendor proposal to a 
 - **`imageCompleteness`** — derived flags (`main`, `sides`, `models`), each true once that subfolder has at least one image.
 - **`pricingHistory`** — append-only array of dated price entries (cost, MSRP, Rue price). Never overwritten — mirrors how the Excel sheet tracked price changes over time via separate dated columns.
 - **`costHistory`** — per-PO costing snapshots (labor/material cost per gram, quantity, total).
+- **`customFields`** — a free-form `Map<string,string>` (label → text) for columns a vendor quote carried that don't map to a known spec field. A quote sheet's column set isn't fixed, so unrecognized columns are kept here under the vendor's exact label rather than dropped. Populated by quote intake (§5a); not yet surfaced on the item detail/catalog screens.
 - **`masterRecordComplete`** — the publish gate; see §6.
+- **`title` / `description` / `bulletFeatures` / `brand` / `upc`** — listing content. `brand`/`upc` come from the Master File import (see §6a — previously silently dropped by the strict root schema).
+- **`baseSku` / `variantSuffix`** — SKU family split (before / after the first hyphen), kept in sync with `itemNumber` by a pre-save hook. See §6a "Variations".
+- **`origin`** (`master_file` / `manual` / `quotation`), **`inCatalog`**, **`catalogApproval`** (`{ status, approvedBy, approvedAt }`), **`catalogSubmittedAt`** — the catalog membership + approval fields, §6a.
 
 **This lifecycle now has a confirmed upstream stage** — see §4a below — that precedes everything described here. The `quoted` status is where that upstream stage hands off into this collection.
 
@@ -116,6 +120,9 @@ Scaffolded for future phases — Monday.com sync runs and marketplace export col
 ### `import_batches` and `import_batch_rows` — legacy-import staging (see §5)
 Each uploaded Master File becomes one `import_batches` document (filename, status, summary counters) plus one `import_batch_rows` document **per row** in a separate collection, referencing the batch by `batchId`. This is a two-collection design, not one — see the 2026-09-08 fix note in §5 for why rows aren't embedded directly in the batch.
 
+### `quotations` and `quotation_rows` — vendor quote intake (see §5a)
+Each intaken vendor quote (an uploaded `.xlsx`/`.csv` or a hand-entered one) becomes one `quotations` document (vendor, `source`, optional file name / PO ref / season, `status`, summary counters, and `itemIds` linking the items its commit produced) plus one `quotation_rows` document **per line item** in a separate collection, `quotationId`-referenced — same two-collection design and same 16MB-ceiling reason as `import_batch_rows`. `quotation_rows.coerced` is dot-path keyed to the `Item` schema so the commit step writes it straight through. The 34 standard line-item columns (CZ item#, vendor item#, silver price/gram, weights, stone info, plating, measurements, costs, price, material, stamp, date, image) are defined once in [`src/lib/quote-import/fields.ts`](src/lib/quote-import/fields.ts). Any column beyond those 34 is kept as a **custom field** — `coerced.__custom` is a `{ label: text }` map of the row's unrecognized columns, written to `Item.customFields` at commit (later row wins per label, blanks skipped). On the manual "new quote" page these are **quote-level custom columns** — define a column once and every item row shows it; on file import they're per-row, whatever the sheet carried. Column names that collide with a standard field, and spreadsheet-noise headers (`Column3`, `__EMPTY`, blank), are ignored.
+
 ## 5. Legacy Data Import (Phase 2)
 
 The Excel Master File has real-world data-quality problems: dates stored as text, blank vs. `/` used inconsistently for "not applicable," hand-typed metal values with no validation ("Brass" typed freely instead of picked from a list), and stray leftover header cells from AutoFilter exports.
@@ -133,6 +140,28 @@ Nothing ever writes to the live `items` collection until a human has explicitly 
 
 **Fix, 2026-09-08 — large-file upload crash.** The original design stored every row's raw data, coerced data, and validation flags as one embedded array inside a single `import_batches` document. A large enough Master File pushed that one document past MongoDB's hard 16MB-per-document limit, and the upload failed with a low-level driver error (`RangeError: offset ... out of range`) instead of a usable message. Fixed by moving rows into their own `import_batch_rows` collection — one small document per row, referencing its batch by `batchId` — so no single document grows with file size. Verified against the live database with a synthetic 6,000-row file (well past what triggered the original crash): upload, per-row approval, and commit-to-`items` all confirmed working end-to-end, then the test data was removed. Batches of any realistic size are no longer bounded by document size — the two remaining scaling concerns (not yet hit in practice) are noted in §13.
 
+## 5a. Vendor Quote Intake (2026-09-10)
+
+The legacy import (§5) is a one-time migration of the historical Master File. Quote intake is the ongoing counterpart: how a **new** vendor quote enters the system, either as a file the vendor sent or typed in by hand. It reuses the §5 staged-review pattern deliberately — parse, stage, review with inline correction, then commit — rather than inventing a second one.
+
+It lives under **Purchase Orders**, not Items: a quote is a vendor-pipeline artifact (one quote, one vendor, many line items) that *produces* items rather than being one. Three buttons on `/purchase-orders` and `/purchase-orders/quotes`: **New quote manually**, **Import quote file**, **View all quotes**.
+
+**The line-item shape.** One list — [`src/lib/quote-import/fields.ts`](src/lib/quote-import/fields.ts) — defines the 34 columns of a quote line (CZ item#, vendor item#, silver price/gram, total & silver weight, main/rest stone info·color·type, plating & plating type, the BR&NEC length/extender/size measurements, ring size, clasp, post length, push-back size, chain thickness, labor cost/gram, qty, labor & silver cost totals, price, total price, total PO, material, stamp, confirmation date, and an image field). That one definition drives the file parser's header matching, the manual-entry form, and the review editor, so the three stay in lockstep. Each field declares where it lands on the `Item` document (dot-path) and its type, which picks the coercion rule.
+
+**Image field.** Captured as a fixed note — `"working on it"` — on every row, file or manual, and never written to the `Item`. Directory-select → automatic SharePoint upload following the §7 folder structure is a separate, later piece of work.
+
+**File path.** `POST /api/quotations` (multipart) accepts `.xlsx` (via `exceljs`) or `.csv` (via a small dependency-free RFC-4180 reader, [`parseCsv.ts`](src/lib/quote-import/parseCsv.ts) — quoted fields, embedded commas/newlines, `""` escaping, UTF-8 BOM). **Legacy `.xls` (Excel 97-2003) is deliberately rejected** with a clear "open in Excel and Save As .xlsx or .csv first" message: `exceljs` can't read it, and the alternative reader (SheetJS/`xlsx` on npm) carries unpatched prototype-pollution and ReDoS CVEs that PROJECT-REPORT.md §2 rules out for an untrusted-upload handler. The header row is **auto-detected** — the parser scans the first 3 rows and picks the one matching the most known column names, so a blank or title row above the headers (as in the real 23337 sheet, whose headers are on row 2) is handled. Headers are then matched by name against the field list's aliases, so the sheet can be in the vendor's own column order and layout. Every cell is coerced by its field's type — money coercion strips currency markers (`US$`, `USD`, `$`, `€`, …) and thousands separators; a value that won't coerce (a non-numeric price, an impossible date like `13/25/2026`) is flagged with the raw value kept, exactly as §5 does. **Row identity:** the CZ item number if present, otherwise the vendor's own item number — many quote sheets (23337 included) carry no CZ number, it's assigned in a later step — a row is only flagged when it has neither.
+
+**Manual path.** `/purchase-orders/quotes/new` — vendor/PO-ref/received-date/season header plus repeatable item rows (Add item / Remove), every field from the same list. `POST /api/quotations` (JSON) runs the typed values through the *same* coercion server-side so a hand-typed bad date is flagged just like a file one.
+
+**Data model.** `quotations` (extended from the schema stub) + a new `quotation_rows` collection — one small document per line item, `quotationId`-referenced, for the same 16MB-ceiling reason `import_batch_rows` exists. A quotation carries `source` (`file_upload`/`manual`), the vendor, optional file name / PO ref / season, a `status` (`parsing → needs_review → reviewed → committed`), summary counters, and `itemIds` linking the items its commit produced.
+
+**Review + commit.** `/purchase-orders/quotes/[id]` — filter tabs (flagged / needs-review / all), inline correction of any field (a fixed flag clears itself), per-row approve/reject, bulk-approve of all unflagged rows. **Commit** writes approved rows into `items` as `status: "quoted"`, one `pricingHistory` entry per row with `source: "quotation_import"`, vendor copied from the quotation. Rows are grouped by identity: rows sharing a CZ item number merge into one item (later row wins on scalars, pricing appends), and a CZ number that already exists in `items` merges into that document rather than colliding on the unique index. Rows with only a vendor item number are matched to an existing item on `(vendorId, vendorSku)` where `itemNumber` is still unset, and a newly-created one leaves `itemNumber` unset for the later CZ-assignment step — so two such rows can't collide on the sparse unique index, and the same SKU from a *different* vendor stays a separate item. Commit is re-runnable — committed rows are skipped — and batched (one `Item.find` per identity namespace, one `bulkWrite`) like the §5 commit.
+
+**Merge-safety fix during build.** The first cut of the commit step built each field-set as a fresh nested object and `Object.assign`-ed it onto the target — which meant writing a partial path like `specs.ringSize` onto an existing item **replaced its whole `specs` subdocument**, wiping `specs.weight`, `specs.metal`, etc. Caught in end-to-end testing (re-import an existing item touching only ring size → its weight vanished). Fixed with a deep-set helper ([`applyToItem.ts`](src/lib/quote-import/applyToItem.ts)) that creates intermediate objects but never replaces an existing one. Re-verified: partial re-import now leaves untouched nested fields intact. The legacy §5 commit has the same latent shape but is masked there because those rows always carry the full spec set; noted for a follow-up.
+
+**Verification.** Full flow exercised against the live database and removed afterward. Manual path: 3-item quote (one row deliberately flagged) → bulk-approve took exactly the 2 clean rows → inline-fix the flagged row's value (flag cleared) → approve → commit created 3 `quoted` items with specs/pricing mapped correctly; `.xlsx` upload with a duplicate CZ number → the two duplicate rows merged into one item, later row's values winning, two pricing entries; re-commit returned `committed: 0` (idempotent); re-import of an existing item merged in place preserving untouched fields; unauthenticated `POST` → 401; empty `items` / malformed `vendorId` → 400 with field errors. Real-format path: a rebuilt copy of the 23337 sheet (blank row 1, headers on row 2, no CZ number column, `US$`-prefixed prices) uploaded as `.xlsx` → header row auto-detected, prices coerced, 3 items created keyed on vendor item number with `itemNumber` left unset; re-importing one vendor SKU for the same vendor merged in place, the same SKU under a different vendor created a separate item; the legacy binary `.xls` is rejected up front with the save-as guidance.
+
 ## 6. Master Record Completion Gate (Phase 5)
 
 An item can't be considered ready for marketplace export until its record is genuinely complete. [`src/lib/masterRecordComplete.ts`](src/lib/masterRecordComplete.ts) defines the exact rule, recomputed automatically on every relevant update (item edits and legacy-import commits alike):
@@ -144,7 +173,56 @@ An item is "complete" only when **all** of the following are true:
 - At least one MSRP price entry exists
 - All three image subfolders (main, sides, models) have at least one image
 
-The `/catalog` screen lists every item with a clear complete/incomplete status and, for incomplete ones, exactly which fields are missing — filterable to show only incomplete records. This is the screen a marketplace-listing or merchandising user would use to see what still needs work before an item can go live.
+## 6a. The Catalog — the finalized company database (2026-09-10)
+
+`/catalog` is the **verified, finalized product database** — not a view of the pipeline. It shows only
+items with `inCatalog: true`:
+
+- **Master File imports** and **hand-added items** are in the catalog directly (`origin: master_file`
+  / `manual`, `catalogApproval.status: "approved"` — the import is by definition the finalized DB, and
+  a person with catalog rights added the manual one deliberately).
+- **Quote-committed items** (`origin: quotation`) are **not** in the catalog. Once such an item's
+  master record is complete, someone with `marketplace_listing` rights hits **"Submit to catalog"** on
+  its detail page (`POST /api/items/[id]/submit-to-catalog`, guarded on `isMasterRecordComplete`); it
+  enters as `inCatalog: true` with `catalogApproval.status: "pending"`, and an **admin approves** it
+  (`POST /api/catalog/[id]/approve`) before it counts as finalized.
+
+**Table** — compact, no horizontal scroll: **SKU · Title · Category · Brand · Plating · UPC · MSRP ·
+Variation?**. SKU links to the full item detail. The old wide "Missing" column is replaced by a
+**warning icon** on the right ([`CatalogRowFlags.tsx`](src/app/catalog/CatalogRowFlags.tsx), a small
+self-contained popover) that opens on click to list exactly which of the five completeness checks
+fail. Filter tabs: **All · Incomplete only · Pending approval · Show only variations**.
+
+**Filtering / search / sort** ([`CatalogFilters.tsx`](src/app/catalog/CatalogFilters.tsx), a client
+form that pushes to URL params; the server component does the work). A debounced **search** box
+(`q` — case-insensitive across SKU, title, brand, UPC), **Category** and **Plating** dropdowns
+(options are `Item.distinct(...)` over the catalog), a **MSRP min/max** range, and a **Sort by**
+select (SKU A–Z / Z–A, Title, MSRP low→high / high→low, Recently updated). MSRP filter and sort need
+the last `pricingHistory` entry, so the query is a single aggregation: `$match` → `$addFields`
+(`latestMsrp: {$last: "$pricingHistory.msrp"}`) → optional price `$match` → `$facet` (paged rows +
+count) with the numeric-ordering collation. All params compose with the tabs and survive pagination.
+
+**Variations** — same design, hyphen-suffixed SKU: `A1234`, `A1234-GP`, `A1234-RP`; rings carry a
+size segment: `R1234-GP-6`, `R1234-6`. Each variation is its **own** `Item` row (own `itemNumber`,
+`upc`, images, plating) — the catalog does **not** merge them. `Item` gains `baseSku` (text before the
+first hyphen — [`src/lib/catalog/sku.ts`](src/lib/catalog/sku.ts), kept in sync by a pre-save hook)
+and `variantSuffix`; alphabetical SKU sort naturally clusters a family, and the "Show only variations"
+filter (`variantSuffix != null`) isolates the suffixed rows. A **"Variation?"** column shows Yes/No +
+the suffix.
+
+**Manual add** — `/catalog/new` (`marketplace_listing` + admin), `POST /api/catalog` with
+`CatalogItemCreateSchema`: a base SKU plus a repeatable variations block
+(`{ suffix, plating?, upc?, msrp? }`). Rejects a hyphen in the base SKU and any duplicate `itemNumber`.
+
+**New `Item` fields**: `title`, `description`, `bulletFeatures` (listing copy), `brand`, `upc`,
+`baseSku`, `variantSuffix`, `origin`, `inCatalog`, `catalogApproval`, `catalogSubmittedAt`. `title` /
+`description` / `brand` / `upc` / `bulletFeatures` are also editable via `PATCH /api/items/[id]`.
+
+**Bug fixed in passing**: the Master File import writes `brand` and `upc`, but the `Item` root schema
+is strict and had no such fields — **both were silently dropped on every import to date**. Adding the
+schema fields makes them persist (the import's `setDotPath` already emitted them). A one-time
+`Item.updateMany` backfill can re-flag existing imported items as `inCatalog` / set `baseSku` if the
+current DB's items should appear immediately — documented, not run.
 
 ## 7. Image Storage — SharePoint Pipeline (Phase 4)
 
@@ -212,9 +290,9 @@ The project follows an 11-phase plan, plus one newly identified sub-phase (3b) s
 | 1 | Foundation — scaffold, auth, roles, CI-ready build | **Done** |
 | 2 | Schema + legacy import-review UI | **Done** |
 | 3 | Pilot — intake → review → sample SKU → PO/PI, end to end | **Done** (minimal-intake version; see 3b) |
-| 3b | Sample-purchasing intake pipeline — vendor proposal file attach, two-stage approval (image review + "molly's approval"), Pass/Done-Ordered outcome, permanent item/box number assignment | **Not started** — scope identified 2026-08-31, not yet requested |
+| 3b | Sample-purchasing intake pipeline — vendor proposal file attach, two-stage approval (image review + "molly's approval"), Pass/Done-Ordered outcome, permanent item/box number assignment | **Partly addressed 2026-09-10** — vendor quote intake (file upload `.xlsx`/`.csv` + manual multi-item entry) with staged parse → review → commit is built and verified (§5a). The two-stage approval, Pass/Done-Ordered outcome, and box-number assignment parts of 3b are still not started. Image-from-directory → SharePoint upload is deferred (§13). |
 | 4 | Receiving + photography + SharePoint image pipeline | **Done** — SharePoint credentials received 2026-09-01, image pipeline built and verified live same day. Receiving log + warehouse QC screens (content/packaging checks) still to build. |
-| 5 | Master DB completion gate | **Done** |
+| 5 | Master DB completion gate | **Done** — plus the Catalog rebuilt 2026-09-10 as the finalized company database (`inCatalog` filter, admin approval for quote items, variations as separate rows, manual `/catalog/new` entry). See §6a. |
 | 6 | Marketplace export generator | **Done** — real Target, Macy's, Belk, and Kohl's bulk-import templates supplied 2026-09-09; export-review UI built and verified live for all four platforms. Shopify/Amazon still blocked on template files. |
 | 7 | Payables + payment recording | **Done** |
 | 8 | Role hardening + Monday.com sync + dashboard | Mostly done — role gating exists (and its `/items`/`/catalog`/`/` gap was fixed, §10 item 7), Monday.com sync built and verified live both directions (push §12, pull §12 "Inbound pull") 2026-09-01. `/dashboard` aggregation views not yet built. |
@@ -245,6 +323,28 @@ The sync above is one-way (PIM → Monday). A second, independent pull direction
 
 **Real numbers from the live board, verified 2026-09-01:** 7,398 total items. 317 have a status with a confident mapping and are import-ready (all 317 vendor names matched existing PIM vendors cleanly — no manual vendor creation needed). 7,081 are skipped — overwhelmingly (7,023) status `"Received"`, i.e. old/completed historical orders, plus 56 `"Canceled"`. Per your decision, historical `"Received"` backfill is deliberately left out of scope for now rather than importing ~7,000 historical rows in one action — revisit separately if you want that history in PIM later.
 
+### Can quotes / items sync to Monday.com? — feasibility (2026-09-10)
+
+**Short answer: yes, the same way POs already do — it's a bounded piece of work, not a research question.** Everything the PO sync is built on is generic and already in place; nothing new needs to be figured out at the protocol level.
+
+**What already exists and would be reused unchanged:**
+- [`client.ts`](src/lib/monday/client.ts) — the GraphQL wrapper (auth header, Monday's HTTP-200-with-`errors` quirk). Board-agnostic.
+- The `mondayItemId` idempotency pattern — `items.mondayItemId` **already exists on the schema** (added alongside the PO field, currently unused). First push does `create_item` and stores the returned id; every later push does `change_multiple_column_values` on that id. No duplicates.
+- `sync_logs` with `run_type` — a `monday_push` run type is already defined; a per-item or per-quote run logs the same way.
+- The bounded-concurrency helper (`mapWithConcurrency`, 4-at-a-time) for a bulk push, and the "sync now" endpoint + preview/apply UI pattern from the PO side.
+
+**What would need to be built (all mechanical, mirroring [`sync.ts`](src/lib/monday/sync.ts) / [`config.ts`](src/lib/monday/config.ts)):**
+1. **An items board id + column-id map.** The single hard dependency — someone with board access supplies the target board's id and the column ids for each field to push (Monday's column ids are opaque strings like `dropdown1`, `numbers`, `date4`, captured once from the board, exactly as [`MONDAY_COLUMN_IDS`](src/lib/monday/config.ts) was for the PO board). Without this there's nothing to write to; with it, the rest is a day's work.
+2. **`syncItemToMonday(item)`** — a near-copy of `syncPurchaseOrderToMonday`: build a `column_values` object from the item's fields via the map, create-or-update by `mondayItemId`, stamp `lastPushedToMondayAt`.
+3. **A value map per Monday status/dropdown column** — the PO sync needed `STATUS_TO_MONDAY_LABEL` because Monday status columns take a label string, not a raw value. Any status/dropdown column on the items board needs the same small lookup table, and the same "unmapped label → logged, not guessed" discipline (§12's vocabulary-gap note applies identically).
+4. **A trigger** — `POST /api/items/[id]/monday-sync` for a per-item button and/or `POST /api/monday/sync-items` for a bulk run, admin-gated, logged. Per the blueprint's async-trigger rule (already followed on the PO side), this is never called synchronously inside the request that edited the item — it's a deliberate action or a background job.
+
+**Quote-specific options, once item→Monday exists:**
+- **Push each committed item** — a quote's `commit` already produces `items` with `quotation_import` provenance; a follow-on step (or the same admin bulk run) pushes those items to the board. Simplest, and reuses everything above verbatim.
+- **Push the quote itself as a board item** — only if Monday has (or gets) a "quotes"/"sample purchasing" board that mirrors §4a. That needs its own board id + column map; the code shape is still the same `create_item`/`change_multiple_column_values` pattern.
+
+**Not needed / not recommended:** a live two-way quote↔Monday binding. The established pattern here is one-way push + a separate, explicit, preview-then-apply pull (§12 "Inbound pull") — a quote intake would follow the same model if inbound quote data on Monday ever needs to come back.
+
 ## 13. Known Open Items
 
 - **MongoDB Atlas connection string contains a live credential** (`rafe:rafe123`) that was shared in plaintext during setup. It has not yet been rotated. This should be changed in Atlas and the `.env.local` file updated, at your convenience — the string is correctly excluded from version control in the meantime.
@@ -255,6 +355,9 @@ The sync above is one-way (PIM → Monday). A second, independent pull direction
 - **No upload size/row-count cap** — nothing currently stops an arbitrarily large file from being uploaded and parsed in memory in one request. Not a data-corruption risk after the §10 item 11 fix, but a resource-exhaustion one worth guarding against with a sane cap and a clear rejection message.
 - **Monday.com status vocabulary gap** (§12) — roughly 20 real board-status labels have no equivalent in this app's `PoStatus` enum. Worth a conversation with Joel; not currently blocking anything.
 - **Marketplace export files don't yet replicate dropdown validation from real templates** — generated Macy's/Belk/Kohl's/Target files match every column exactly but don't carry the Excel data-validation pick-lists and conditional formatting from your native templates. Adding these is technically straightforward (exceljs supports it) but requires listing which columns have restricted values and what those values are.
+- **Quote intake — image field is a placeholder** (§5a) — every parsed/entered line item gets a fixed `"working on it"` note in the image field; it's never written to the `Item`. The intended replacement is directory-select in the browser → automatic SharePoint upload following the §7 folder structure, deferred by decision to a later piece of work.
+- **Quote intake — item→Monday.com sync not built** — a committed quote produces `items` but nothing pushes them to a Monday board. Feasibility and the exact work involved are written up at the end of §12; the one external dependency is an items board id + column-id map from someone with board access.
+- **`applyToItem` deep-merge fix not yet back-ported to the §5 legacy-import commit** — the same "partial dot-path replaces the whole subdocument" bug exists in [`import-review/[batchId]/commit`](src/app/api/admin/import-review/[batchId]/commit/route.ts), currently masked because Master File rows always carry the full spec set. Low risk today; worth aligning the two commit paths on the shared helper.
 
 ## 14. Visual Design System & UI Audit (2026-09-09)
 
@@ -262,7 +365,7 @@ A full redesign and rebrand from "PIM 2.0" to "CZC PIM," completed 2026-09-09, m
 
 A full pass over everything built so far, requested to confirm three things before client presentation: the DB schema is fully covered, every API endpoint actually works, and the UI for completed phases is presentation-ready.
 
-- **DB:** all 11 collections re-read against the blueprint field-by-field — confirmed correct. `Quotation`, `ReceivingLog`, `Shipment`, `PlatformTemplate` are scaffolded-but-unused, which is expected (they belong to phases not yet built), not a defect.
+- **DB:** all 11 collections re-read against the blueprint field-by-field — confirmed correct. `ReceivingLog`, `Shipment`, `PlatformTemplate` are scaffolded-but-unused, which is expected (they belong to phases not yet built), not a defect. (`Quotation` is no longer in that list — it was extended and put to use by the 2026-09-10 quote-intake feature, §5a, which also added the `quotation_rows` collection.)
 - **API:** all 15 non-Monday endpoints verified working via direct handler invocation against the real database with a mocked session (Monday's two write endpoints were deliberately excluded from this pass to honor "don't disturb the real board" — they were already verified live in §12). 23/23 checks passed, including a direct confirmation that the checklist hard gate (§8, §10 item 3) actually blocks and then allows the `ready_to_ship` transition.
 - **UI:** every real authenticated page (Items, Item detail, Purchase Orders, PO detail, Payables, Catalog, Import Review + batch review, Login, Unauthorized) was rebuilt on a shared design system — CSS custom-property tokens for a light/dark-aware palette, Fraunces/Inter/IBM Plex Mono type pairing, Lucide icons throughout, and shared components (`Card`, `Pill`, `Button`, `Field`) — replacing the original plain inline-styled HTML. This is the same design language used for the `/present` client-demo build described elsewhere in this history. Verified end-to-end via real authenticated HTTP requests, not just a build check.
 - This pass is also where bugs 7–10 in §10 were found and fixed.

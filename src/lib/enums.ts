@@ -27,6 +27,11 @@ export const ITEM_STATUSES = [
 ] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 
+// How an item entered the system — drives whether it belongs in the
+// finalized catalog and whether it needs admin approval to get there.
+export const ITEM_ORIGINS = ["master_file", "manual", "quotation"] as const;
+export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
+
 export const PO_STATUSES = [
   "waiting_for_sample_po",
   "negotiating",
@@ -104,6 +109,15 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const QUOTATION_IMPORT_STATUSES = ["parsed", "needs_review", "imported"] as const;
 export type QuotationImportStatus = (typeof QUOTATION_IMPORT_STATUSES)[number];
+
+export const QUOTATION_STATUSES = ["parsing", "needs_review", "reviewed", "committed"] as const;
+export type QuotationStatus = (typeof QUOTATION_STATUSES)[number];
+
+export const QUOTATION_SOURCES = ["file_upload", "manual"] as const;
+export type QuotationSource = (typeof QUOTATION_SOURCES)[number];
+
+export const QUOTATION_ROW_STATUSES = ["needs_review", "approved", "rejected"] as const;
+export type QuotationRowStatus = (typeof QUOTATION_ROW_STATUSES)[number];
 
 export const SYNC_LOG_RUN_TYPES = ["monday_push", "monday_pull", "marketplace_export"] as const;
 export type SyncLogRunType = (typeof SYNC_LOG_RUN_TYPES)[number];

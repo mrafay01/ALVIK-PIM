@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { StatCard } from "@/components/ui/StatCard";
 import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
-import { ClipboardList, Ship, TriangleAlert, DollarSign } from "lucide-react";
+import Link from "next/link";
+import { ClipboardList, Ship, TriangleAlert, DollarSign, FilePlus2, Upload } from "lucide-react";
 import { PO_STATUS_LABEL, PO_STATUS_TONE } from "@/lib/statusDisplay";
 
 const TH_CLASS =
@@ -45,6 +46,27 @@ export default async function PurchaseOrdersPage({
         One collection replaces six separate Monday.com stage boards — each was really a filtered
         view of the same list. Create a PO from an item&apos;s detail page once it has a sample SKU.
       </p>
+
+      <div className="flex gap-2.5 mb-6 flex-wrap">
+        <Link
+          href="/purchase-orders/quotes/new"
+          className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-brass text-[#1a1409] border border-brass shadow-[0_2px_10px_var(--brass-glow)] no-underline hover:brightness-110"
+        >
+          <FilePlus2 size={15} /> New quote manually
+        </Link>
+        <Link
+          href="/purchase-orders/quotes/import"
+          className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-surface text-ink border border-border-strong no-underline hover:border-brass hover:text-brass"
+        >
+          <Upload size={15} /> Import quote file
+        </Link>
+        <Link
+          href="/purchase-orders/quotes"
+          className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-transparent text-ink-soft border border-transparent no-underline hover:text-ink hover:bg-surface-overlay"
+        >
+          View all quotes
+        </Link>
+      </div>
 
       <div className="grid grid-cols-4 gap-3.5 mb-7">
         <StatCard label="Total POs" value={total} icon={ClipboardList} tone="brass" />

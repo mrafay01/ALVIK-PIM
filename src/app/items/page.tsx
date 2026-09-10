@@ -1,14 +1,12 @@
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import Item from "@/models/Item";
-import Vendor from "@/models/Vendor";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { StatCard } from "@/components/ui/StatCard";
 import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { Gem, CircleCheck, CircleDashed, ImageOff } from "lucide-react";
 import { ITEM_STATUS_LABEL, ITEM_STATUS_TONE } from "@/lib/statusDisplay";
-import { IntakeForm } from "./IntakeForm";
 
 const TH_CLASS =
   "text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap";
@@ -23,7 +21,7 @@ export default async function ItemsPage({
   const page = parsePage(pageParam);
   await connectDB();
 
-  const [items, total, pendingCount, approvedCount, noSkuCount, vendors] = await Promise.all([
+  const [items, total, pendingCount, approvedCount, noSkuCount] = await Promise.all([
     Item.find({})
       .select("status sampleSku itemNumber vendorId vendorSku category updatedAt")
       .populate("vendorId", "name")
@@ -35,14 +33,14 @@ export default async function ItemsPage({
     Item.countDocuments({ status: "review_pending" }),
     Item.countDocuments({ status: "approved" }),
     Item.countDocuments({ sampleSku: { $in: [null, undefined] }, itemNumber: { $in: [null, undefined] } }),
-    Vendor.find({}).select("name").sort({ name: 1 }).lean(),
   ]);
 
   return (
     <AppShell activeHref="/items" eyebrow="Product spine" title="Items">
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Intake a vendor quote here, then open an item to record a review decision, assign a
-        sample SKU, and create a purchase order — the pilot lifecycle, start to finish.
+        Open an item to record a review decision, assign a sample SKU, and create a purchase
+        order — the pilot lifecycle, start to finish. New items enter through a vendor quote
+        under Purchase Orders.
       </p>
 
       <div className="grid grid-cols-4 gap-3.5 mb-7">
@@ -52,15 +50,12 @@ export default async function ItemsPage({
         <StatCard label="No SKU yet" value={noSkuCount} icon={ImageOff} tone="neutral" />
       </div>
 
-      <Card className="mb-8">
-        <h2 className="text-[0.95rem] mb-3.5">Intake a new quote</h2>
-        <IntakeForm vendors={vendors.map((v) => ({ id: String(v._id), name: v.name }))} />
-      </Card>
-
       <h2 className="text-[0.95rem] mb-3.5">All items ({total.toLocaleString()})</h2>
       {total === 0 ? (
         <Card>
-          <p className="text-ink-faint m-0 text-[0.88rem]">No items yet — intake one above.</p>
+          <p className="text-ink-faint m-0 text-[0.88rem]">
+            No items yet — they enter through a vendor quote under Purchase Orders.
+          </p>
         </Card>
       ) : (
         <Card padding={0}>
