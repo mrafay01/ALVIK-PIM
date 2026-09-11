@@ -4,6 +4,16 @@ import ExcelJS from "exceljs";
 // Data-quality note: treat every legacy cell as untrusted text, coerce with
 // a mapping table, and flag anything that fails rather than guessing or
 // dropping it silently.
+//
+// The real Master File header row repeats several labels — "Date" appears
+// twice (once next to MSRP, once next to NEW MSRP), and the stone columns
+// are two near-identical groups ("main stone info/color/type" vs. the
+// general "Stone info/color/type/setting"). Matching by lowercased header
+// text alone can't tell those apart, and a later duplicate header would
+// silently clobber an earlier one in a plain object. So columns are mapped
+// by their fixed position (A, B, C, …) — captured once from the real file —
+// with the header-text table kept only as a fallback for sheets whose
+// layout drifts from that reference (columns present, order changed).
 
 export type FieldFlag = {
   field: string;
@@ -87,13 +97,18 @@ function coerceDate(raw: unknown, field: string, flags: FieldFlag[]): string | n
   return null;
 }
 
+// Money/weight cells sometimes carry a unit or currency suffix ("12.5g",
+// "$42.00"). Strip common markers, then parse.
 function coerceNumber(raw: unknown, field: string, flags: FieldFlag[]): number | null {
   if (isPlaceholder(raw)) return null;
-  if (typeof raw === "number") return raw;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
   if (typeof raw === "string") {
-    const cleaned = raw.replace(/[$,\s]/g, "");
+    const cleaned = raw
+      .replace(/(?:US\$|USD|[$€£¥])/gi, "")
+      .replace(/(grams?|gms?|g)\b/gi, "")
+      .replace(/[,\s]/g, "");
     const n = Number(cleaned);
-    if (!Number.isNaN(n)) return n;
+    if (cleaned !== "" && !Number.isNaN(n)) return n;
   }
   flags.push({ field, message: `Non-numeric value "${String(raw)}"`, rawValue: raw });
   return null;
@@ -104,37 +119,105 @@ function coerceText(raw: unknown): string | null {
   return String(raw).trim();
 }
 
-// Column header aliases seen across sheet exports — headers aren't always
-// spelled/capitalized consistently, and some sheets carry stray non-English
-// header cells left over from AutoFilter that we skip entirely.
-const HEADER_ALIASES: Record<string, string> = {
-  sku: "sku",
-  itemnumber: "sku",
-  plating: "plating",
-  metal: "metal",
-  pearl: "pearl",
-  "all measure": "allMeasure",
-  clasp: "clasp",
-  length: "length",
-  thickness: "thickness",
-  brand: "brand",
-  category: "category",
-  catogry: "category", // real typo seen in the source sheet
-  gender: "gender",
-  tcw: "tcw",
-  birthstone: "birthstone",
-  date: "date",
-  msrp: "msrp",
-  "new msrp": "newMsrp",
-  "rue price": "ruePrice",
-  upc: "upc",
-  discontinued: "discontinued",
-  "discontin ": "discontinued",
-};
+function coerceBool(raw: unknown): boolean {
+  return !isPlaceholder(raw);
+}
 
-function normalizeHeader(header: string): string | null {
-  const key = header.trim().toLowerCase();
-  return HEADER_ALIASES[key] ?? null;
+type ColumnKind = "text" | "number" | "weight" | "date" | "bool" | "metal";
+
+// One entry per real Master File column, in spreadsheet order (A, B, C, …).
+// `path` is the dot-path the value lands at on the staged row's `coerced`
+// object (pricing.* paths are folded into one pricingHistory entry by the
+// commit route's existing buildUpdate — see admin/import-review commit).
+// `header` is the exact label from the real file, used for header-text
+// fallback matching and shown in the raw-row audit trail.
+interface ColumnDef {
+  header: string;
+  aliases?: string[];
+  path: string | null; // null = captured in `raw` only, not written to coerced
+  kind: ColumnKind;
+}
+
+const COLUMNS: ColumnDef[] = [
+  { header: "SKU", aliases: ["itemnumber"], path: "itemNumber", kind: "text" },
+  { header: "Date added", path: "specs.dateAdded", kind: "date" },
+  { header: "Title", path: "title", kind: "text" },
+  { header: "Description", path: "description", kind: "text" },
+  { header: "TITLE#2", path: "title2", kind: "text" },
+  { header: "descripton # 2", aliases: ["description #2", "descripto"], path: "description2", kind: "text" },
+  { header: "Variation sku", path: "specs.variationSku", kind: "text" },
+  { header: "variation titles", path: "specs.variationTitle", kind: "text" },
+  { header: "variation description", path: "specs.variationDescription", kind: "text" },
+  { header: "Total Weight", path: "specs.weight.totalG", kind: "weight" },
+  { header: "silver weight", path: "specs.weight.silverG", kind: "weight" },
+  { header: "main stone info", path: "specs.mainStoneInfo", kind: "text" },
+  { header: "main stone color", path: "specs.mainStoneColor", kind: "text" },
+  { header: "main stone type", path: "specs.mainStoneType", kind: "text" },
+  { header: "Stone info", path: "specs.restStoneInfo", kind: "text" },
+  { header: "stone color", path: "specs.restStoneColor", kind: "text" },
+  { header: "stone type", path: "specs.restStoneType", kind: "text" },
+  { header: "stone setting", path: "specs.stoneSetting", kind: "text" },
+  { header: "Pearl Size (in mm)", path: "specs.pearlSize", kind: "text" },
+  { header: "Pearl type", path: "specs.pearlType", kind: "text" },
+  { header: "Plating", path: "specs.plating", kind: "text" },
+  { header: "All Length+ Extender", aliases: ["all measure"], path: "specs.lengthExtender", kind: "text" },
+  { header: "measurements", path: "specs.measurements", kind: "text" },
+  { header: "clasp", path: "specs.clasp", kind: "text" },
+  { header: "Length of post", aliases: ["length"], path: "specs.postLength", kind: "text" },
+  { header: "Push back Size", path: "specs.pushBackSize", kind: "text" },
+  { header: "Thickness of chain", aliases: ["thickness"], path: "specs.thickness", kind: "text" },
+  { header: "brand", path: "brand", kind: "text" },
+  { header: "all specs", path: "specs.allSpecs", kind: "text" },
+  { header: "Metal", path: "specs.metal", kind: "metal" },
+  // Note: no top-level `discontinued` field exists on Item — the lifecycle
+  // already models this via status: "discontinued". Stored under specs so a
+  // reviewer can see the sheet's flag and decide whether to change status,
+  // rather than being silently dropped by the strict root schema (the same
+  // failure mode brand/upc had before those fields were added).
+  { header: "Discontinue", aliases: ["discontinued", "discontin "], path: "specs.discontinuedFlag", kind: "bool" },
+  { header: "Gender", path: "specs.gender", kind: "text" },
+  { header: "tcw", path: "specs.tcw", kind: "text" },
+  { header: "Date", path: "pricing.effectiveDate", kind: "date" },
+  { header: "MSRP", path: "pricing.msrp", kind: "number" },
+  { header: "Date", path: "specs.newMsrpDate", kind: "date" },
+  { header: "NEW MSRP", aliases: ["new msrp"], path: "pricing.newMsrp", kind: "number" },
+  { header: "Rue Price", aliases: ["rue price"], path: "pricing.ruePrice", kind: "number" },
+  { header: "catogry", aliases: ["category"], path: "category", kind: "text" },
+  { header: "total carat weight added up already", path: "specs.totalCaratWeight", kind: "text" },
+  { header: "upc", path: "upc", kind: "text" },
+  { header: "birthstone", path: "specs.birthstone", kind: "text" },
+];
+
+// header text (lowercased, trimmed) -> index into COLUMNS, for the
+// header-text fallback path. Two columns share the literal label "Date" —
+// intentionally not included here since text matching can't disambiguate
+// them; those two are only ever resolved by position.
+const AMBIGUOUS_HEADERS = new Set(["date"]);
+const HEADER_TO_COLUMN: Record<string, number> = {};
+COLUMNS.forEach((col, i) => {
+  const labels = [col.header, ...(col.aliases ?? [])];
+  for (const label of labels) {
+    const key = label.trim().toLowerCase();
+    if (AMBIGUOUS_HEADERS.has(key)) continue;
+    if (!(key in HEADER_TO_COLUMN)) HEADER_TO_COLUMN[key] = i;
+  }
+});
+
+function coerceByKind(kind: ColumnKind, raw: unknown, field: string, flags: FieldFlag[]): unknown {
+  switch (kind) {
+    case "text":
+      return coerceText(raw);
+    case "number":
+      return coerceNumber(raw, field, flags);
+    case "weight":
+      return coerceNumber(raw, field, flags);
+    case "date":
+      return coerceDate(raw, field, flags);
+    case "bool":
+      return coerceBool(raw);
+    case "metal":
+      return coerceMetal(raw, flags);
+  }
 }
 
 function cellValue(cell: ExcelJS.Cell): unknown {
@@ -156,10 +239,35 @@ export async function parseMasterFileBuffer(data: ArrayBuffer): Promise<StagedRo
   if (!sheet) return [];
 
   const headerRow = sheet.getRow(1);
-  const headers: (string | null)[] = [];
+  const headerCells: (string | null)[] = [];
   headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-    headers[colNumber] = cell.value ? String(cell.value) : null;
+    headerCells[colNumber] = cell.value ? String(cell.value) : null;
   });
+
+  // Resolve each spreadsheet column (1-based) to a COLUMNS index. Prefer the
+  // reference layout (column N -> COLUMNS[N-1]) whenever that column's
+  // header is at least recognizable (matches by text or is one of the two
+  // ambiguous "Date" columns in its expected slot); otherwise fall back to
+  // pure header-text matching so a reordered sheet still imports.
+  const colToIndex: (number | null)[] = [];
+  for (let c = 1; c < headerCells.length; c++) {
+    const header = headerCells[c];
+    if (!header) {
+      colToIndex[c] = null;
+      continue;
+    }
+    const key = header.trim().toLowerCase();
+    const refIndex = c - 1; // COLUMNS is 0-based, sheet columns are 1-based
+    const refCol = COLUMNS[refIndex];
+    if (refCol) {
+      const refLabels = [refCol.header, ...(refCol.aliases ?? [])].map((l) => l.trim().toLowerCase());
+      if (refLabels.includes(key)) {
+        colToIndex[c] = refIndex;
+        continue;
+      }
+    }
+    colToIndex[c] = key in HEADER_TO_COLUMN ? HEADER_TO_COLUMN[key] : null;
+  }
 
   const staged: StagedRowInput[] = [];
 
@@ -167,56 +275,38 @@ export async function parseMasterFileBuffer(data: ArrayBuffer): Promise<StagedRo
     if (rowNumber === 1) return; // header row
 
     const rawRow: Record<string, unknown> = {};
+    const flags: FieldFlag[] = [];
+    const coerced: Record<string, unknown> = {};
+
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      const header = headers[colNumber];
-      if (header) rawRow[header] = cellValue(cell);
+      const header = headerCells[colNumber];
+      const value = cellValue(cell);
+      if (header) {
+        // A duplicate header ("Date" x2) would collide in a plain object —
+        // suffix repeats so the raw audit trail keeps both.
+        const rawKey = header in rawRow ? `${header} (${colNumber})` : header;
+        rawRow[rawKey] = value;
+      }
+
+      const colIndex = colToIndex[colNumber];
+      if (colIndex == null) return;
+      const col = COLUMNS[colIndex];
+      if (!col.path) return;
+      const out = coerceByKind(col.kind, value, col.path, flags);
+      if (out !== null && out !== undefined && out !== "") {
+        coerced[col.path] = out;
+      }
     });
 
     if (Object.values(rawRow).every((v) => v === null || v === undefined || v === "")) {
       return; // fully blank row — skip rather than staging an empty entry
     }
 
-    const flags: FieldFlag[] = [];
-    const normalized: Record<string, unknown> = {};
-
-    for (const [header, value] of Object.entries(rawRow)) {
-      const key = normalizeHeader(header);
-      if (!key) continue; // stray/unrecognized header cell — ignored, not silently mapped
-      normalized[key] = value;
-    }
-
-    const coerced: Record<string, unknown> = {
-      itemNumber: coerceText(normalized.sku),
-      "specs.metal": coerceMetal(normalized.metal, flags),
-      "specs.plating": coerceText(normalized.plating),
-      "specs.pearl": coerceText(normalized.pearl),
-      "specs.allMeasure": coerceText(normalized.allMeasure),
-      "specs.clasp": coerceText(normalized.clasp),
-      "specs.chainLength": coerceText(normalized.length),
-      "specs.thickness": coerceText(normalized.thickness),
-      brand: coerceText(normalized.brand),
-      category: coerceText(normalized.category),
-      "specs.gender": coerceText(normalized.gender),
-      "specs.tcw": coerceText(normalized.tcw),
-      "specs.birthstone": coerceText(normalized.birthstone),
-      "pricing.effectiveDate": coerceDate(normalized.date, "pricing.effectiveDate", flags),
-      "pricing.msrp": coerceNumber(normalized.msrp, "pricing.msrp", flags),
-      "pricing.newMsrp": coerceNumber(normalized.newMsrp, "pricing.newMsrp", flags),
-      "pricing.ruePrice": coerceNumber(normalized.ruePrice, "pricing.ruePrice", flags),
-      upc: coerceText(normalized.upc),
-      discontinued: !isPlaceholder(normalized.discontinued),
-    };
-
     if (!coerced.itemNumber) {
-      flags.push({ field: "itemNumber", message: "Missing SKU — row cannot be imported without one", rawValue: normalized.sku });
+      flags.push({ field: "itemNumber", message: "Missing SKU — row cannot be imported without one", rawValue: null });
     }
 
-    staged.push({
-      rowNumber, // exceljs row numbers are already 1-based and match the spreadsheet
-      raw: rawRow,
-      coerced,
-      flags,
-    });
+    staged.push({ rowNumber, raw: rawRow, coerced, flags });
   });
 
   return staged;

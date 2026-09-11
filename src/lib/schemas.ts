@@ -107,7 +107,18 @@ export const ItemPatchSchema = z
 
 // One hand-entered catalog product: a base SKU plus optional variations
 // (same design, hyphen-suffixed SKU — different plating / stone / size).
+// Field set mirrors every column on the real Master File (see
+// src/lib/import/parseMasterFile.ts COLUMNS) so an item entered by hand
+// carries the same information as one that came through the import.
 const catalogText = z.string().trim().min(1).max(200);
+const optText = (max: number) => z.string().trim().max(max).optional();
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .optional();
+
+// Per-variant fields — plating/stone/measurements/pricing differ row to
+// row even though title/description/category are shared across the family.
 const CatalogVariationSchema = z.object({
   suffix: z
     .string()
@@ -115,22 +126,68 @@ const CatalogVariationSchema = z.object({
     .min(1)
     .max(40)
     .regex(/^[A-Za-z0-9-]+$/, "letters, digits and hyphens only"),
-  plating: z.string().trim().max(300).optional(),
-  upc: z.string().trim().max(200).optional(),
+  plating: optText(300),
+  upc: optText(200),
   msrp: money.optional(),
+  totalWeight: z.number().finite().min(0).max(100000).optional(),
+  silverWeight: z.number().finite().min(0).max(100000).optional(),
+  mainStoneInfo: optText(300),
+  mainStoneColor: optText(200),
+  mainStoneType: optText(200),
+  restStoneInfo: optText(300),
+  restStoneColor: optText(200),
+  restStoneType: optText(200),
+  stoneSetting: optText(200),
+  pearlSize: optText(100),
+  pearlType: optText(200),
+  lengthExtender: optText(200),
+  measurements: optText(200),
+  clasp: optText(200),
+  postLength: optText(100),
+  pushBackSize: optText(100),
+  thickness: optText(100),
 });
 
 export const CatalogItemCreateSchema = z.object({
   sku: catalogText,
   title: z.string().trim().min(1).max(500),
+  title2: optText(500),
   description: z.string().trim().max(5000).optional(),
+  description2: z.string().trim().max(5000).optional(),
   category: z.string().trim().min(1).max(200),
-  brand: z.string().trim().max(200).optional(),
-  metal: z.string().trim().max(200).optional(),
-  plating: z.string().trim().max(300).optional(),
+  brand: optText(200),
+  metal: optText(200),
+  plating: optText(300),
   msrp: money.optional(),
-  upc: z.string().trim().max(200).optional(),
+  newMsrp: money.optional(),
+  ruePrice: money.optional(),
+  effectiveDate: isoDate,
+  upc: optText(200),
   bulletFeatures: z.array(z.string().trim().max(500)).max(10).optional(),
+  variationSku: optText(200),
+  variationTitle: optText(300),
+  variationDescription: optText(2000),
+  totalWeight: z.number().finite().min(0).max(100000).optional(),
+  silverWeight: z.number().finite().min(0).max(100000).optional(),
+  mainStoneInfo: optText(300),
+  mainStoneColor: optText(200),
+  mainStoneType: optText(200),
+  restStoneInfo: optText(300),
+  restStoneColor: optText(200),
+  restStoneType: optText(200),
+  stoneSetting: optText(200),
+  pearlSize: optText(100),
+  pearlType: optText(200),
+  lengthExtender: optText(200),
+  measurements: optText(200),
+  clasp: optText(200),
+  postLength: optText(100),
+  pushBackSize: optText(100),
+  thickness: optText(100),
+  gender: optText(100),
+  tcw: optText(100),
+  totalCaratWeight: optText(100),
+  allSpecs: optText(500),
   variations: z.array(CatalogVariationSchema).max(20).optional(),
 });
 

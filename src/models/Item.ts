@@ -96,6 +96,10 @@ const ItemSchema = new Schema(
     // import (previously silently dropped — the root schema is strict).
     title: String,
     description: String,
+    // TITLE#2 / descripton #2 on the real Master File — a secondary title
+    // and description some rows carry alongside the primary pair.
+    title2: String,
+    description2: String,
     bulletFeatures: { type: [String], default: undefined },
     brand: String,
     upc: { type: String, index: true, sparse: true },
