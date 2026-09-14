@@ -48,6 +48,8 @@ export default async function MarketplaceExportPlatformPage({
   return (
     <AppShell
       activeHref="/marketplace-export"
+      backHref="/marketplace-export"
+      backLabel="Marketplace Export"
       eyebrow="Bulk-import file"
       title={`${PLATFORM_NAMES[platform] ?? platform} Export`}
     >

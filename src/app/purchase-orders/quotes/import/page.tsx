@@ -9,7 +9,13 @@ export default async function QuoteImportPage() {
   const vendors = await Vendor.find({}).select("name").sort({ name: 1 }).lean();
 
   return (
-    <AppShell activeHref="/purchase-orders" eyebrow="Vendor pipeline" title="Import Quote File">
+    <AppShell
+      activeHref="/purchase-orders"
+      backHref="/purchase-orders/quotes"
+      backLabel="Quotes"
+      eyebrow="Vendor pipeline"
+      title="Import Quote File"
+    >
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
         Upload a vendor quote as <strong>.xlsx</strong> or <strong>.csv</strong>. Every line item is
         parsed and staged for review — nothing writes to the product database until you approve it.

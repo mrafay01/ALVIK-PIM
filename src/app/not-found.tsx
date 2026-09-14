@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Gem, ClipboardList, Wallet, ArrowLeft, Compass } from "lucide-react";
+import { LayoutDashboard, Gem, ClipboardList, Wallet, ArrowLeft, Compass } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 
 const SHORTCUTS = [
-  { href: "/items", label: "Items", icon: Gem },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/vendor-items", label: "Vendor Items", icon: Gem },
   { href: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList },
   { href: "/payables", label: "Payables", icon: Wallet },
 ];
@@ -66,7 +67,7 @@ export default function NotFound() {
 
         <div className="flex justify-center mb-8">
           <Link
-            href="/items"
+            href="/dashboard"
             className="inline-flex items-center gap-2 text-[#1a1409] rounded-sm px-[22px] py-[11px] font-bold text-[0.87rem] no-underline border border-brass"
             style={{
               background: "linear-gradient(135deg, var(--brass) 0%, var(--brass-soft) 160%)",
@@ -74,7 +75,7 @@ export default function NotFound() {
             }}
           >
             <ArrowLeft size={15} />
-            Back to Items
+            Back to Dashboard
           </Link>
         </div>
 

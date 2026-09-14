@@ -38,7 +38,7 @@ export default function Error({
           <Button variant="primary" onClick={() => reset()}>
             Try again
           </Button>
-          <Button onClick={() => (window.location.href = "/items")}>Back to Items</Button>
+          <Button onClick={() => (window.location.href = "/dashboard")}>Back to Dashboard</Button>
         </div>
       </Card>
     </main>

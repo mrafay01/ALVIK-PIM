@@ -1,4 +1,5 @@
 export { default as User } from "./User";
+export { default as LoginOtp } from "./LoginOtp";
 export { default as Vendor } from "./Vendor";
 export { default as Item } from "./Item";
 export { default as Quotation } from "./Quotation";

@@ -12,7 +12,13 @@ const TH_CLASS =
   "text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap";
 const TD_CLASS = "px-4 py-3 text-[0.85rem]";
 
-export default async function ItemsPage({
+// Not-yet-finalized items only — anything that has made it into the Catalog
+// (inCatalog: true) is done here and belongs on /catalog instead. This page
+// is the working set: quote intake, manual entry pending review, and
+// Monday-sourced items still moving through the pilot lifecycle.
+const PIPELINE_MATCH = { inCatalog: { $ne: true } };
+
+export default async function VendorItemsPage({
   searchParams,
 }: {
   searchParams: Promise<{ page?: string }>;
@@ -22,39 +28,46 @@ export default async function ItemsPage({
   await connectDB();
 
   const [items, total, pendingCount, approvedCount, noSkuCount] = await Promise.all([
-    Item.find({})
+    Item.find(PIPELINE_MATCH)
       .select("status sampleSku itemNumber vendorId vendorSku category updatedAt")
       .populate("vendorId", "name")
       .sort({ updatedAt: -1 })
       .skip((page - 1) * PAGE_SIZE)
       .limit(PAGE_SIZE)
       .lean(),
-    Item.countDocuments({}),
-    Item.countDocuments({ status: "review_pending" }),
-    Item.countDocuments({ status: "approved" }),
-    Item.countDocuments({ sampleSku: { $in: [null, undefined] }, itemNumber: { $in: [null, undefined] } }),
+    Item.countDocuments(PIPELINE_MATCH),
+    Item.countDocuments({ ...PIPELINE_MATCH, status: "review_pending" }),
+    Item.countDocuments({ ...PIPELINE_MATCH, status: "approved" }),
+    Item.countDocuments({
+      ...PIPELINE_MATCH,
+      sampleSku: { $in: [null, undefined] },
+      itemNumber: { $in: [null, undefined] },
+    }),
   ]);
 
   return (
-    <AppShell activeHref="/items" eyebrow="Product spine" title="Items">
+    <AppShell activeHref="/vendor-items" eyebrow="Product spine" title="Vendor Items">
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Open an item to record a review decision, assign a sample SKU, and create a purchase
-        order — the pilot lifecycle, start to finish. New items enter through a vendor quote
-        under Purchase Orders.
+        Everything still in progress — from a vendor quote, entered manually, or pulled from
+        Monday.com — before it&apos;s finalized. Open an item to record a review decision, assign a
+        sample SKU, and create a purchase order. Once an item is verified and complete, it moves to
+        the <a href="/catalog" className="text-brass no-underline font-semibold">Catalog</a> and
+        drops off this list.
       </p>
 
       <div className="grid grid-cols-4 gap-3.5 mb-7">
-        <StatCard label="Total items" value={total} icon={Gem} tone="brass" />
+        <StatCard label="Vendor items" value={total} icon={Gem} tone="brass" />
         <StatCard label="Pending review" value={pendingCount} icon={CircleDashed} tone="warn" />
         <StatCard label="Approved" value={approvedCount} icon={CircleCheck} tone="good" />
         <StatCard label="No SKU yet" value={noSkuCount} icon={ImageOff} tone="neutral" />
       </div>
 
-      <h2 className="text-[0.95rem] mb-3.5">All items ({total.toLocaleString()})</h2>
+      <h2 className="text-[0.95rem] mb-3.5">All vendor items ({total.toLocaleString()})</h2>
       {total === 0 ? (
         <Card>
           <p className="text-ink-faint m-0 text-[0.88rem]">
-            No items yet — they enter through a vendor quote under Purchase Orders.
+            No items in progress — they enter through a vendor quote under Purchase Orders, or are
+            added manually.
           </p>
         </Card>
       ) : (
@@ -97,7 +110,7 @@ export default async function ItemsPage({
             </table>
           </div>
           <div className="px-4 pb-3">
-            <Pagination page={page} total={total} basePath="/items" />
+            <Pagination page={page} total={total} basePath="/vendor-items" />
           </div>
         </Card>
       )}

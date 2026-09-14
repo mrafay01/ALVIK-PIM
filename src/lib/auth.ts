@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import { rateLimit } from "@/lib/rateLimit";
+import { redeemSessionTicket } from "@/lib/otp";
 import User from "@/models/User";
 import type { Role } from "@/lib/enums";
 
@@ -20,6 +21,12 @@ if (process.env.NODE_ENV === "production" && !process.env.NEXTAUTH_SECRET) {
   throw new Error("NEXTAUTH_SECRET must be set in production");
 }
 
+// Email-OTP second factor — off while it's in testing. The /api/auth/otp/*
+// routes, the LoginOtp model, and the login page's two-step UI are all
+// still in place; this is the one switch that turns the requirement back
+// on (set OTP_2FA_ENABLED=true) without touching any of that code.
+const OTP_2FA_ENABLED = process.env.OTP_2FA_ENABLED === "true";
+
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   pages: {
@@ -31,9 +38,11 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        sessionTicket: { label: "Session ticket", type: "text" },
       },
       async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) return null;
+        if (OTP_2FA_ENABLED && !credentials?.sessionTicket) return null;
 
         const email = credentials.email.toLowerCase();
 
@@ -60,6 +69,17 @@ export const authOptions: NextAuthOptions = {
 
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
         if (!valid) return null;
+
+        // When enabled, password alone is never enough — a session only
+        // mints once the caller also holds a session ticket proving they
+        // completed the email-OTP step for this exact user (see
+        // /api/auth/otp/*). The ticket is single-use, so this can't be
+        // replayed. Currently off (OTP_2FA_ENABLED unset) while it's in
+        // testing — see the flag's definition above.
+        if (OTP_2FA_ENABLED) {
+          const ticketOk = await redeemSessionTicket(user._id, credentials.sessionTicket!);
+          if (!ticketOk) return null;
+        }
 
         return {
           id: user._id.toString(),

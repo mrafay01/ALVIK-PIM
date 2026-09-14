@@ -9,6 +9,7 @@
 // models registered.
 
 import User from "./User";
+import LoginOtp from "./LoginOtp";
 import Vendor from "./Vendor";
 import Item from "./Item";
 import Quotation from "./Quotation";
@@ -26,6 +27,7 @@ import MarketplaceListing from "./MarketplaceListing";
 // Reference each import so nothing is tree-shaken away as an unused binding.
 export const MODELS = {
   User,
+  LoginOtp,
   Vendor,
   Item,
   Quotation,

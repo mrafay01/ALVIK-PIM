@@ -50,7 +50,13 @@ export default async function BatchReviewPage({
   ]);
 
   return (
-    <AppShell activeHref="/admin/import-review" eyebrow="Data migration" title={batch.sourceFileName}>
+    <AppShell
+      activeHref="/admin/import-review"
+      backHref="/admin/import-review"
+      backLabel="Legacy Import"
+      eyebrow="Data migration"
+      title={batch.sourceFileName}
+    >
       <p className="text-ink-soft mb-6 text-[0.92rem]">
         {batch.totalRows} rows · {batch.flaggedRows} flagged for attention · status:{" "}
         <span className="capitalize">{batch.status.replace(/_/g, " ")}</span>

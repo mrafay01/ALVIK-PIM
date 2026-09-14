@@ -81,11 +81,24 @@ export default async function CatalogPage({
   const role = await getSessionRole();
   const canApprove = role === "administrator";
 
+  // A SKU having a hyphen doesn't make it a variation — e.g. A80219-ROSE
+  // may be the only row with that base SKU, in which case the hyphen is
+  // just encoding its plating, not marking a sibling relationship. A row
+  // is a real variation only when another catalog item shares its baseSku,
+  // so that has to be counted across the whole catalog before the page's
+  // own filters/pagination are applied.
+  const baseSkuCounts = await Item.aggregate([
+    { $match: { inCatalog: true } },
+    { $group: { _id: "$baseSku", count: { $sum: 1 } } },
+    { $match: { count: { $gt: 1 } } },
+  ]);
+  const familySkus = (baseSkuCounts as { _id: string }[]).map((r) => r._id);
+
   // Base match — the tab filter + always inCatalog.
   const match: Record<string, unknown> = { inCatalog: true };
   if (tab === "incomplete") match.masterRecordComplete = false;
   if (tab === "pending") match["catalogApproval.status"] = "pending";
-  if (tab === "variations") match.variantSuffix = { $ne: null };
+  if (tab === "variations") match.baseSku = { $in: familySkus };
   if (category) match.category = category;
   if (plating) match["specs.plating"] = plating;
   if (q) {
@@ -119,6 +132,7 @@ export default async function CatalogPage({
         {
           $project: {
             itemNumber: 1,
+            baseSku: 1,
             variantSuffix: 1,
             title: 1,
             category: 1,
@@ -143,10 +157,12 @@ export default async function CatalogPage({
     Item.distinct("category", { inCatalog: true }),
     Item.distinct("specs.plating", { inCatalog: true }),
   ]);
+  const familySkuSet = new Set(familySkus);
 
   const items = (facetResult[0]?.rows ?? []) as Array<{
     _id: unknown;
     itemNumber?: string;
+    baseSku?: string;
     variantSuffix?: string | null;
     title?: string;
     category?: string;
@@ -281,7 +297,7 @@ export default async function CatalogPage({
                 )
                   .filter((c) => !c.ok)
                   .map((c) => c.reason ?? c.field);
-                const isVariant = it.variantSuffix != null;
+                const isVariant = !!it.baseSku && familySkuSet.has(it.baseSku);
                 const pending = it.catalogApproval?.status === "pending";
                 return (
                   <tr key={String(it._id)} className="czc-row border-b border-border">
@@ -309,7 +325,8 @@ export default async function CatalogPage({
                     <td className={`${TD_CLASS} text-ink-soft`}>
                       {isVariant ? (
                         <span className="text-[0.82rem]">
-                          Yes <span className="text-ink-faint">· {it.variantSuffix}</span>
+                          Yes
+                          {it.variantSuffix && <span className="text-ink-faint"> · {it.variantSuffix}</span>}
                         </span>
                       ) : (
                         <span className="text-ink-faint text-[0.82rem]">No</span>

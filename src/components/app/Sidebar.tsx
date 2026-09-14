@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
+  LayoutDashboard,
   Gem,
   ClipboardList,
   Wallet,
@@ -11,6 +12,7 @@ import {
   FileSpreadsheet,
   RefreshCw,
   Store,
+  Users,
   ChevronsLeft,
   ChevronsRight,
 } from "lucide-react";
@@ -24,6 +26,7 @@ const COLLAPSE_KEY = "czc-pim-sidebar-collapsed";
 // (what `icon: Gem` would be) fails with "Only plain objects can be
 // passed to Client Components from Server Components."
 const ICONS = {
+  LayoutDashboard,
   Gem,
   ClipboardList,
   Wallet,
@@ -31,6 +34,7 @@ const ICONS = {
   FileSpreadsheet,
   RefreshCw,
   Store,
+  Users,
 };
 
 export type NavIconName = keyof typeof ICONS;

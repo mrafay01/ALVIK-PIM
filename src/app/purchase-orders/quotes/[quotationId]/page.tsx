@@ -46,7 +46,13 @@ export default async function QuoteReviewPage({
   const title = quotation.sourceFileName || quotation.poNumber || `Quote ${quotationId.slice(-6)}`;
 
   return (
-    <AppShell activeHref="/purchase-orders" eyebrow={`Quote review · ${vendorName}`} title={title}>
+    <AppShell
+      activeHref="/purchase-orders"
+      backHref="/purchase-orders/quotes"
+      backLabel="Quotes"
+      eyebrow={`Quote review · ${vendorName}`}
+      title={title}
+    >
       <p className="text-ink-soft mb-6 text-[0.92rem]">
         {grandTotal} line item{grandTotal === 1 ? "" : "s"} · {quotation.flaggedRows} flagged ·{" "}
         {quotation.approvedRows} approved · status:{" "}

@@ -12,6 +12,7 @@ import {
   JM_UPDATE_STATUSES,
   ON_MASTER_STATUSES,
   DESCRIPTIONS_STATUSES,
+  ROLES,
 } from "@/lib/enums";
 
 // Request-body validation for the API routes. Every mutating handler parses
@@ -325,6 +326,35 @@ export const MarketplaceListingPatchSchema = z
     chokingHazardWarning: z.string().trim().max(500).optional(),
     prop65Warning: z.string().trim().max(500).optional(),
     readyToExport: z.boolean().optional(),
+  })
+  .refine((b) => Object.keys(b).length > 0, "empty update");
+
+// ----------------------------------------------------------------- users
+
+const userName = z.string().trim().min(1).max(120);
+const userEmail = z.string().trim().toLowerCase().email().max(200);
+// Same floor as the NextAuth credentials provider assumes — bcrypt itself
+// truncates at 72 bytes, so there's no ceiling worth enforcing here.
+const userPassword = z.string().min(8).max(200);
+
+export const UserCreateSchema = z.object({
+  name: userName,
+  email: userEmail,
+  password: userPassword,
+  role: z.enum(ROLES),
+});
+
+// Admin editing an existing user: role and active are the day-to-day
+// controls; name/password are occasionally-used extras. Email is
+// deliberately not editable here — it's the sign-in identity, changing it
+// is a rarer, riskier operation better done deliberately than folded into
+// this form.
+export const UserPatchSchema = z
+  .object({
+    name: userName.optional(),
+    role: z.enum(ROLES).optional(),
+    active: z.boolean().optional(),
+    password: userPassword.optional(),
   })
   .refine((b) => Object.keys(b).length > 0, "empty update");
 

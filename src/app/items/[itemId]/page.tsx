@@ -48,7 +48,13 @@ export default async function ItemDetailPage({
         : null;
 
   return (
-    <AppShell activeHref="/items" eyebrow="Item detail" title={item.vendorSku || "Item"}>
+    <AppShell
+      activeHref={item.inCatalog ? "/catalog" : "/vendor-items"}
+      backHref={item.inCatalog ? "/catalog" : "/vendor-items"}
+      backLabel={item.inCatalog ? "Catalog" : "Vendor Items"}
+      eyebrow="Item detail"
+      title={item.vendorSku || "Item"}
+    >
       <div className="flex items-center gap-2.5 mb-6">
         <Pill tone={ITEM_STATUS_TONE[item.status as keyof typeof ITEM_STATUS_TONE]}>
           {ITEM_STATUS_LABEL[item.status as keyof typeof ITEM_STATUS_LABEL]}

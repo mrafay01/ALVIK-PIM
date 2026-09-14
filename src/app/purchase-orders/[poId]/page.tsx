@@ -32,7 +32,13 @@ export default async function PurchaseOrderDetailPage({
   const allDone = checklistEntries.length > 0 && doneCount === checklistEntries.length;
 
   return (
-    <AppShell activeHref="/purchase-orders" eyebrow="Purchase order" title={po.poNumber}>
+    <AppShell
+      activeHref="/purchase-orders"
+      backHref="/purchase-orders"
+      backLabel="Purchase Orders"
+      eyebrow="Purchase order"
+      title={po.poNumber}
+    >
       <div className="flex items-center gap-2.5 mb-6">
         <Pill tone={PO_STATUS_TONE[po.status as keyof typeof PO_STATUS_TONE]}>
           {PO_STATUS_LABEL[po.status as keyof typeof PO_STATUS_LABEL]}

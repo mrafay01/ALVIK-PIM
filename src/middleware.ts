@@ -89,6 +89,8 @@ export const config = {
   // auth flow itself stays reachable; the health check is public on purpose.
   matcher: [
     "/",
+    "/dashboard/:path*",
+    "/vendor-items/:path*",
     "/items/:path*",
     "/purchase-orders/:path*",
     "/payables/:path*",

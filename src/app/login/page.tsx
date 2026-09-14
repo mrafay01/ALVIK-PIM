@@ -4,7 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { LogIn, Gem, ClipboardList, ShieldCheck, Workflow } from "lucide-react";
+import { LogIn, Gem, ClipboardList, ShieldCheck, Workflow, MailCheck, ArrowLeft } from "lucide-react";
 import { Field, Input, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 
@@ -26,24 +26,134 @@ const HIGHLIGHTS = [
   },
 ];
 
+type Step = "password" | "otp";
+
+// Mirrors the server-side OTP_2FA_ENABLED flag in src/lib/auth.ts — off
+// while 2FA is in testing. Set both NEXT_PUBLIC_OTP_2FA_ENABLED and
+// OTP_2FA_ENABLED to "true" together to turn it back on; leaving them out
+// of sync makes this page request/verify a code that authorize() then
+// ignores (harmless, just a confusing extra step for no reason).
+const OTP_2FA_ENABLED = process.env.NEXT_PUBLIC_OTP_2FA_ENABLED === "true";
+
 export default function LoginPage() {
   const router = useRouter();
+  const [step, setStep] = useState<Step>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function requestOtp() {
+    const res = await fetch("/api/auth/otp/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Couldn't send a verification code. Try again.");
+    }
+  }
+
+  async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
-    const result = await signIn("credentials", { email, password, redirect: false });
-    setSubmitting(false);
-    if (result?.error) {
-      setError("Invalid email or password.");
-      return;
+    try {
+      if (!OTP_2FA_ENABLED) {
+        // 2FA off — sign in directly on the password step. authorize()
+        // doesn't require sessionTicket while OTP_2FA_ENABLED is unset,
+        // so this is a normal single-step credentials login.
+        const result = await signIn("credentials", { email, password, redirect: false });
+        if (result?.error) {
+          throw new Error("Invalid email or password.");
+        }
+        router.push("/dashboard");
+        return;
+      }
+
+      await requestOtp();
+      setStep("otp");
+      setResendCooldown(30);
+      const interval = setInterval(() => {
+        setResendCooldown((s) => {
+          if (s <= 1) {
+            clearInterval(interval);
+            return 0;
+          }
+          return s - 1;
+        });
+      }, 1000);
+    } catch (err) {
+      // Same message whether the account exists or the password is
+      // wrong — the API doesn't distinguish, so neither should this.
+      setError(err instanceof Error ? err.message : "Invalid email or password.");
+    } finally {
+      setSubmitting(false);
     }
-    router.push("/items");
+  }
+
+  async function handleResend() {
+    if (resendCooldown > 0 || submitting) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      await requestOtp();
+      setResendCooldown(30);
+      const interval = setInterval(() => {
+        setResendCooldown((s) => {
+          if (s <= 1) {
+            clearInterval(interval);
+            return 0;
+          }
+          return s - 1;
+        });
+      }, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't resend the code.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleOtpSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const verifyRes = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code }),
+      });
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) {
+        throw new Error(verifyData.error || "That code isn't right.");
+      }
+
+      const result = await signIn("credentials", {
+        email,
+        password,
+        sessionTicket: verifyData.sessionTicket,
+        redirect: false,
+      });
+      if (result?.error) {
+        throw new Error("Verification failed. Start over and try again.");
+      }
+      router.push("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That code isn't right.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function backToPassword() {
+    setStep("password");
+    setCode("");
+    setError(null);
   }
 
   return (
@@ -142,27 +252,102 @@ export default function LoginPage() {
       {/* Right: sign-in form */}
       <div className="flex items-center justify-center p-8">
         <div className="w-full max-w-[360px]">
-          <div className="mb-8">
-            <h2 className="text-2xl mb-1.5">Welcome back</h2>
-            <p className="text-[0.88rem] text-ink-faint m-0">Sign in with your CZC PIM credentials to continue.</p>
-          </div>
+          {step === "password" ? (
+            <>
+              <div className="mb-8">
+                <h2 className="text-2xl mb-1.5">Welcome back</h2>
+                <p className="text-[0.88rem] text-ink-faint m-0">Sign in with your CZC PIM credentials to continue.</p>
+              </div>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <Field label="Email">
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus placeholder="you@company.com" />
-            </Field>
-            <Field label="Password">
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
-            </Field>
-            <Button type="submit" variant="primary" disabled={submitting} className="mt-1.5 !px-4 !py-[11px]">
-              <span className="flex items-center justify-center gap-1.5">
-                <LogIn size={16} /> {submitting ? "Signing in…" : "Sign in"}
-              </span>
-            </Button>
-            {error && <ErrorText>{error}</ErrorText>}
-          </form>
+              <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-4">
+                <Field label="Email">
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoFocus
+                    placeholder="you@company.com"
+                  />
+                </Field>
+                <Field label="Password">
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    placeholder="••••••••"
+                  />
+                </Field>
+                <Button type="submit" variant="primary" disabled={submitting} className="mt-1.5 !px-4 !py-[11px]">
+                  <span className="flex items-center justify-center gap-1.5">
+                    <LogIn size={16} /> {submitting ? "Sending code…" : "Continue"}
+                  </span>
+                </Button>
+                {error && <ErrorText>{error}</ErrorText>}
+              </form>
 
-          <p className="mt-7 text-[0.78rem] text-ink-faint text-center">Need access? Contact your administrator.</p>
+              <p className="mt-7 text-[0.78rem] text-ink-faint text-center">Need access? Contact your administrator.</p>
+            </>
+          ) : (
+            <>
+              <div className="mb-8">
+                <span className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-brass-bg text-brass mb-4">
+                  <MailCheck size={20} />
+                </span>
+                <h2 className="text-2xl mb-1.5">Check your email</h2>
+                <p className="text-[0.88rem] text-ink-faint m-0">
+                  We sent a 6-digit code to <span className="text-ink font-semibold">{email}</span>. It expires
+                  in 10 minutes.
+                </p>
+              </div>
+
+              <form onSubmit={handleOtpSubmit} className="flex flex-col gap-4">
+                <Field label="Verification code">
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    required
+                    autoFocus
+                    placeholder="123456"
+                    className="tracking-[0.4em] text-center font-mono text-lg"
+                  />
+                </Field>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={submitting || code.length !== 6}
+                  className="mt-1.5 !px-4 !py-[11px]"
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <LogIn size={16} /> {submitting ? "Verifying…" : "Verify & sign in"}
+                  </span>
+                </Button>
+                {error && <ErrorText>{error}</ErrorText>}
+              </form>
+
+              <div className="flex items-center justify-between mt-5">
+                <button
+                  type="button"
+                  onClick={backToPassword}
+                  className="inline-flex items-center gap-1.5 text-[0.82rem] text-ink-faint bg-transparent border-none cursor-pointer p-0 hover:text-ink"
+                >
+                  <ArrowLeft size={13} /> Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resendCooldown > 0 || submitting}
+                  className="text-[0.82rem] text-brass bg-transparent border-none p-0 disabled:text-ink-faint disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </main>
