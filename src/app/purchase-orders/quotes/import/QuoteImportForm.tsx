@@ -80,11 +80,11 @@ export function QuoteImportForm({ vendors }: { vendors: { id: string; name: stri
         </Field>
       </div>
 
-      <Field label="Quote file (.xlsx or .csv)">
+      <Field label="Quote file (.xlsx, .xls, or .csv)">
         <input
           type="file"
           name="file"
-          accept=".xlsx,.csv"
+          accept=".xlsx,.xls,.csv"
           required
           className="text-[0.85rem] text-ink-soft"
         />

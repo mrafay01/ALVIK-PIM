@@ -1,5 +1,6 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
+import logger from "@/lib/logger";
 import type { Role } from "@/lib/enums";
 
 // Route-prefix -> roles allowed there. Administrator always passes.
@@ -53,25 +54,38 @@ export default withAuth(
     const path = req.nextUrl.pathname;
     const isApi = path.startsWith("/api/");
     const role = req.nextauth.token?.role as Role | undefined;
+    const userId = req.nextauth.token?.id as string | undefined;
 
     if (!role) {
-      return isApi
-        ? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-        : NextResponse.redirect(new URL("/login", req.url));
+      if (isApi) {
+        logger.warn("API request without role", { path, method: req.method });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      return NextResponse.redirect(new URL("/login", req.url));
     }
 
-    if (role === "administrator") return NextResponse.next();
+    if (role === "administrator") {
+      if (isApi) {
+        logger.debug("API request", { path, method: req.method, userId, role });
+      }
+      return NextResponse.next();
+    }
 
     const allowed = isApi
       ? firstMatch(path, API_ROUTE_ROLES)
       : firstMatch(path, PAGE_ROUTE_ROLES);
 
     if (allowed && !allowed.includes(role)) {
-      return isApi
-        ? NextResponse.json({ error: "Forbidden" }, { status: 403 })
-        : NextResponse.redirect(new URL("/unauthorized", req.url));
+      if (isApi) {
+        logger.warn("API request forbidden by role", { path, method: req.method, userId, role, required: allowed });
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      return NextResponse.redirect(new URL("/unauthorized", req.url));
     }
 
+    if (isApi) {
+      logger.debug("API request", { path, method: req.method, userId, role });
+    }
     return NextResponse.next();
   },
   {
@@ -90,7 +104,6 @@ export const config = {
   matcher: [
     "/",
     "/dashboard/:path*",
-    "/vendor-items/:path*",
     "/items/:path*",
     "/purchase-orders/:path*",
     "/payables/:path*",

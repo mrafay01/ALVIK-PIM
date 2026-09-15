@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { isXlsBuffer, convertXlsToXlsxBuffer } from "@/lib/xlsToXlsx";
 
 // Coercion + validation rules for the Master File import, per the blueprint's
 // Data-quality note: treat every legacy cell as untrusted text, coerce with
@@ -232,9 +233,19 @@ function cellValue(cell: ExcelJS.Cell): unknown {
   return v;
 }
 
-export async function parseMasterFileBuffer(data: ArrayBuffer): Promise<StagedRowInput[]> {
+export async function parseMasterFileBuffer(
+  data: ArrayBuffer,
+  fileName = ""
+): Promise<StagedRowInput[]> {
+  // Legacy .xls (Excel 97-2003) — exceljs can't read it directly, so it's
+  // converted to an equivalent .xlsx buffer first. See
+  // src/lib/xlsToXlsx.ts for why this is safe (SheetJS, patched, kept to
+  // the smallest possible surface) and src/lib/quote-import/parseQuoteFile.ts
+  // for the same pattern used on the quote-intake path.
+  const sourceData = isXlsBuffer(data, fileName) ? await convertXlsToXlsxBuffer(data) : data;
+
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(data);
+  await workbook.xlsx.load(sourceData);
   const sheet = workbook.worksheets[0];
   if (!sheet) return [];
 

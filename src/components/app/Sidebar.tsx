@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   LayoutDashboard,
-  Gem,
   ClipboardList,
   Wallet,
   BookOpenCheck,
@@ -23,11 +22,10 @@ const COLLAPSE_KEY = "czc-pim-sidebar-collapsed";
 // Icons are looked up by name here rather than passed as component
 // references from AppShell (a Server Component) — RSC can only serialize
 // plain data across that boundary, and a component/function reference
-// (what `icon: Gem` would be) fails with "Only plain objects can be
-// passed to Client Components from Server Components."
+// (what `icon: ClipboardList` would be) fails with "Only plain objects can
+// be passed to Client Components from Server Components."
 const ICONS = {
   LayoutDashboard,
-  Gem,
   ClipboardList,
   Wallet,
   BookOpenCheck,

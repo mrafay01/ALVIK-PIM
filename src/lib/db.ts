@@ -38,8 +38,11 @@ export async function connectDB(): Promise<typeof mongoose> {
       // shard host can't be reached, so request handlers surface a clean
       // error (see app/error.tsx) rather than timing out.
       serverSelectionTimeoutMS: 5000,
-      // Serverless/edge instances don't need the default pool of 100.
-      maxPoolSize: 10,
+      // Connection pool size: 50 for production, 10 for development.
+      // Each concurrent request needs a connection; maintain min 5 to avoid
+      // cold-start delays; production handles 100+ concurrent requests.
+      maxPoolSize: process.env.NODE_ENV === "production" ? 50 : 10,
+      minPoolSize: process.env.NODE_ENV === "production" ? 5 : 1,
     });
   }
 

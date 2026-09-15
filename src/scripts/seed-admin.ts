@@ -4,6 +4,7 @@
  */
 import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
+import logger from "@/lib/logger";
 import User from "@/models/User";
 
 async function main() {
@@ -12,7 +13,7 @@ async function main() {
   const name = process.env.SEED_ADMIN_NAME ?? "Admin";
 
   if (!email || !password) {
-    console.error("Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD before running.");
+    logger.error("SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD env vars required");
     process.exit(1);
   }
 
@@ -20,7 +21,7 @@ async function main() {
 
   const existing = await User.findOne({ email: email.toLowerCase() });
   if (existing) {
-    console.log(`User ${email} already exists — skipping.`);
+    logger.info("Administrator already exists, skipping creation", { email });
     process.exit(0);
   }
 
@@ -33,11 +34,11 @@ async function main() {
     active: true,
   });
 
-  console.log(`Created administrator: ${email}`);
+  logger.info("Administrator account created", { email, name });
   process.exit(0);
 }
 
 main().catch((err) => {
-  console.error(err);
+  logger.error("Seed-admin script failed", { error: err instanceof Error ? err.message : String(err) });
   process.exit(1);
 });

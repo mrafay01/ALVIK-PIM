@@ -49,9 +49,9 @@ export default async function ItemDetailPage({
 
   return (
     <AppShell
-      activeHref={item.inCatalog ? "/catalog" : "/vendor-items"}
-      backHref={item.inCatalog ? "/catalog" : "/vendor-items"}
-      backLabel={item.inCatalog ? "Catalog" : "Vendor Items"}
+      activeHref={item.inCatalog ? "/catalog" : "/dashboard"}
+      backHref={item.inCatalog ? "/catalog" : "/dashboard"}
+      backLabel={item.inCatalog ? "Catalog" : "Dashboard"}
       eyebrow="Item detail"
       title={item.vendorSku || "Item"}
     >

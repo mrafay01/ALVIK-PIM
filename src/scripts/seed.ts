@@ -7,6 +7,7 @@
  */
 import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
+import logger from "@/lib/logger";
 import User from "@/models/User";
 import Vendor from "@/models/Vendor";
 import { ROLES, type Role } from "@/lib/enums";
@@ -68,7 +69,7 @@ async function seedUsers(domain: string) {
       role: u.role,
       active: true,
     });
-    console.log(`Created ${u.role}: ${email} (password not set — use password reset)`);
+    logger.info(`Created user for role ${u.role}`, { email });
     created += 1;
   }
   return created;
@@ -96,22 +97,18 @@ async function main() {
   const roleCheck = ROLE_SEED_USERS.map((u) => u.role);
   const missing = ROLES.filter((r) => !roleCheck.includes(r));
   if (missing.length > 0) {
-    console.error(`ROLE_SEED_USERS is missing coverage for: ${missing.join(", ")}`);
+    logger.error(`ROLE_SEED_USERS is missing coverage for: ${missing.join(", ")}`);
     process.exit(1);
   }
 
   const usersCreated = await seedUsers(domain);
   const vendorsCreated = await seedVendors();
 
-  console.log(`\nDone. Users created: ${usersCreated}, Vendors created: ${vendorsCreated}`);
-  console.log(
-    "Seeded users have random passwords — nobody can sign in with them yet. " +
-      "Set real passwords via seed-admin.ts style creation or a password-reset flow before handing out accounts."
-  );
+  logger.info("Database seeding complete", { usersCreated, vendorsCreated });
   process.exit(0);
 }
 
 main().catch((err) => {
-  console.error(err);
+  logger.error("Seed script failed", { error: err instanceof Error ? err.message : String(err) });
   process.exit(1);
 });

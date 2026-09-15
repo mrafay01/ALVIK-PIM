@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
 
   let rows;
   try {
-    rows = await parseMasterFileBuffer(await file.arrayBuffer());
+    rows = await parseMasterFileBuffer(await file.arrayBuffer(), file.name);
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse file: ${(err as Error).message}` },

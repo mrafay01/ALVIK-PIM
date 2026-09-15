@@ -44,7 +44,12 @@
       "Bash(rm -rf .next)",
       "Bash(npx next *)",
       "Bash(cp \"C:/Users/cw/.claude/projects/c--Users-cw-Documents-PIM/1a197cc3-533e-4dd9-930b-3228e778f282/tool-results/artifact-4bfebdd3-1789042939-f2c7.html\" \"C:/Users/cw/AppData/Local/Temp/claude/c--Users-cw-Documents-PIM/1a197cc3-533e-4dd9-930b-3228e778f282/scratchpad/blueprint.html\" && wc -l \"C:/Users/cw/AppData/Local/Temp/claude/c--Users-cw-Documents-PIM/1a197cc3-533e-4dd9-930b-3228e778f282/scratchpad/blueprint.html\")",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(Get-ChildItem -Path . -Depth 2 -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(npm list *)",
+      "Bash(grep -r \"eval\\\\|innerHTML\\\\|\\\\$\\\\|exec\" \"C:\\\\Users\\\\cw\\\\Documents\\\\PIM\\\\src\" --include=\"*.ts\" --include=\"*.tsx\")",
+      "Bash(npm test *)"
     ],
     "additionalDirectories": [
       "\\tmp",

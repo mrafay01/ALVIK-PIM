@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { parseCsv } from "./parseCsv";
+import { isXlsBuffer, convertXlsToXlsxBuffer } from "@/lib/xlsToXlsx";
 import {
   QUOTE_FIELDS,
   QUOTE_HEADER_TO_KEY,
@@ -8,19 +9,19 @@ import {
   type QuoteFieldKind,
 } from "./fields";
 
-// Parses a vendor quote file (.xlsx or .csv) into staged rows, treating
-// every cell as untrusted text and coercing with the same discipline as the
-// legacy Master File import (src/lib/import/parseMasterFile.ts): coerce by
-// the field's declared kind, flag anything that fails instead of guessing
-// or silently dropping it, and keep the raw value so a reviewer can see and
-// fix it.
+// Parses a vendor quote file (.xlsx, legacy .xls, or .csv) into staged
+// rows, treating every cell as untrusted text and coercing with the same
+// discipline as the legacy Master File import
+// (src/lib/import/parseMasterFile.ts): coerce by the field's declared
+// kind, flag anything that fails instead of guessing or silently dropping
+// it, and keep the raw value so a reviewer can see and fix it.
 //
-// exceljs (not SheetJS/`xlsx`) for reading, matching the project's stack
-// decision in PROJECT-REPORT.md §2 — SheetJS on npm carries unpatched
-// prototype-pollution and ReDoS CVEs, an unacceptable risk for a handler
-// that parses untrusted uploads. exceljs cannot read legacy .xls (Excel
-// 97-2003), so those are rejected with a clear "save as .xlsx first"
-// message rather than pulling in the vulnerable reader.
+// exceljs for .xlsx/.csv, matching the project's stack decision in
+// PROJECT-REPORT.md §2. exceljs cannot read legacy .xls (Excel 97-2003) at
+// all, so a .xls upload is first converted to an equivalent .xlsx buffer
+// in memory (src/lib/xlsToXlsx.ts — the one place SheetJS is used, kept to
+// the smallest possible surface) and then handed to the exact same
+// exceljs path below as any native .xlsx upload.
 export class QuoteParseError extends Error {}
 
 export type FieldFlag = {
@@ -310,13 +311,18 @@ export async function parseQuoteFileBuffer(
   const lower = fileName.toLowerCase();
   const head = new Uint8Array(data.slice(0, 8));
   const isZip = head[0] === 0x50 && head[1] === 0x4b; // .xlsx (ZIP)
-  const isOle2 = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0; // legacy .xls
 
-  if (isOle2 || lower.endsWith(".xls")) {
-    throw new QuoteParseError(
-      "This looks like a legacy .xls file (Excel 97–2003). Open it in Excel and use " +
-        "“Save As” to save a .xlsx or .csv copy, then upload that."
-    );
+  if (isXlsBuffer(data, fileName)) {
+    let xlsxData: ArrayBuffer;
+    try {
+      xlsxData = await convertXlsToXlsxBuffer(data);
+    } catch {
+      throw new QuoteParseError(
+        "Couldn't read this .xls file — it may be corrupted or password-protected. " +
+          "Open it in Excel and use “Save As” to save a .xlsx or .csv copy, then upload that."
+      );
+    }
+    return parseXlsx(xlsxData);
   }
   if (lower.endsWith(".csv")) return parseCsvBuffer(data);
   if (lower.endsWith(".xlsx") || isZip) return parseXlsx(data);

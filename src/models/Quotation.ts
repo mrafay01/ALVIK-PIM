@@ -54,6 +54,8 @@ const QuotationSchema = new Schema(
 // Quotes list sorts newest-first; the review page loads one by _id.
 QuotationSchema.index({ createdAt: -1 });
 QuotationSchema.index({ vendorId: 1 });
+// Dashboard: quotations needing review
+QuotationSchema.index({ status: 1 });
 
 export type QuotationDoc = InferSchemaType<typeof QuotationSchema>;
 export default (models.Quotation as Model<QuotationDoc>) ||

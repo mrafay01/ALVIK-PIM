@@ -20,41 +20,50 @@ const TH_CLASS =
   "text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap";
 const TD_CLASS = "px-4 py-3 text-[0.85rem]";
 
-function fmtMoney(n: number | undefined | null) {
-  return `$${(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
-
 function weekLabel(d: Date) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 // A card whose header links out to the page that owns the data it shows —
 // every chart/table on this dashboard is a summary of somewhere else in the
-// app, so the click target is never a dead end.
+// app, so the click target is never a dead end. `href` is optional: a card
+// summarizing something with no page of its own (e.g. in-progress items,
+// which have no standalone list) renders its header as plain text instead
+// of faking a link.
 function LinkedCard({
   href,
   title,
   subtitle,
   children,
 }: {
-  href: string;
+  href?: string;
   title: string;
   subtitle?: string;
   children: React.ReactNode;
 }) {
+  const header = (
+    <div className="min-w-0">
+      <h2 className={`text-[0.95rem] ${href ? "group-hover:text-brass transition-colors duration-150" : ""}`}>
+        {title}
+      </h2>
+      {subtitle && <p className="text-ink-faint text-[0.78rem] mt-1 mb-0">{subtitle}</p>}
+    </div>
+  );
+
   return (
-    <Card className="czc-card-link" padding={0}>
-      <Link href={href} className="flex items-center justify-between gap-3 px-[22px] pt-[22px] pb-1 no-underline group">
-        <div className="min-w-0">
-          <h2 className="text-[0.95rem] group-hover:text-brass transition-colors duration-150">{title}</h2>
-          {subtitle && <p className="text-ink-faint text-[0.78rem] mt-1 mb-0">{subtitle}</p>}
-        </div>
-        <ArrowRight
-          size={16}
-          strokeWidth={2}
-          className="shrink-0 text-ink-faint group-hover:text-brass group-hover:translate-x-0.5 transition-[color,transform] duration-150"
-        />
-      </Link>
+    <Card className={href ? "czc-card-link" : ""} padding={0}>
+      {href ? (
+        <Link href={href} className="flex items-center justify-between gap-3 px-[22px] pt-[22px] pb-1 no-underline group">
+          {header}
+          <ArrowRight
+            size={16}
+            strokeWidth={2}
+            className="shrink-0 text-ink-faint group-hover:text-brass group-hover:translate-x-0.5 transition-[color,transform] duration-150"
+          />
+        </Link>
+      ) : (
+        <div className="px-[22px] pt-[22px] pb-1">{header}</div>
+      )}
       <div className="px-[22px] pb-[22px] pt-4">{children}</div>
     </Card>
   );
@@ -67,63 +76,89 @@ export default async function DashboardPage() {
   const twelveWeeksAgo = new Date(now.getTime() - 12 * 7 * 24 * 60 * 60 * 1000);
   const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  const [
-    incompleteCatalogItems,
-    poStatusCounts,
-    payablesDueSoon,
-    pendingCatalogApproval,
-    catalogCompleteCount,
-    catalogIncompleteCount,
-    itemsNoImages,
-    itemsFullImages,
-    itemsPartialImages,
-    poImagePending,
-    poImageWithPhotographer,
-    poImageReceived,
-    quotationsNeedingReview,
-    recentItemsCreated,
-    recentItems,
-  ] = await Promise.all([
-    Item.countDocuments({ inCatalog: true, masterRecordComplete: false }),
-    PurchaseOrder.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
-    Payment.countDocuments({
-      status: { $in: ["open", "deposit_submitted"] },
-      dueDate: { $lte: sevenDaysFromNow },
-    }),
-    Item.countDocuments({ inCatalog: true, "catalogApproval.status": "pending" }),
-    Item.countDocuments({ inCatalog: true, masterRecordComplete: true }),
-    Item.countDocuments({
-      inCatalog: true,
-      masterRecordComplete: false,
-      $or: [{ "catalogApproval.status": { $ne: "pending" } }, { catalogApproval: { $exists: false } }],
-    }),
-    Item.countDocuments({ $or: [{ media: { $exists: false } }, { media: { $size: 0 } }] }),
-    Item.countDocuments({
-      "imageCompleteness.main": true,
-      "imageCompleteness.sides": true,
-      "imageCompleteness.models": true,
-    }),
-    Item.countDocuments({
-      media: { $exists: true, $not: { $size: 0 } },
-      $or: [
-        { "imageCompleteness.main": { $ne: true } },
-        { "imageCompleteness.sides": { $ne: true } },
-        { "imageCompleteness.models": { $ne: true } },
-      ],
-    }),
-    PurchaseOrder.countDocuments({ imageStatus: "pending" }),
-    PurchaseOrder.countDocuments({ imageStatus: { $in: ["sent_to_photo_guy", "submitted_on_fiverr"] } }),
-    PurchaseOrder.countDocuments({ imageStatus: { $in: ["images_received", "received"] } }),
-    Quotation.countDocuments({ status: "needs_review" }),
+  // Batch all Item and PurchaseOrder counts into aggregation pipelines using $facet
+  // to reduce from ~15 separate queries to 3 batch calls (Item, PurchaseOrder, Payment).
+  const [itemMetrics, poMetrics, recentItems, quotationsNeedingReview, payablesDueSoon] = await Promise.all([
     Item.aggregate([
-      { $match: { createdAt: { $gte: twelveWeeksAgo } } },
       {
-        $group: {
-          _id: { $dateTrunc: { date: "$createdAt", unit: "week", timezone: "UTC" } },
-          count: { $sum: 1 },
+        $facet: {
+          incompleteCatalog: [
+            { $match: { inCatalog: true, masterRecordComplete: false } },
+            { $count: "count" },
+          ],
+          catalogPending: [
+            { $match: { inCatalog: true, "catalogApproval.status": "pending" } },
+            { $count: "count" },
+          ],
+          catalogComplete: [
+            { $match: { inCatalog: true, masterRecordComplete: true } },
+            { $count: "count" },
+          ],
+          catalogIncomplete: [
+            {
+              $match: {
+                inCatalog: true,
+                masterRecordComplete: false,
+                $or: [{ "catalogApproval.status": { $ne: "pending" } }, { catalogApproval: { $exists: false } }],
+              },
+            },
+            { $count: "count" },
+          ],
+          itemsNoImages: [
+            { $match: { $or: [{ media: { $exists: false } }, { media: { $size: 0 } }] } },
+            { $count: "count" },
+          ],
+          itemsFullImages: [
+            {
+              $match: {
+                "imageCompleteness.main": true,
+                "imageCompleteness.sides": true,
+                "imageCompleteness.models": true,
+              },
+            },
+            { $count: "count" },
+          ],
+          itemsPartialImages: [
+            {
+              $match: {
+                media: { $exists: true, $not: { $size: 0 } },
+                $or: [
+                  { "imageCompleteness.main": { $ne: true } },
+                  { "imageCompleteness.sides": { $ne: true } },
+                  { "imageCompleteness.models": { $ne: true } },
+                ],
+              },
+            },
+            { $count: "count" },
+          ],
+          itemsCreated: [
+            { $match: { createdAt: { $gte: twelveWeeksAgo } } },
+            {
+              $group: {
+                _id: { $dateTrunc: { date: "$createdAt", unit: "week", timezone: "UTC" } },
+                count: { $sum: 1 },
+              },
+            },
+            { $sort: { _id: 1 } },
+          ],
         },
       },
-      { $sort: { _id: 1 } },
+    ]),
+    PurchaseOrder.aggregate([
+      {
+        $facet: {
+          statusCounts: [{ $group: { _id: "$status", count: { $sum: 1 } } }],
+          imageStatusPending: [{ $match: { imageStatus: "pending" } }, { $count: "count" }],
+          imageStatusWithPhotographer: [
+            { $match: { imageStatus: { $in: ["sent_to_photo_guy", "submitted_on_fiverr"] } } },
+            { $count: "count" },
+          ],
+          imageStatusReceived: [
+            { $match: { imageStatus: { $in: ["images_received", "received"] } } },
+            { $count: "count" },
+          ],
+        },
+      },
     ]),
     Item.find({ inCatalog: { $ne: true } })
       .select("itemNumber sampleSku title status vendorId updatedAt")
@@ -131,9 +166,31 @@ export default async function DashboardPage() {
       .sort({ updatedAt: -1 })
       .limit(8)
       .lean(),
+    Quotation.countDocuments({ status: "needs_review" }),
+    Payment.countDocuments({
+      status: { $in: ["open", "deposit_submitted"] },
+      dueDate: { $lte: sevenDaysFromNow },
+    }),
   ]);
 
-  const poStatusMap = new Map(poStatusCounts.map((r) => [r._id, r.count]));
+  // Extract counts from facet results
+  const incompleteCatalogItems = itemMetrics[0].incompleteCatalog[0]?.count ?? 0;
+  const pendingCatalogApproval = itemMetrics[0].catalogPending[0]?.count ?? 0;
+  const catalogCompleteCount = itemMetrics[0].catalogComplete[0]?.count ?? 0;
+  const catalogIncompleteCount = itemMetrics[0].catalogIncomplete[0]?.count ?? 0;
+  const itemsNoImages = itemMetrics[0].itemsNoImages[0]?.count ?? 0;
+  const itemsFullImages = itemMetrics[0].itemsFullImages[0]?.count ?? 0;
+  const itemsPartialImages = itemMetrics[0].itemsPartialImages[0]?.count ?? 0;
+  const recentItemsCreated = itemMetrics[0].itemsCreated;
+
+  const poStatusCounts = poMetrics[0].statusCounts;
+  const poImagePending = poMetrics[0].imageStatusPending[0]?.count ?? 0;
+  const poImageWithPhotographer = poMetrics[0].imageStatusWithPhotographer[0]?.count ?? 0;
+  const poImageReceived = poMetrics[0].imageStatusReceived[0]?.count ?? 0;
+
+  const poStatusMap = new Map(
+    (poStatusCounts as Array<{ _id: string; count: number }>).map((r) => [r._id, r.count])
+  );
   const poStatusData: HBarDatum[] = PO_STATUSES.filter((s) => (poStatusMap.get(s) ?? 0) > 0).map((s) => ({
     label: PO_STATUS_LABEL[s],
     value: poStatusMap.get(s) ?? 0,
@@ -149,7 +206,10 @@ export default async function DashboardPage() {
 
   // Fill in the full 12-week range so weeks with zero items still show a bar.
   const weekBuckets = new Map(
-    recentItemsCreated.map((r) => [new Date(r._id).toISOString().slice(0, 10), r.count])
+    (recentItemsCreated as Array<{ _id: Date; count: number }>).map((r) => [
+      new Date(r._id).toISOString().slice(0, 10),
+      r.count,
+    ])
   );
   const trendData = Array.from({ length: 12 }).map((_, i) => {
     const weekStart = new Date(twelveWeeksAgo.getTime() + i * 7 * 24 * 60 * 60 * 1000);
@@ -250,14 +310,13 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-[1.3fr_1fr] gap-5 mb-5">
         <LinkedCard
-          href="/vendor-items"
           title="Items created, last 12 weeks"
           subtitle="New items entering the pipeline, by week."
         >
           <TrendBars data={trendData} />
         </LinkedCard>
 
-        <LinkedCard href="/vendor-items" title="Image pipeline" subtitle="From photographer through SharePoint upload.">
+        <LinkedCard title="Image pipeline" subtitle="From photographer through SharePoint upload.">
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-3">
               <span className="flex items-center justify-center w-8 h-8 rounded-sm bg-good-bg shrink-0">
@@ -307,7 +366,6 @@ export default async function DashboardPage() {
       </div>
 
       <LinkedCard
-        href="/vendor-items"
         title="Recently updated vendor items"
         subtitle="The last in-progress items touched, across every status."
       >

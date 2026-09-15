@@ -7,7 +7,6 @@ import { Sidebar, type NavItem } from "./Sidebar";
 
 const NAV: (NavItem & { roles: Role[] | null })[] = [
   { href: "/dashboard", label: "Dashboard", icon: "LayoutDashboard", roles: null },
-  { href: "/vendor-items", label: "Vendor Items", icon: "Gem", roles: null },
   { href: "/purchase-orders", label: "Purchase Orders", icon: "ClipboardList", roles: null },
   { href: "/payables", label: "Payables", icon: "Wallet", roles: ["administrator", "accounts_finance"] as Role[] },
   { href: "/catalog", label: "Catalog", icon: "BookOpenCheck", roles: null },

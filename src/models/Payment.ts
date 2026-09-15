@@ -29,6 +29,8 @@ const PaymentSchema = new Schema(
 PaymentSchema.index({ poId: 1, createdAt: -1 });
 PaymentSchema.index({ status: 1, updatedAt: -1 });
 PaymentSchema.index({ vendorId: 1 });
+// Dashboard: payables due within 7 days
+PaymentSchema.index({ dueDate: 1, status: 1 });
 
 export type PaymentDoc = InferSchemaType<typeof PaymentSchema>;
 export default (models.Payment as Model<PaymentDoc>) ||

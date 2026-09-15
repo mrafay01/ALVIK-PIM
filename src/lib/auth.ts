@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import { rateLimit } from "@/lib/rateLimit";
 import { redeemSessionTicket } from "@/lib/otp";
+import logger from "@/lib/logger";
 import User from "@/models/User";
 import type { Role } from "@/lib/enums";
 
@@ -41,8 +42,14 @@ export const authOptions: NextAuthOptions = {
         sessionTicket: { label: "Session ticket", type: "text" },
       },
       async authorize(credentials, req) {
-        if (!credentials?.email || !credentials?.password) return null;
-        if (OTP_2FA_ENABLED && !credentials?.sessionTicket) return null;
+        if (!credentials?.email || !credentials?.password) {
+          logger.warn("Login attempt with missing credentials", { email: credentials?.email });
+          return null;
+        }
+        if (OTP_2FA_ENABLED && !credentials?.sessionTicket) {
+          logger.warn("Login attempt with missing OTP ticket", { email: credentials.email });
+          return null;
+        }
 
         const email = credentials.email.toLowerCase();
 
@@ -57,6 +64,7 @@ export const authOptions: NextAuthOptions = {
         const perEmail = rateLimit(`login:email:${email}`, { limit: 5, windowMs: 60_000 });
         const perIp = rateLimit(`login:ip:${ip}`, { limit: 20, windowMs: 60_000 });
         if (!perEmail.allowed || !perIp.allowed) {
+          logger.warn("Login rate limit exceeded", { email, ip, perEmailRemaining: perEmail.remaining, perIpRemaining: perIp.remaining });
           throw new LoginRateLimitError();
         }
 
@@ -65,10 +73,16 @@ export const authOptions: NextAuthOptions = {
           email,
           active: true,
         });
-        if (!user) return null;
+        if (!user) {
+          logger.warn("Login failed: user not found", { email, ip });
+          return null;
+        }
 
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
-        if (!valid) return null;
+        if (!valid) {
+          logger.warn("Login failed: invalid password", { email, ip });
+          return null;
+        }
 
         // When enabled, password alone is never enough — a session only
         // mints once the caller also holds a session ticket proving they
@@ -78,9 +92,13 @@ export const authOptions: NextAuthOptions = {
         // testing — see the flag's definition above.
         if (OTP_2FA_ENABLED) {
           const ticketOk = await redeemSessionTicket(user._id, credentials.sessionTicket!);
-          if (!ticketOk) return null;
+          if (!ticketOk) {
+            logger.warn("Login failed: invalid OTP ticket", { email, ip });
+            return null;
+          }
         }
 
+        logger.info("Login successful", { email, userId: user._id.toString(), role: user.role });
         return {
           id: user._id.toString(),
           name: user.name,
