@@ -1,7 +1,15 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
-import logger from "@/lib/logger";
 import type { Role } from "@/lib/enums";
+
+// The Edge runtime (where middleware always executes) doesn't support
+// Node's `fs`/`path` modules, which the shared Winston logger (@/lib/logger)
+// depends on — importing it here breaks every request with a 500. Use
+// plain console logging instead for this file only.
+const logger = {
+  debug: (...args: unknown[]) => console.debug(...args),
+  warn: (...args: unknown[]) => console.warn(...args),
+};
 
 // Route-prefix -> roles allowed there. Administrator always passes.
 // Mirrors the roles table in PROJECT-REPORT.md §3/§7 and the ROLE_SETS map

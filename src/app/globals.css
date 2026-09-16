@@ -218,3 +218,12 @@ a {
     transition-duration: 0.01ms !important;
   }
 }
+
+.details-chevron {
+  display: inline-block;
+  transition: transform 0.15s;
+}
+
+details[open] > summary .details-chevron {
+  transform: rotate(90deg);
+}
