@@ -2,89 +2,36 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
-import { Field, Input, ErrorText } from "@/components/ui/Field";
+import { Package, DollarSign, Gem, Ruler, Save, Megaphone, Sparkles, Layers, Check } from "lucide-react";
+import { Field, Input, Select, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { DESCRIPTION_PLATFORMS, type DescriptionPlatform } from "@/lib/enums";
+import { DESCRIPTION_PLATFORM_LABEL } from "@/lib/statusDisplay";
+import { BulletFeaturesEditor, BULLET_FEATURES_MIN_VISIBLE } from "@/components/ui/BulletFeaturesEditor";
+import { CATEGORY_OPTIONS, GENDER_OPTIONS, BRAND_OPTIONS, METAL_OPTIONS, PLATING_OPTIONS } from "@/lib/itemPicklists";
+import { MeasurementFieldsEditor } from "@/components/ui/MeasurementFieldsEditor";
+import type { ItemMeasurements } from "@/lib/measurements/types";
+import { validateItemMeasurements, formatValidationIssues, cleanMeasurementsForSave } from "@/lib/measurements/validate";
+import { VariationsStep } from "./VariationsStep";
+import { type VariationDraft, emptyVariationDraft, draftToPayload } from "@/lib/catalog/variationDraft";
 
-// Per-variant fields — mirrors CatalogVariationSchema. Any left blank fall
-// back to the shared/base value at submit time.
-type Variation = {
-  suffix: string;
-  plating: string;
-  upc: string;
-  msrp: string;
-  totalWeight: string;
-  silverWeight: string;
-  mainStoneInfo: string;
-  mainStoneColor: string;
-  mainStoneType: string;
-  restStoneInfo: string;
-  restStoneColor: string;
-  restStoneType: string;
-  stoneSetting: string;
-  pearlSize: string;
-  pearlType: string;
-  lengthExtender: string;
-  measurements: string;
-  clasp: string;
-  postLength: string;
-  pushBackSize: string;
-  thickness: string;
-};
-
-const emptyVariation = (): Variation => ({
-  suffix: "",
-  plating: "",
-  upc: "",
-  msrp: "",
-  totalWeight: "",
-  silverWeight: "",
-  mainStoneInfo: "",
-  mainStoneColor: "",
-  mainStoneType: "",
-  restStoneInfo: "",
-  restStoneColor: "",
-  restStoneType: "",
-  stoneSetting: "",
-  pearlSize: "",
-  pearlType: "",
-  lengthExtender: "",
-  measurements: "",
-  clasp: "",
-  postLength: "",
-  pushBackSize: "",
-  thickness: "",
-});
-
-const inputClass =
-  "font-body text-[0.86rem] px-3 py-2 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)]";
 const textareaClass =
-  "font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)]";
+  "font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none transition-[border-color,box-shadow] duration-150 focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)] resize-y";
 
-function Section({
-  title,
-  hint,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
+function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={`${textareaClass} ${props.className ?? ""}`} />;
+}
+
+// Matches the header style used on the item detail/edit screens (icon +
+// title + optional hint) so all three "item" screens read as one system.
+function SectionHeader({ icon, title, hint }: { icon: React.ReactNode; title: string; hint?: string }) {
   return (
-    <Card>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 w-full text-left bg-transparent border-none p-0 cursor-pointer"
-      >
-        {open ? <ChevronDown size={15} className="text-ink-faint" /> : <ChevronRight size={15} className="text-ink-faint" />}
-        <h2 className="text-[0.95rem] m-0">{title}</h2>
-        {hint && <span className="text-[0.78rem] text-ink-faint ml-1">— {hint}</span>}
-      </button>
-      {open && <div className="mt-3.5 grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">{children}</div>}
-    </Card>
+    <div className="flex items-center gap-2 mb-4">
+      <span className="text-brass shrink-0 flex items-center">{icon}</span>
+      <h2 className="text-[0.92rem] font-semibold m-0">{title}</h2>
+      {hint && <span className="text-[0.78rem] text-ink-faint">— {hint}</span>}
+    </div>
   );
 }
 
@@ -98,10 +45,9 @@ function TextField({
   onChange: (v: string) => void;
 }) {
   return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-[0.7rem] font-semibold text-ink-faint uppercase tracking-wide">{label}</span>
-      <input value={value} onChange={(e) => onChange(e.target.value)} className={inputClass} />
-    </label>
+    <Field label={label}>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} />
+    </Field>
   );
 }
 
@@ -121,11 +67,10 @@ export function NewCatalogItemForm() {
   const [ruePrice, setRuePrice] = useState("");
   const [effectiveDate, setEffectiveDate] = useState("");
   const [upc, setUpc] = useState("");
-  const [bullets, setBullets] = useState("");
-
-  const [variationSku, setVariationSku] = useState("");
-  const [variationTitle, setVariationTitle] = useState("");
-  const [variationDescription, setVariationDescription] = useState("");
+  const [upc2, setUpc2] = useState("");
+  const [aliasSku, setAliasSku] = useState("");
+  const [bulletFeatures, setBulletFeatures] = useState<string[]>([]);
+  const [bulletFeaturesBoxCount, setBulletFeaturesBoxCount] = useState(BULLET_FEATURES_MIN_VISIBLE);
 
   const [totalWeight, setTotalWeight] = useState("");
   const [silverWeight, setSilverWeight] = useState("");
@@ -139,25 +84,28 @@ export function NewCatalogItemForm() {
   const [pearlSize, setPearlSize] = useState("");
   const [pearlType, setPearlType] = useState("");
 
-  const [lengthExtender, setLengthExtender] = useState("");
-  const [measurements, setMeasurements] = useState("");
   const [clasp, setClasp] = useState("");
-  const [postLength, setPostLength] = useState("");
-  const [pushBackSize, setPushBackSize] = useState("");
-  const [thickness, setThickness] = useState("");
 
   const [gender, setGender] = useState("");
   const [tcw, setTcw] = useState("");
   const [totalCaratWeight, setTotalCaratWeight] = useState("");
   const [allSpecs, setAllSpecs] = useState("");
 
-  const [variations, setVariations] = useState<Variation[]>([]);
+  const [itemMeasurements, setItemMeasurements] = useState<ItemMeasurements>({});
+
+  const [marketplaceDescriptions, setMarketplaceDescriptions] = useState<Record<DescriptionPlatform, string>>(
+    () => Object.fromEntries(DESCRIPTION_PLATFORMS.map((p) => [p, ""])) as Record<DescriptionPlatform, string>
+  );
+
+  // Whether this product has variations — null means "not decided yet",
+  // which keeps the confirm prompt showing until the user picks one way
+  // or the other, rather than defaulting silently to "no."
+  const [hasVariations, setHasVariations] = useState<boolean | null>(null);
+  const [step, setStep] = useState<"product" | "variations">("product");
+  const [variations, setVariations] = useState<VariationDraft[]>([]);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  function updateVariation<K extends keyof Variation>(idx: number, key: K, value: string) {
-    setVariations((prev) => prev.map((v, i) => (i === idx ? { ...v, [key]: value } : v)));
-  }
 
   function num(s: string): number | undefined {
     return s.trim() ? Number(s) : undefined;
@@ -166,49 +114,58 @@ export function NewCatalogItemForm() {
     return s.trim() || undefined;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
+  function validateProductStep(): string | null {
     if (!sku.trim() || !title.trim() || !category.trim()) {
-      setError("SKU, title and category are required.");
-      return;
+      return "SKU, title and category are required.";
     }
     if (sku.includes("-")) {
-      setError("The main SKU shouldn't contain a hyphen — add variations below.");
+      return "The main SKU shouldn't contain a hyphen — variations get their SKU from the confirmation step next.";
+    }
+    if (bulletFeatures.slice(0, 3).some((b) => !b.trim())) {
+      return "The first 3 feature points are required.";
+    }
+    const measurementCheck = validateItemMeasurements(itemMeasurements, category);
+    if (!measurementCheck.valid) {
+      return formatValidationIssues(measurementCheck.issues);
+    }
+    return null;
+  }
+
+  function handleContinue(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const validationError = validateProductStep();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    if (hasVariations === null) {
+      setError("Choose whether this item has variations before continuing.");
+      return;
+    }
+    if (hasVariations) {
+      if (variations.length === 0) setVariations([emptyVariationDraft(itemMeasurements)]);
+      setStep("variations");
+      return;
+    }
+    void submit([]);
+  }
+
+  async function submit(variationDrafts: VariationDraft[]) {
+    setError(null);
+
+    const validationError = validateProductStep();
+    if (validationError) {
+      setError(validationError);
+      setStep("product");
       return;
     }
 
-    const bulletFeatures = bullets
-      .split("\n")
-      .map((b) => b.trim())
-      .filter(Boolean)
-      .slice(0, 10);
+    const payloadVariations = variationDrafts
+      .map((v) => draftToPayload(v, itemMeasurements))
+      .filter((v): v is NonNullable<typeof v> => v !== null);
 
-    const payloadVariations = variations
-      .filter((v) => v.suffix.trim())
-      .map((v) => ({
-        suffix: v.suffix.trim(),
-        plating: str(v.plating),
-        upc: str(v.upc),
-        msrp: num(v.msrp),
-        totalWeight: num(v.totalWeight),
-        silverWeight: num(v.silverWeight),
-        mainStoneInfo: str(v.mainStoneInfo),
-        mainStoneColor: str(v.mainStoneColor),
-        mainStoneType: str(v.mainStoneType),
-        restStoneInfo: str(v.restStoneInfo),
-        restStoneColor: str(v.restStoneColor),
-        restStoneType: str(v.restStoneType),
-        stoneSetting: str(v.stoneSetting),
-        pearlSize: str(v.pearlSize),
-        pearlType: str(v.pearlType),
-        lengthExtender: str(v.lengthExtender),
-        measurements: str(v.measurements),
-        clasp: str(v.clasp),
-        postLength: str(v.postLength),
-        pushBackSize: str(v.pushBackSize),
-        thickness: str(v.thickness),
-      }));
+    const cleanBulletFeatures = bulletFeatures.map((b) => b.trim()).filter(Boolean).slice(0, 10);
 
     setSubmitting(true);
     try {
@@ -230,10 +187,9 @@ export function NewCatalogItemForm() {
           ruePrice: num(ruePrice),
           effectiveDate: effectiveDate || undefined,
           upc: str(upc),
-          bulletFeatures: bulletFeatures.length ? bulletFeatures : undefined,
-          variationSku: str(variationSku),
-          variationTitle: str(variationTitle),
-          variationDescription: str(variationDescription),
+          upc2: str(upc2),
+          aliasSku: str(aliasSku),
+          bulletFeatures: cleanBulletFeatures.length ? cleanBulletFeatures : undefined,
           totalWeight: num(totalWeight),
           silverWeight: num(silverWeight),
           mainStoneInfo: str(mainStoneInfo),
@@ -245,16 +201,16 @@ export function NewCatalogItemForm() {
           stoneSetting: str(stoneSetting),
           pearlSize: str(pearlSize),
           pearlType: str(pearlType),
-          lengthExtender: str(lengthExtender),
-          measurements: str(measurements),
           clasp: str(clasp),
-          postLength: str(postLength),
-          pushBackSize: str(pushBackSize),
-          thickness: str(thickness),
+          measurements: cleanMeasurementsForSave(itemMeasurements),
           gender: str(gender),
           tcw: str(tcw),
           totalCaratWeight: str(totalCaratWeight),
           allSpecs: str(allSpecs),
+          marketplaceDescriptions: (() => {
+            const entries = Object.entries(marketplaceDescriptions).filter(([, text]) => text.trim());
+            return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+          })(),
           variations: payloadVariations.length ? payloadVariations : undefined,
         }),
       });
@@ -269,172 +225,286 @@ export function NewCatalogItemForm() {
     }
   }
 
+  if (step === "variations") {
+    return (
+      <VariationsStep
+        base={{
+          sku: sku.trim(),
+          title: title.trim(),
+          description,
+          category,
+          brand,
+          gender,
+          metal,
+          plating,
+          msrp,
+          measurements: itemMeasurements,
+        }}
+        variations={variations}
+        onChange={setVariations}
+        onBack={() => setStep("product")}
+        onSubmit={() => void submit(variations)}
+        submitting={submitting}
+        error={error}
+      />
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6 max-w-[860px]">
+    <form onSubmit={handleContinue} className="flex flex-col gap-6 max-w-[960px]">
       <Card>
-        <h2 className="text-[0.95rem] mb-3.5">Product</h2>
-        <div className="flex flex-col gap-3.5">
-          <div className="flex gap-3.5 flex-wrap">
-            <Field label="Base SKU" width={160}>
+        <SectionHeader icon={<Package size={16} />} title="Product" />
+        <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Field label="Base SKU">
               <Input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="A1234" required />
             </Field>
-            <Field label="Category" width={160}>
-              <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ring" required />
+            <Field label="Category">
+              <Select value={category} onChange={(e) => setCategory(e.target.value)} required>
+                <option value="">Select category…</option>
+                {CATEGORY_OPTIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </Select>
             </Field>
-            <Field label="Brand" width={160}>
-              <Input value={brand} onChange={(e) => setBrand(e.target.value)} />
+            <Field label="Brand">
+              <Select value={brand} onChange={(e) => setBrand(e.target.value)}>
+                <option value="">Select brand…</option>
+                {BRAND_OPTIONS.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </Select>
             </Field>
           </div>
-          <div className="flex gap-3.5 flex-wrap">
-            <Field label="Title" width={"100%"}>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
-            </Field>
-          </div>
+
+          <Field label="Title">
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
+          </Field>
           <Field label="Title #2 (optional)">
             <Input value={title2} onChange={(e) => setTitle2(e.target.value)} />
           </Field>
           <Field label="Description">
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={textareaClass} />
+            <TextArea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
           </Field>
           <Field label="Description #2 (optional)">
-            <textarea value={description2} onChange={(e) => setDescription2(e.target.value)} rows={2} className={textareaClass} />
+            <TextArea rows={2} value={description2} onChange={(e) => setDescription2(e.target.value)} />
           </Field>
-          <Field label="Feature points (one per line, max 10)">
-            <textarea value={bullets} onChange={(e) => setBullets(e.target.value)} rows={3} className={textareaClass} />
-          </Field>
-          <div className="flex gap-3.5 flex-wrap">
-            <Field label="Metal" width={150}>
-              <Input value={metal} onChange={(e) => setMetal(e.target.value)} placeholder="Silver" />
+          <div>
+            <span className="text-[0.72rem] font-semibold text-ink-faint uppercase tracking-wide block mb-2">
+              Feature points — first 3 required, up to 10
+            </span>
+            <BulletFeaturesEditor
+              values={bulletFeatures}
+              boxCount={bulletFeaturesBoxCount}
+              onChange={setBulletFeatures}
+              onBoxCountChange={setBulletFeaturesBoxCount}
+            />
+          </div>
+
+          <div className="pt-1 border-t border-border" />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Field label="Metal">
+              <Select value={metal} onChange={(e) => setMetal(e.target.value)}>
+                <option value="">Select metal…</option>
+                {METAL_OPTIONS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </Select>
             </Field>
-            <Field label="Plating" width={200}>
-              <Input value={plating} onChange={(e) => setPlating(e.target.value)} />
+            <Field label="Plating">
+              <Select value={plating} onChange={(e) => setPlating(e.target.value)}>
+                <option value="">Select plating…</option>
+                {PLATING_OPTIONS.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </Select>
             </Field>
-            <Field label="UPC" width={150}>
+            <Field label="Gender">
+              <Select value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="">Select gender…</option>
+                {GENDER_OPTIONS.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="UPC">
               <Input value={upc} onChange={(e) => setUpc(e.target.value)} />
             </Field>
-            <Field label="Gender" width={120}>
-              <Input value={gender} onChange={(e) => setGender(e.target.value)} />
+            <Field label="2nd UPC">
+              <Input value={upc2} onChange={(e) => setUpc2(e.target.value)} />
+            </Field>
+            <Field label="Alias SKU">
+              <Input value={aliasSku} onChange={(e) => setAliasSku(e.target.value)} />
             </Field>
           </div>
         </div>
       </Card>
 
       <Card>
-        <h2 className="text-[0.95rem] mb-3.5">Pricing</h2>
-        <div className="flex gap-3.5 flex-wrap">
-          <Field label="MSRP" width={110}>
+        <SectionHeader icon={<Megaphone size={16} />} title="Marketplace descriptions" />
+        <p className="text-ink-soft text-[0.83rem] -mt-2 mb-4">
+          Per-marketplace copy — falls back to the general description above until a platform gets its
+          own. AI-assisted drafting from the title/description is planned; for now these are entered by
+          hand.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {DESCRIPTION_PLATFORMS.map((platform) => (
+            <Field key={platform} label={DESCRIPTION_PLATFORM_LABEL[platform]}>
+              <TextArea
+                rows={4}
+                value={marketplaceDescriptions[platform]}
+                onChange={(e) =>
+                  setMarketplaceDescriptions((prev) => ({ ...prev, [platform]: e.target.value }))
+                }
+                placeholder={description || "No general description set yet."}
+              />
+            </Field>
+          ))}
+        </div>
+        <p className="flex items-center gap-1.5 text-ink-faint text-[0.76rem] mt-4 mb-0">
+          <Sparkles size={12} /> AI-generated drafts from title/description are coming soon.
+        </p>
+      </Card>
+
+      <Card>
+        <SectionHeader icon={<DollarSign size={16} />} title="Pricing" hint="shared across every variation" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Field label="MSRP">
             <Input type="number" step="0.01" value={msrp} onChange={(e) => setMsrp(e.target.value)} />
           </Field>
-          <Field label="New MSRP" width={110}>
+          <Field label="New MSRP">
             <Input type="number" step="0.01" value={newMsrp} onChange={(e) => setNewMsrp(e.target.value)} />
           </Field>
-          <Field label="Rue Price" width={110}>
+          <Field label="Rue Price">
             <Input type="number" step="0.01" value={ruePrice} onChange={(e) => setRuePrice(e.target.value)} />
           </Field>
-          <Field label="Effective date" width={160}>
+          <Field label="Effective date">
             <Input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
           </Field>
         </div>
       </Card>
 
-      <Section title="Variation info" hint="from the Master File's variation SKU/title/description columns">
-        <TextField label="Variation SKU" value={variationSku} onChange={setVariationSku} />
-        <TextField label="Variation title" value={variationTitle} onChange={setVariationTitle} />
-        <TextField label="Variation description" value={variationDescription} onChange={setVariationDescription} />
-      </Section>
-
-      <Section title="Weight & stones" hint="shared for the base row; each variation below can override">
-        <TextField label="Total weight" value={totalWeight} onChange={setTotalWeight} />
-        <TextField label="Silver weight" value={silverWeight} onChange={setSilverWeight} />
-        <TextField label="Main stone info" value={mainStoneInfo} onChange={setMainStoneInfo} />
-        <TextField label="Main stone color" value={mainStoneColor} onChange={setMainStoneColor} />
-        <TextField label="Main stone type" value={mainStoneType} onChange={setMainStoneType} />
-        <TextField label="Rest stone info" value={restStoneInfo} onChange={setRestStoneInfo} />
-        <TextField label="Rest stone color" value={restStoneColor} onChange={setRestStoneColor} />
-        <TextField label="Rest stone type" value={restStoneType} onChange={setRestStoneType} />
-        <TextField label="Stone setting" value={stoneSetting} onChange={setStoneSetting} />
-        <TextField label="Pearl size (mm)" value={pearlSize} onChange={setPearlSize} />
-        <TextField label="Pearl type" value={pearlType} onChange={setPearlType} />
-        <TextField label="TCW" value={tcw} onChange={setTcw} />
-        <TextField label="Total carat weight" value={totalCaratWeight} onChange={setTotalCaratWeight} />
-      </Section>
-
-      <Section title="Measurements & findings" hint="length, clasp, chain thickness, etc.">
-        <TextField label="Length + extender" value={lengthExtender} onChange={setLengthExtender} />
-        <TextField label="Measurements" value={measurements} onChange={setMeasurements} />
-        <TextField label="Clasp" value={clasp} onChange={setClasp} />
-        <TextField label="Length of post" value={postLength} onChange={setPostLength} />
-        <TextField label="Push back size" value={pushBackSize} onChange={setPushBackSize} />
-        <TextField label="Thickness of chain" value={thickness} onChange={setThickness} />
-        <TextField label="All specs" value={allSpecs} onChange={setAllSpecs} />
-      </Section>
-
       <Card>
-        <div className="flex items-center justify-between mb-3.5">
-          <h2 className="text-[0.95rem] m-0">Variations</h2>
-          <Button size="sm" onClick={() => setVariations((v) => [...v, emptyVariation()])}>
-            <span className="flex items-center gap-1.5">
-              <Plus size={13} /> Add variation
-            </span>
-          </Button>
+        <SectionHeader
+          icon={<Gem size={16} />}
+          title="Weight & stones"
+          hint="shared for the base row; variations can override in the next step"
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <TextField label="Total weight" value={totalWeight} onChange={setTotalWeight} />
+          <TextField label="Silver weight" value={silverWeight} onChange={setSilverWeight} />
+          <TextField label="TCW" value={tcw} onChange={setTcw} />
+          <TextField label="Total carat weight" value={totalCaratWeight} onChange={setTotalCaratWeight} />
+          <TextField label="Main stone info" value={mainStoneInfo} onChange={setMainStoneInfo} />
+          <TextField label="Main stone color" value={mainStoneColor} onChange={setMainStoneColor} />
+          <TextField label="Main stone type" value={mainStoneType} onChange={setMainStoneType} />
+          <TextField label="Rest stone info" value={restStoneInfo} onChange={setRestStoneInfo} />
+          <TextField label="Rest stone color" value={restStoneColor} onChange={setRestStoneColor} />
+          <TextField label="Rest stone type" value={restStoneType} onChange={setRestStoneType} />
+          <TextField label="Stone setting" value={stoneSetting} onChange={setStoneSetting} />
+          <TextField label="Pearl size (mm)" value={pearlSize} onChange={setPearlSize} />
+          <TextField label="Pearl type" value={pearlType} onChange={setPearlType} />
         </div>
-        {variations.length === 0 ? (
-          <p className="text-ink-faint text-[0.85rem] m-0">
-            None — just the base SKU. Add a row for each plating / stone / size variant (e.g. suffix{" "}
-            <code className="font-mono">GP</code>, <code className="font-mono">RP</code>,{" "}
-            <code className="font-mono">GP-6</code>). Any field left blank on a variation falls back to the
-            shared value above.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {variations.map((v, i) => (
-              <div key={i} className="p-3.5 rounded-sm bg-surface-sunken">
-                <div className="flex items-center justify-between mb-2.5">
-                  <span className="text-[0.85rem] font-semibold text-ink">
-                    {sku || "SKU"}-{v.suffix || "…"}
-                  </span>
-                  <Button size="sm" variant="danger" onClick={() => setVariations((prev) => prev.filter((_, idx) => idx !== i))}>
-                    <Trash2 size={13} />
-                  </Button>
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5">
-                  <TextField label="Suffix" value={v.suffix} onChange={(x) => updateVariation(i, "suffix", x)} />
-                  <TextField label="Plating" value={v.plating} onChange={(x) => updateVariation(i, "plating", x)} />
-                  <TextField label="UPC" value={v.upc} onChange={(x) => updateVariation(i, "upc", x)} />
-                  <TextField label="MSRP" value={v.msrp} onChange={(x) => updateVariation(i, "msrp", x)} />
-                  <TextField label="Total weight" value={v.totalWeight} onChange={(x) => updateVariation(i, "totalWeight", x)} />
-                  <TextField label="Silver weight" value={v.silverWeight} onChange={(x) => updateVariation(i, "silverWeight", x)} />
-                  <TextField label="Main stone info" value={v.mainStoneInfo} onChange={(x) => updateVariation(i, "mainStoneInfo", x)} />
-                  <TextField label="Main stone color" value={v.mainStoneColor} onChange={(x) => updateVariation(i, "mainStoneColor", x)} />
-                  <TextField label="Main stone type" value={v.mainStoneType} onChange={(x) => updateVariation(i, "mainStoneType", x)} />
-                  <TextField label="Rest stone info" value={v.restStoneInfo} onChange={(x) => updateVariation(i, "restStoneInfo", x)} />
-                  <TextField label="Rest stone color" value={v.restStoneColor} onChange={(x) => updateVariation(i, "restStoneColor", x)} />
-                  <TextField label="Rest stone type" value={v.restStoneType} onChange={(x) => updateVariation(i, "restStoneType", x)} />
-                  <TextField label="Stone setting" value={v.stoneSetting} onChange={(x) => updateVariation(i, "stoneSetting", x)} />
-                  <TextField label="Pearl size" value={v.pearlSize} onChange={(x) => updateVariation(i, "pearlSize", x)} />
-                  <TextField label="Pearl type" value={v.pearlType} onChange={(x) => updateVariation(i, "pearlType", x)} />
-                  <TextField label="Length + extender" value={v.lengthExtender} onChange={(x) => updateVariation(i, "lengthExtender", x)} />
-                  <TextField label="Measurements" value={v.measurements} onChange={(x) => updateVariation(i, "measurements", x)} />
-                  <TextField label="Clasp" value={v.clasp} onChange={(x) => updateVariation(i, "clasp", x)} />
-                  <TextField label="Length of post" value={v.postLength} onChange={(x) => updateVariation(i, "postLength", x)} />
-                  <TextField label="Push back size" value={v.pushBackSize} onChange={(x) => updateVariation(i, "pushBackSize", x)} />
-                  <TextField label="Thickness" value={v.thickness} onChange={(x) => updateVariation(i, "thickness", x)} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </Card>
 
-      <div className="flex items-center gap-3">
-        <Button type="submit" variant="primary" disabled={submitting}>
-          {submitting
-            ? "Creating…"
-            : `Create ${1 + variations.filter((v) => v.suffix.trim()).length} item${
-                variations.filter((v) => v.suffix.trim()).length ? "s" : ""
+      <Card>
+        <SectionHeader icon={<Ruler size={16} />} title="Findings & specs" hint="clasp, misc. spec text" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <TextField label="Clasp" value={clasp} onChange={setClasp} />
+          <Field label="All specs" width="100%">
+            <Input value={allSpecs} onChange={(e) => setAllSpecs(e.target.value)} />
+          </Field>
+        </div>
+      </Card>
+
+      {category.trim() && (
+        <MeasurementFieldsEditor
+          category={category}
+          value={itemMeasurements}
+          onChange={setItemMeasurements}
+        />
+      )}
+
+      <Card>
+        <SectionHeader icon={<Layers size={16} />} title="Variations" />
+        <p className="text-ink-soft text-[0.85rem] mb-4">
+          Does this item come in multiple platings, stone colors, or sizes — each needing its own SKU?
+          Category, brand, gender, metal, and MSRP always stay the same across every variation; title,
+          description, and stone/plating details can differ.
+        </p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => setHasVariations(true)}
+            className={`flex-1 flex items-center gap-2.5 px-4 py-3 rounded-md border text-left transition-colors duration-150 cursor-pointer ${
+              hasVariations === true
+                ? "border-brass bg-brass-bg text-ink"
+                : "border-border-strong bg-surface text-ink-soft hover:border-brass"
+            }`}
+          >
+            <span
+              className={`flex items-center justify-center w-5 h-5 rounded-full border-2 shrink-0 ${
+                hasVariations === true ? "border-brass bg-brass" : "border-border-strong"
               }`}
-        </Button>
-        {error && <ErrorText>{error}</ErrorText>}
+            >
+              {hasVariations === true && <Check size={12} className="text-[#1a1409]" />}
+            </span>
+            <span>
+              <span className="block font-semibold text-[0.87rem]">Yes, it has variations</span>
+              <span className="block text-[0.78rem] text-ink-faint">
+                Continue to the Variations screen after this step
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setHasVariations(false)}
+            className={`flex-1 flex items-center gap-2.5 px-4 py-3 rounded-md border text-left transition-colors duration-150 cursor-pointer ${
+              hasVariations === false
+                ? "border-brass bg-brass-bg text-ink"
+                : "border-border-strong bg-surface text-ink-soft hover:border-brass"
+            }`}
+          >
+            <span
+              className={`flex items-center justify-center w-5 h-5 rounded-full border-2 shrink-0 ${
+                hasVariations === false ? "border-brass bg-brass" : "border-border-strong"
+              }`}
+            >
+              {hasVariations === false && <Check size={12} className="text-[#1a1409]" />}
+            </span>
+            <span>
+              <span className="block font-semibold text-[0.87rem]">No, just this one SKU</span>
+              <span className="block text-[0.78rem] text-ink-faint">Create the item as-is</span>
+            </span>
+          </button>
+        </div>
+      </Card>
+
+      <div className="flex items-center gap-3 sticky bottom-4 z-10">
+        <Card padding={0} className="flex items-center gap-3 px-4 py-3 shadow-lg flex-wrap">
+          <Button type="submit" variant="primary" disabled={submitting}>
+            <span className="flex items-center gap-1.5">
+              <Save size={14} />
+              {submitting
+                ? "Creating…"
+                : hasVariations
+                  ? "Continue to variations"
+                  : "Create item"}
+            </span>
+          </Button>
+          {error && <ErrorText>{error}</ErrorText>}
+        </Card>
       </div>
     </form>
   );

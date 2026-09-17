@@ -31,6 +31,7 @@ export async function POST(
     approvedBy: gate.session.user?.id ? new Types.ObjectId(gate.session.user.id) : undefined,
     approvedAt: new Date(),
   };
+  if (gate.session.user?.id) item.lastEditedBy = new Types.ObjectId(gate.session.user.id);
   await item.save();
 
   return NextResponse.json({ approved: true });

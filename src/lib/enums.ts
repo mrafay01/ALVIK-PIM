@@ -134,3 +134,13 @@ export type MarketplaceExportPlatform = (typeof MARKETPLACE_EXPORT_PLATFORMS)[nu
 
 export const IMAGE_SUBFOLDERS = ["main", "sides", "models"] as const;
 export type ImageSubfolder = (typeof IMAGE_SUBFOLDERS)[number];
+
+// Marketplaces that get their own tailored product description on the item
+// detail page, independent of whether that platform has an export template
+// yet (MARKETPLACE_EXPORT_PLATFORMS) or a listing overlay
+// (MarketplaceListing). Rue La La has no export template today, but still
+// gets a description box here — same as Shopify. Each is hand-written for
+// now; a later AI pass generates a draft from the item's general
+// title/description that a human then edits in place.
+export const DESCRIPTION_PLATFORMS = ["macys", "kohls", "shopify", "target", "ruelala", "belk"] as const;
+export type DescriptionPlatform = (typeof DESCRIPTION_PLATFORMS)[number];

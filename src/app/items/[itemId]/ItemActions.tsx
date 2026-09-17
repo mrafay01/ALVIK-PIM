@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, XCircle, Tag, FileText } from "lucide-react";
+import { Tag, FileText } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
@@ -22,7 +22,6 @@ export function ItemActions({
   hasSampleSku: boolean;
 }) {
   const router = useRouter();
-  const [note, setNote] = useState("");
   const [sampleSku, setSampleSku] = useState("");
   const [poNumber, setPoNumber] = useState("");
   const [qty, setQty] = useState("");
@@ -84,30 +83,6 @@ export function ItemActions({
 
   return (
     <div className="flex flex-col gap-4">
-      {!hasReviewDecision && (
-        <Card>
-          <SectionTitle>Step 1 — Review decision</SectionTitle>
-          <p className="text-[0.83rem] text-ink-soft mb-3">
-            Approve to continue the pilot, or reject with an optional reason.
-          </p>
-          <div className="flex gap-2.5 items-end flex-wrap">
-            <Field label="Note (optional)" width={240}>
-              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. want it gold-plated" />
-            </Field>
-            <Button variant="primary" disabled={busy} onClick={() => patchItem({ reviewDecision: { decision: "approved", note } })}>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 size={15} /> Approve
-              </span>
-            </Button>
-            <Button variant="danger" disabled={busy} onClick={() => patchItem({ reviewDecision: { decision: "rejected", note } })}>
-              <span className="flex items-center gap-1.5">
-                <XCircle size={15} /> Reject
-              </span>
-            </Button>
-          </div>
-        </Card>
-      )}
-
       {hasReviewDecision && status === "approved" && !hasSampleSku && (
         <Card>
           <SectionTitle>Step 2 — Assign sample SKU</SectionTitle>

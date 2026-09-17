@@ -12,6 +12,7 @@ import {
   JM_UPDATE_STATUSES,
   ON_MASTER_STATUSES,
   DESCRIPTIONS_STATUSES,
+  DESCRIPTION_PLATFORMS,
   ROLES,
 } from "@/lib/enums";
 
@@ -56,6 +57,53 @@ export const ItemSpecsSchema = z.record(z.string().max(60), specsValue).refine(
   "too many spec fields"
 );
 
+// ---------------------------------------------------------- measurements
+//
+// Shape validation only (Zod's job) — negative/NaN/Infinity/unit and
+// min<=max business-rule checks live in src/lib/measurements/validate.ts
+// and run separately at the API route, same division as ITEM_TRANSITIONS
+// being checked in the route rather than here.
+const MEASUREMENT_UNITS = ["mm", "cm", "in", "mg", "g", "kg", "oz", "ozt"] as const;
+
+const MeasurementValueSchema = z.object({
+  value: z.number(),
+  unit: z.enum(MEASUREMENT_UNITS),
+  originalValue: z.string().max(200).optional(),
+  source: z.enum(["supplier", "manual", "calculated"]).optional(),
+  isEstimated: z.boolean().optional(),
+});
+
+// Keys are MeasurementFieldKey values, but kept as a plain string record
+// here (rather than z.enum over every key) so a new field key added to
+// the category config doesn't also require a schema.ts edit.
+const MeasurementValuesSchema = z
+  .record(z.string().max(60), MeasurementValueSchema)
+  .refine((o) => Object.keys(o).length <= 40, "too many measurement fields");
+
+export const ItemMeasurementsSchema = z.object({
+  category: z.string().trim().max(200).optional(),
+  values: MeasurementValuesSchema.optional(),
+  ringSize: z
+    .object({
+      value: z.number(),
+      system: z.enum(["US", "UK", "EU", "JP"]),
+    })
+    .optional(),
+  adjustable: z.boolean().optional(),
+  stones: z
+    .object({
+      length: MeasurementValueSchema.optional(),
+      width: MeasurementValueSchema.optional(),
+      depth: MeasurementValueSchema.optional(),
+    })
+    .optional(),
+  raw: z.string().max(2000).optional(),
+  hasCharm: z.boolean().optional(),
+  hasPendant: z.boolean().optional(),
+  isOpen: z.boolean().optional(),
+  earringType: z.enum(["hoop", "stud", "drop"]).optional(),
+});
+
 // Allowed item lifecycle transitions. Anything not listed is rejected — the
 // PATCH route previously assigned body.status verbatim, letting any client
 // jump an item straight to "live" or "discontinued".
@@ -87,18 +135,34 @@ export const ItemPatchSchema = z
     sampleSku: shortText.optional(),
     status: z.enum(ITEM_STATUSES).optional(),
     itemNumber: shortText.optional(),
+    vendorSku: z.string().trim().max(200).optional(),
     category: z.string().trim().max(200).optional(),
+    collectionName: z.string().trim().max(200).optional(),
+    season: z.string().trim().max(100).optional(),
+    boxNumber: z.string().trim().max(100).optional(),
     title: z.string().trim().max(500).optional(),
+    title2: z.string().trim().max(500).optional(),
     description: z.string().trim().max(5000).optional(),
+    description2: z.string().trim().max(5000).optional(),
     brand: z.string().trim().max(200).optional(),
     upc: z.string().trim().max(200).optional(),
+    upc2: z.string().trim().max(200).optional(),
+    aliasSku: z.string().trim().max(200).optional(),
     bulletFeatures: z.array(z.string().trim().max(500)).max(10).optional(),
     specs: ItemSpecsSchema.optional(),
+    measurements: ItemMeasurementsSchema.optional(),
     pricing: z
       .object({
         costPerUnit: money.optional(),
         msrp: money.optional(),
         ruePrice: money.optional(),
+      })
+      .optional(),
+    active: z.boolean().optional(),
+    marketplaceDescription: z
+      .object({
+        platform: z.enum(DESCRIPTION_PLATFORMS),
+        text: z.string().trim().max(5000),
       })
       .optional(),
   })
@@ -118,8 +182,14 @@ const isoDate = z
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .optional();
 
-// Per-variant fields — plating/stone/measurements/pricing differ row to
-// row even though title/description/category are shared across the family.
+// Per-variant fields. Deliberately NO `msrp` here — MSRP is always shared
+// across a variation family (set once on the base item) and is rejected
+// server-side if a caller tries to send one per variation, see POST
+// /api/catalog. Likewise no category/brand/gender/metal — those are also
+// always inherited from the base and have no per-variation override at
+// all. `title`/`description` MAY vary per variation (fall back to the
+// base item's when omitted) since listing copy can legitimately differ
+// per plating/size even though the underlying product doesn't.
 const CatalogVariationSchema = z.object({
   suffix: z
     .string()
@@ -127,9 +197,18 @@ const CatalogVariationSchema = z.object({
     .min(1)
     .max(40)
     .regex(/^[A-Za-z0-9-]+$/, "letters, digits and hyphens only"),
+  // When set, this variation gets its own independent SKU instead of the
+  // default "{baseSku}-{suffix}" derivation — the rare case where a
+  // variation needs a wholly different SKU family. Still linked to its
+  // siblings via variationGroupId. `suffix` above is still required even
+  // then (used for display/labeling), but itemNumber comes from here.
+  independentSku: optText(200),
+  title: optText(500),
+  description: z.string().trim().max(5000).optional(),
   plating: optText(300),
   upc: optText(200),
-  msrp: money.optional(),
+  upc2: optText(200),
+  aliasSku: optText(200),
   totalWeight: z.number().finite().min(0).max(100000).optional(),
   silverWeight: z.number().finite().min(0).max(100000).optional(),
   mainStoneInfo: optText(300),
@@ -141,12 +220,13 @@ const CatalogVariationSchema = z.object({
   stoneSetting: optText(200),
   pearlSize: optText(100),
   pearlType: optText(200),
-  lengthExtender: optText(200),
-  measurements: optText(200),
   clasp: optText(200),
-  postLength: optText(100),
-  pushBackSize: optText(100),
-  thickness: optText(100),
+  // Structured measurements can differ per variation (e.g. a ring size
+  // GP-6 variant needs its own ring_size even though the base item has
+  // none set yet) — falls back to the base item's `measurements` when
+  // omitted. Validated against the shared `category` (never per-variation)
+  // in POST /api/catalog, same rule as the base item's own measurements.
+  measurements: ItemMeasurementsSchema.optional(),
 });
 
 export const CatalogItemCreateSchema = z.object({
@@ -164,10 +244,9 @@ export const CatalogItemCreateSchema = z.object({
   ruePrice: money.optional(),
   effectiveDate: isoDate,
   upc: optText(200),
+  upc2: optText(200),
+  aliasSku: optText(200),
   bulletFeatures: z.array(z.string().trim().max(500)).max(10).optional(),
-  variationSku: optText(200),
-  variationTitle: optText(300),
-  variationDescription: optText(2000),
   totalWeight: z.number().finite().min(0).max(100000).optional(),
   silverWeight: z.number().finite().min(0).max(100000).optional(),
   mainStoneInfo: optText(300),
@@ -179,16 +258,19 @@ export const CatalogItemCreateSchema = z.object({
   stoneSetting: optText(200),
   pearlSize: optText(100),
   pearlType: optText(200),
-  lengthExtender: optText(200),
-  measurements: optText(200),
-  clasp: optText(200),
-  postLength: optText(100),
-  pushBackSize: optText(100),
-  thickness: optText(100),
   gender: optText(100),
   tcw: optText(100),
   totalCaratWeight: optText(100),
   allSpecs: optText(500),
+  // Structured, category-driven measurements (see src/lib/measurements/).
+  // `clasp` stays as its own top-level SpecsSchema field (not a
+  // measurement) since it's a component name/description, not a number.
+  clasp: optText(200),
+  measurements: ItemMeasurementsSchema.optional(),
+  // Per-marketplace description overrides, set at creation time the same
+  // way the general description is — keyed by DESCRIPTION_PLATFORMS. Only
+  // non-empty entries are kept; see POST /api/catalog.
+  marketplaceDescriptions: z.record(z.enum(DESCRIPTION_PLATFORMS), z.string().trim().max(5000)).optional(),
   variations: z.array(CatalogVariationSchema).max(20).optional(),
 });
 

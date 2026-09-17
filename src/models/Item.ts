@@ -32,6 +32,68 @@ const SpecsSchema = new Schema(
   { _id: false, strict: false } // open shape — attribute set varies by category
 );
 
+// Structured, category-driven measurements — see src/lib/measurements/.
+// Deliberately separate from `specs` above rather than folded into it:
+// `specs` stays exactly as every existing import/form/export path already
+// writes and reads it (zero migration, zero breakage), while this field is
+// the new typed home for the Bracelet/Ring/Pendant/Earring/Bangle/
+// Necklace/Anklet measurement system. `values` is a flexible key->
+// Measurement map (each key/shape is defined in code by
+// src/lib/measurements/schema.ts, not by the DB schema) so a new category
+// or a new field on an existing category never needs a migration here —
+// same rationale as `specs` being strict:false, just scoped to one
+// sub-field instead of the whole subdocument.
+const StoneMeasurementSchema = new Schema(
+  {
+    value: Number,
+    unit: String,
+    originalValue: String,
+    source: { type: String, enum: ["supplier", "manual", "calculated"] },
+    isEstimated: Boolean,
+  },
+  { _id: false }
+);
+
+const MeasurementsSchema = new Schema(
+  {
+    category: String,
+    values: { type: Schema.Types.Mixed, default: undefined },
+    ringSize: {
+      value: Number,
+      system: { type: String, enum: ["US", "UK", "EU", "JP"] },
+    },
+    adjustable: Boolean,
+    stones: {
+      length: StoneMeasurementSchema,
+      width: StoneMeasurementSchema,
+      depth: StoneMeasurementSchema,
+    },
+    // Catch-all for import text that couldn't be confidently parsed into
+    // a specific field (ambiguous combined dimensions, free-form supplier
+    // notes) — preserved rather than dropped or guessed into a field.
+    raw: String,
+    hasCharm: Boolean,
+    hasPendant: Boolean,
+    isOpen: Boolean,
+    earringType: { type: String, enum: ["hoop", "stud", "drop"] },
+  },
+  { _id: false }
+);
+
+// One free-text box per marketplace — see DESCRIPTION_PLATFORMS. Hand-edited
+// today; a later AI pass drafts these from title/description for a human to
+// refine, so each entry also tracks how it was produced and by whom/when,
+// the way pricingHistory/reviewDecision already do for their own edits.
+const MarketplaceDescriptionEntrySchema = new Schema(
+  {
+    text: { type: String, trim: true, maxlength: 5000, default: "" },
+    source: { type: String, enum: ["manual", "ai_generated"], default: "manual" },
+    updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    updatedAt: Date,
+  },
+  { _id: false }
+);
+
 const MediaItemSchema = new Schema(
   {
     sharePointItemId: { type: String, required: true },
@@ -85,6 +147,19 @@ const ItemSchema = new Schema(
     // non-variant/base row.
     variantSuffix: { type: String, default: null },
 
+    // Explicit family relationship for a set of variations, set once at
+    // creation time and shared by every member (base row included) — the
+    // same ObjectId on every sibling. Exists alongside baseSku/variantSuffix
+    // rather than replacing them: baseSku/variantSuffix still drive normal
+    // SKU display and the default "{baseSku}-{suffix}" derivation, but a
+    // variation can opt into an independent SKU (a different baseSku
+    // entirely) while staying linked to its family via this id — something
+    // the baseSku-string grouping alone can't express. Items created before
+    // this field existed have no variationGroupId; every family-aware query
+    // falls back to grouping by baseSku for those (see
+    // src/lib/catalog/variationFamily.ts).
+    variationGroupId: { type: Schema.Types.ObjectId, index: true, sparse: true },
+
     // Named collectionName, not collection — "collection" is a reserved
     // Mongoose schema option and would silently misbehave if used directly.
     collectionName: String,
@@ -103,8 +178,27 @@ const ItemSchema = new Schema(
     bulletFeatures: { type: [String], default: undefined },
     brand: String,
     upc: { type: String, index: true, sparse: true },
+    // A second UPC some items carry (e.g. a repackaged/relabeled variant
+    // sharing the same product) and an alternate SKU used to cross-reference
+    // this item under a different system/vendor naming — both free text,
+    // neither unique (unlike upc/itemNumber) since the same value can
+    // legitimately appear on more than one row.
+    upc2: { type: String, trim: true },
+    aliasSku: { type: String, trim: true, index: true },
+
+    // Per-marketplace description overrides, keyed by DESCRIPTION_PLATFORMS
+    // ("macys", "kohls", ...). A Map rather than one field per platform —
+    // same pattern as customFields below — so adding a marketplace later
+    // needs no schema migration. Falls back to `description` above wherever
+    // a platform's entry is missing/blank (see resolveMarketplaceDescription)
+    // — this only stores the override, not a full copy of every platform's
+    // text from day one.
+    marketplaceDescriptions: { type: Map, of: MarketplaceDescriptionEntrySchema, default: undefined },
 
     specs: SpecsSchema,
+    // Structured, category-specific measurements — replaces the free-text
+    // "Measurements & findings" UI. See src/lib/measurements/.
+    measurements: { type: MeasurementsSchema, default: undefined },
 
     reviewDecision: {
       decision: String,
@@ -153,6 +247,20 @@ const ItemSchema = new Schema(
       approvedAt: Date,
     },
     catalogSubmittedAt: Date,
+
+    // Catalog-only visibility switch — an inactive item stays in the
+    // catalog (and everywhere else) but is excluded from marketplace
+    // export, so it can't be listed/sold while still being editable and
+    // auditable. Independent of `status`/`masterRecordComplete`.
+    active: { type: Boolean, default: true },
+
+    // Who last made a substantive edit to this item — set explicitly by
+    // every write route (PATCH /api/items/[id], media upload, catalog
+    // submit/approve) alongside its own change, rather than derived from
+    // `updatedAt` alone (that already auto-updates via `timestamps` below,
+    // but carries no "by whom"). Shown on the Catalog list as "Last
+    // edited" — see src/app/catalog/page.tsx.
+    lastEditedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );
@@ -183,6 +291,11 @@ ItemSchema.index({ masterRecordComplete: 1, updatedAt: -1 });
 ItemSchema.index({ inCatalog: 1, itemNumber: 1 });
 // Item detail resolves POs for an item; buildPullPlan matches by mondayItemId.
 ItemSchema.index({ mondayItemId: 1 }, { sparse: true });
+// GET /api/items with no ?status= filter sorts purely by updatedAt desc —
+// none of the compound indexes above lead with updatedAt, so an unfiltered
+// call would otherwise fall back to an in-memory sort over the whole
+// collection before skip/limit could apply.
+ItemSchema.index({ updatedAt: -1 });
 
 export type ItemDoc = InferSchemaType<typeof ItemSchema>;
 export default (models.Item as Model<ItemDoc>) ||

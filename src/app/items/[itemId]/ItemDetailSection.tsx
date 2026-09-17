@@ -1,9 +1,8 @@
 import { Card } from "@/components/ui/Card";
 
-// Read-only mirror of the collapsible <Section> in NewCatalogItemForm, minus
-// the client-side open/close state — a plain <details> gets the same
-// disclosure UI without needing "use client" on a page that's otherwise a
-// server component.
+// Collapsible variant of SectionCard for the denser jewelry-spec groups —
+// a plain <details> gets native disclosure behavior without needing
+// "use client" on a page that's otherwise a server component.
 export function ItemDetailSection({
   title,
   hint,
@@ -16,27 +15,17 @@ export function ItemDetailSection({
   children: React.ReactNode;
 }) {
   return (
-    <Card padding={0}>
-      <details open={defaultOpen}>
-        <summary className="flex items-center gap-2 px-[22px] py-[18px] cursor-pointer list-none marker:content-none [&::-webkit-details-marker]:hidden">
-          <span className="text-ink-faint text-[0.7rem] transition-transform details-chevron">▶</span>
-          <h2 className="text-[0.95rem] m-0">{title}</h2>
-          {hint && <span className="text-[0.78rem] text-ink-faint ml-1">— {hint}</span>}
+    <Card padding={0} className="overflow-hidden">
+      <details open={defaultOpen} className="group">
+        <summary className="flex items-center gap-2 px-5 sm:px-6 py-4 cursor-pointer list-none marker:content-none [&::-webkit-details-marker]:hidden hover:bg-surface-sunken transition-colors duration-150">
+          <span className="text-ink-faint text-[0.7rem] transition-transform details-chevron shrink-0">▶</span>
+          <h2 className="text-[0.92rem] font-semibold m-0">{title}</h2>
+          {hint && <span className="text-[0.78rem] text-ink-faint ml-1 truncate">— {hint}</span>}
         </summary>
-        <div className="px-[22px] pb-[22px] grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-x-5 gap-y-3.5">
+        <div className="px-5 sm:px-6 pb-5 pt-1 border-t border-border grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
           {children}
         </div>
       </details>
     </Card>
-  );
-}
-
-export function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
-  const isEmpty = value === null || value === undefined || value === "";
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[0.68rem] font-semibold text-ink-faint uppercase tracking-wide">{label}</span>
-      <span className={`text-[0.86rem] ${isEmpty ? "text-ink-faint" : "text-ink"}`}>{isEmpty ? "—" : value}</span>
-    </div>
   );
 }

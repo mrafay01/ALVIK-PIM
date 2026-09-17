@@ -5,6 +5,7 @@ import { ItemPatchSchema, ITEM_TRANSITIONS, badRequest } from "@/lib/schemas";
 import Item from "@/models/Item";
 import { Types } from "mongoose";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
+import { validateItemMeasurements, formatValidationIssues } from "@/lib/measurements/validate";
 
 // GET: single item detail.
 export async function GET(
@@ -78,19 +79,54 @@ export async function PATCH(
     item.itemNumber = body.itemNumber;
   }
 
+  if (body.vendorSku !== undefined) item.vendorSku = body.vendorSku;
+
   if (body.category) {
     item.category = body.category;
   }
 
+  if (body.collectionName !== undefined) item.collectionName = body.collectionName;
+  if (body.season !== undefined) item.season = body.season;
+  if (body.boxNumber !== undefined) item.boxNumber = body.boxNumber;
+
+  if (body.active !== undefined) item.active = body.active;
+
+  if (body.marketplaceDescription) {
+    const { platform, text } = body.marketplaceDescription;
+    if (!item.marketplaceDescriptions) item.set("marketplaceDescriptions", new Map());
+    item.marketplaceDescriptions!.set(platform, {
+      text,
+      source: "manual",
+      updatedBy: session.user?.id ? new Types.ObjectId(session.user.id) : undefined,
+      updatedAt: new Date(),
+    });
+  }
+
   if (body.title !== undefined) item.title = body.title;
+  if (body.title2 !== undefined) item.title2 = body.title2;
   if (body.description !== undefined) item.description = body.description;
+  if (body.description2 !== undefined) item.description2 = body.description2;
   if (body.brand !== undefined) item.brand = body.brand;
   if (body.upc !== undefined) item.upc = body.upc;
+  if (body.upc2 !== undefined) item.upc2 = body.upc2;
+  if (body.aliasSku !== undefined) item.aliasSku = body.aliasSku;
   if (body.bulletFeatures !== undefined) item.bulletFeatures = body.bulletFeatures;
 
   if (body.specs) {
     if (!item.specs) item.set("specs", {});
     Object.assign(item.specs!, body.specs);
+  }
+
+  if (body.measurements) {
+    const effectiveCategory = body.category ?? item.category;
+    const result = validateItemMeasurements(body.measurements, effectiveCategory);
+    if (!result.valid) {
+      return NextResponse.json(
+        { error: formatValidationIssues(result.issues), details: result.issues },
+        { status: 400 }
+      );
+    }
+    item.set("measurements", { ...body.measurements, category: effectiveCategory });
   }
 
   if (body.pricing) {
@@ -102,6 +138,8 @@ export async function PATCH(
   // of the gated fields (category, specs.metal, pricingHistory, …) can be
   // the one that was missing — see §Master DB completion gate in the blueprint.
   item.masterRecordComplete = isMasterRecordComplete(item);
+
+  if (session.user?.id) item.lastEditedBy = new Types.ObjectId(session.user.id);
 
   await item.save();
   return NextResponse.json({ item });

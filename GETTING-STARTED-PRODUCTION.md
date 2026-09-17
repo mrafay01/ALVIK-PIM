@@ -262,8 +262,7 @@ node -e "require('mongoose').connect(process.env.MONGODB_URI).then(() => console
 
 ## Support
 
-- **Documentation:** See PRODUCTION-AUDIT.md
-- **Implementation Details:** See AUDIT-IMPLEMENTATION-SUMMARY.md
+- **Audit History & Implementation Details:** See AUDIT-HISTORY.md
 - **Environment Setup:** See .env.local.example
 - **Logs:** /var/log/pim/ (production)
 - **Errors:** Sentry dashboard (production)

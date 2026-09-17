@@ -52,14 +52,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
   const startedAt = new Date();
 
   const items = await Item.find({ _id: { $in: itemIds } })
-    .select("itemNumber category specs pricingHistory")
+    .select("itemNumber category specs pricingHistory active")
     .lean();
   const listings = await MarketplaceListing.find({ platform, itemId: { $in: itemIds } }).lean();
   const listingByItemId = new Map(listings.map((l) => [String(l.itemId), l]));
 
   const skippedNoSku: string[] = [];
+  const skippedInactive: string[] = [];
   const resolvedRows = items
     .map((item) => {
+      // Inactive items never make it into a generated file — even if their
+      // id was posted from a stale selection made before deactivation.
+      if (item.active === false) {
+        skippedInactive.push(String(item._id));
+        return null;
+      }
       if (!item.itemNumber) {
         skippedNoSku.push(String(item._id));
         return null;
@@ -108,12 +115,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
     rowsProcessed: items.length,
     changed: resolvedRows.length,
     unchanged: 0,
-    skipped: skippedNoSku.length,
+    skipped: skippedNoSku.length + skippedInactive.length,
     errored: 0,
-    errorDetail: skippedNoSku.map((itemId) => ({
-      itemId,
-      message: "Skipped — item has no itemNumber (SKU) yet",
-    })),
+    errorDetail: [
+      ...skippedNoSku.map((itemId) => ({
+        itemId,
+        message: "Skipped — item has no itemNumber (SKU) yet",
+      })),
+      ...skippedInactive.map((itemId) => ({
+        itemId,
+        message: "Skipped — item is marked inactive",
+      })),
+    ],
   });
 
   return new NextResponse(new Uint8Array(fileBuffer), {

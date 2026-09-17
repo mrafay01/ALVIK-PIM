@@ -1,4 +1,4 @@
-import type { ItemStatus, PoStatus, PaymentStatus, Role } from "@/lib/enums";
+import type { ItemStatus, PoStatus, PaymentStatus, Role, DescriptionPlatform } from "@/lib/enums";
 
 type Tone = "good" | "warn" | "critical" | "neutral" | "brass";
 
@@ -97,6 +97,15 @@ export function checklistLabel(field: string): string {
 export function isChecklistFieldDone(field: string, value: string | undefined): boolean {
   return !!value && value === CHECKLIST_DONE_VALUE[field];
 }
+
+export const DESCRIPTION_PLATFORM_LABEL: Record<DescriptionPlatform, string> = {
+  macys: "Macy's",
+  kohls: "Kohl's",
+  shopify: "Shopify",
+  target: "Target",
+  ruelala: "Rue La La",
+  belk: "Belk",
+};
 
 export const ROLE_LABEL: Record<Role, string> = {
   administrator: "Administrator",

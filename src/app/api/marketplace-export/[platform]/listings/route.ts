@@ -31,7 +31,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ plat
     ["sku_permanent", "po_sent", "receiving", "live"].includes(s)
   );
 
-  const items = await Item.find({ status: { $in: exportableStatuses }, itemNumber: { $ne: null } })
+  // Inactive items are catalog-visible but never exportable — see
+  // Item.active. Excluded at the source so they never reach the review
+  // screen a listing would be built from.
+  const items = await Item.find({
+    status: { $in: exportableStatuses },
+    itemNumber: { $ne: null },
+    active: { $ne: false },
+  })
     .select("itemNumber category status specs pricingHistory")
     .sort({ updatedAt: -1 })
     .limit(500)

@@ -6,6 +6,7 @@ import type { PipelineStage } from "mongoose";
 import Item from "@/models/Item";
 import { checkMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { Card } from "@/components/ui/Card";
+import { Pill } from "@/components/ui/Pill";
 import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { ShieldCheck, Plus } from "lucide-react";
 import { CatalogRowFlags } from "./CatalogRowFlags";
@@ -15,13 +16,14 @@ const TH_CLASS =
   "text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-3.5 py-2.5 border-b border-border-strong whitespace-nowrap";
 const TD_CLASS = "px-3.5 py-3 text-[0.84rem]";
 
-type Tab = "all" | "incomplete" | "pending" | "variations";
+type Tab = "all" | "incomplete" | "pending" | "variations" | "inactive";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "all", label: "All" },
   { value: "incomplete", label: "Incomplete only" },
   { value: "pending", label: "Pending approval" },
   { value: "variations", label: "Show only variations" },
+  { value: "inactive", label: "Inactive only" },
 ];
 
 // Escape a user string for safe use inside a MongoDB $regex.
@@ -37,6 +39,11 @@ function num(raw: string | undefined): number | null {
   if (!raw) return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
+}
+
+function fmtEditedDate(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
 const SORT_STAGES: Record<string, Record<string, 1 | -1>> = {
@@ -66,7 +73,10 @@ export default async function CatalogPage({
 }) {
   const sp = await searchParams;
   const tab: Tab =
-    sp.filter === "incomplete" || sp.filter === "pending" || sp.filter === "variations"
+    sp.filter === "incomplete" ||
+    sp.filter === "pending" ||
+    sp.filter === "variations" ||
+    sp.filter === "inactive"
       ? sp.filter
       : "all";
   const page = parsePage(sp.page);
@@ -99,6 +109,7 @@ export default async function CatalogPage({
   if (tab === "incomplete") match.masterRecordComplete = false;
   if (tab === "pending") match["catalogApproval.status"] = "pending";
   if (tab === "variations") match.baseSku = { $in: familySkus };
+  if (tab === "inactive") match.active = false;
   if (category) match.category = category;
   if (plating) match["specs.plating"] = plating;
   if (q) {
@@ -129,6 +140,22 @@ export default async function CatalogPage({
         { $sort: SORT_STAGES[sort] },
         { $skip: (page - 1) * PAGE_SIZE },
         { $limit: PAGE_SIZE },
+        // Only resolves the editor's name for the one page of rows being
+        // rendered, not the whole matched set — cheap even on a large
+        // catalog since $lookup runs after $skip/$limit here.
+        {
+          $lookup: {
+            from: "users",
+            localField: "lastEditedBy",
+            foreignField: "_id",
+            as: "lastEditedByUser",
+          },
+        },
+        {
+          $addFields: {
+            lastEditedByName: { $arrayElemAt: ["$lastEditedByUser.name", 0] },
+          },
+        },
         {
           $project: {
             itemNumber: 1,
@@ -145,6 +172,9 @@ export default async function CatalogPage({
             masterRecordComplete: 1,
             catalogApproval: 1,
             latestMsrp: 1,
+            active: 1,
+            updatedAt: 1,
+            lastEditedByName: 1,
           },
         },
       ],
@@ -174,6 +204,9 @@ export default async function CatalogPage({
     masterRecordComplete?: boolean;
     catalogApproval?: { status?: string };
     latestMsrp?: number | null;
+    active?: boolean;
+    updatedAt?: string | Date;
+    lastEditedByName?: string;
   }>;
   const total: number = facetResult[0]?.count?.[0]?.n ?? 0;
 
@@ -269,19 +302,21 @@ export default async function CatalogPage({
         <Card padding={0}>
           <table className="w-full border-collapse table-fixed">
             <colgroup>
-              <col className="w-[14%]" />
-              <col className="w-[21%]" />
               <col className="w-[11%]" />
-              <col className="w-[10%]" />
+              <col className="w-[16%]" />
+              <col className="w-[9%]" />
+              <col className="w-[8%]" />
+              <col className="w-[9%]" />
+              <col className="w-[8%]" />
+              <col className="w-[7%]" />
+              <col className="w-[7%]" />
               <col className="w-[12%]" />
-              <col className="w-[10%]" />
-              <col className="w-[8%]" />
-              <col className="w-[8%]" />
+              <col className="w-[7%]" />
               <col className="w-[6%]" />
             </colgroup>
             <thead>
               <tr>
-                {["SKU", "Title", "Category", "Brand", "Plating", "UPC", "MSRP", "Variation?", ""].map(
+                {["SKU", "Title", "Category", "Brand", "Plating", "UPC", "MSRP", "Status", "Last edited", "Variation?", ""].map(
                   (h, i) => (
                     <th key={i} className={i === 6 ? `${TH_CLASS} text-right` : TH_CLASS}>
                       {h}
@@ -322,6 +357,19 @@ export default async function CatalogPage({
                     </td>
                     <td className={`${TD_CLASS} font-mono text-[0.8rem] truncate`}>{it.upc || "—"}</td>
                     <td className={`${TD_CLASS} font-mono text-right`}>{money(it.latestMsrp)}</td>
+                    <td className={TD_CLASS}>
+                      <Pill tone={it.active === false ? "neutral" : "good"} dot>
+                        {it.active === false ? "Inactive" : "Active"}
+                      </Pill>
+                    </td>
+                    <td className={`${TD_CLASS} text-ink-soft`}>
+                      <span className="block truncate" title={fmtEditedDate(it.updatedAt)}>
+                        {fmtEditedDate(it.updatedAt)}
+                      </span>
+                      <span className="block text-[0.76rem] text-ink-faint truncate">
+                        {it.lastEditedByName || "—"}
+                      </span>
+                    </td>
                     <td className={`${TD_CLASS} text-ink-soft`}>
                       {isVariant ? (
                         <span className="text-[0.82rem]">

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Types } from "mongoose";
 import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail } from "@/lib/authz";
 import Item from "@/models/Item";
@@ -16,6 +17,7 @@ export async function POST(
 ) {
   const gate = await requireRole([...CATALOG_ROLES]);
   if (isAuthFail(gate)) return gate.response;
+  const { session } = gate;
 
   const { itemId } = await params;
   await connectDB();
@@ -35,6 +37,7 @@ export async function POST(
   item.inCatalog = true;
   item.catalogApproval = { status: "pending" };
   item.catalogSubmittedAt = new Date();
+  if (session.user?.id) item.lastEditedBy = new Types.ObjectId(session.user.id);
   await item.save();
 
   return NextResponse.json({ submitted: true });

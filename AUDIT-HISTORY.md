@@ -288,8 +288,8 @@ Before production deployment:
 - `src/lib/schemas.test.ts` — Input validation tests
 - `jest.config.ts` — Jest configuration
 - `jest.setup.ts` — Jest setup file
-- `PRODUCTION-AUDIT.md` — Comprehensive audit report
-- `AUDIT-IMPLEMENTATION-SUMMARY.md` — This file
+- `PRODUCTION-AUDIT.md` — Comprehensive audit report (superseded; merged into this file, `AUDIT-HISTORY.md`, during a later cleanup pass)
+- `AUDIT-IMPLEMENTATION-SUMMARY.md` — This file (later renamed to `AUDIT-HISTORY.md`)
 
 ### Modified Files (14)
 - `package.json` — Added test scripts + 11 dev dependencies

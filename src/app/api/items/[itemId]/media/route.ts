@@ -102,6 +102,7 @@ export async function POST(
     models: subfoldersPresent.has("models"),
   };
   item.masterRecordComplete = isMasterRecordComplete(item);
+  if (session.user?.id) item.lastEditedBy = new Types.ObjectId(session.user.id);
 
   await item.save();
 
