@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, FileSpreadsheet, TriangleAlert, CheckCircle2, ArrowRight, ExternalLink } from "lucide-react";
+import { RefreshCw, FileSpreadsheet, TriangleAlert, CheckCircle2, ArrowRight, ExternalLink, UserPlus } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { Button } from "@/components/ui/Button";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 interface PullPlanRow {
   mondayItemId: string;
   mondayItemName: string;
-  action: "update" | "create" | "skip_no_status";
+  action: "update" | "create" | "skip_no_vendor";
   poId?: string;
   poNumber?: string;
   vendorName: string | null;
@@ -18,6 +18,12 @@ interface PullPlanRow {
   mappedStatus: string | null;
   statusChanged: boolean;
   poTotal: number | null;
+  orderDate: string | null;
+  requestDate: string | null;
+  vendorConfDate: string | null;
+  priorityText: string | null;
+  trackingNumber: string | null;
+  joelShipConfirmed: boolean;
   fileCount: number;
   reason?: string;
 }
@@ -99,9 +105,13 @@ export function MondayPullPanel() {
           <div>
             <h2 className="text-base mb-1">Pull updates from Monday.com</h2>
             <p className="text-[0.85rem] text-ink-soft m-0 max-w-[560px]">
-              Reads every item on the live Purchase Orders board — status, checklist progress, PO totals, and
-              vendor-uploaded PI files — and shows what would change before anything is written. Never modifies
-              the Monday board.
+              Reads every item on the live Purchase Orders board — status, checklist progress, PO totals, dates,
+              priority, tracking, and vendor-uploaded PI files — and shows what would change before anything is
+              written. Never modifies the Monday board. A vendor name on the board that doesn&apos;t exist in
+              PIM yet is created automatically (matched by exact name, so it&apos;s never duplicated). The
+              board&apos;s exact status label is always captured, even when it&apos;s a side-lane state (Stuck,
+              Canceled, On Hold, …) with no equivalent in this app&apos;s pipeline — only an item with no vendor
+              set at all is skipped.
             </p>
           </div>
           <Button variant="primary" disabled={loading} onClick={runPreview}>
@@ -149,7 +159,7 @@ export function MondayPullPanel() {
               <div className="flex gap-5 text-[0.85rem]">
                 <span><strong>{plan.toUpdate}</strong> to update</span>
                 <span><strong>{plan.toCreate}</strong> to create</span>
-                <span className="text-ink-faint"><strong>{plan.skipped}</strong> skipped (no confident status match)</span>
+                <span className="text-ink-faint"><strong>{plan.skipped}</strong> skipped (no vendor set on board item)</span>
               </div>
               <Button variant="primary" disabled={committing || (plan.toUpdate === 0 && plan.toCreate === 0)} onClick={commit}>
                 <span className="flex items-center gap-1.5">
@@ -162,10 +172,25 @@ export function MondayPullPanel() {
 
           <Card padding={0}>
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse min-w-[900px]">
+              <table className="w-full border-collapse min-w-[1200px]">
                 <thead>
                   <tr>
-                    {["PO #", "Action", "Vendor", "Board status", "Mapped status", "Total", "Files", "Note"].map((h) => (
+                    {[
+                      "PO #",
+                      "Action",
+                      "Vendor",
+                      "Board status",
+                      "Mapped status",
+                      "Priority",
+                      "Total",
+                      "Order date",
+                      "Request date",
+                      "Vendor conf.",
+                      "Tracking #",
+                      "Ship conf.",
+                      "Files",
+                      "Note",
+                    ].map((h) => (
                       <th
                         key={h}
                         className="text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-3.5 py-2.5 border-b border-border-strong whitespace-nowrap"
@@ -185,22 +210,43 @@ export function MondayPullPanel() {
                       <td className="px-3.5 py-2.5 text-[0.83rem]">
                         {row.vendorName ?? "—"}
                         {!row.vendorMatched && row.vendorName && (
-                          <TriangleAlert size={12} color="var(--warn)" className="ml-1.5 inline align-[-1px]" />
+                          <span
+                            title={`"${row.vendorName}" will be created automatically on import`}
+                            className="ml-1.5 inline-flex items-center gap-1 align-[-1px] text-[0.72rem] text-brass"
+                          >
+                            <UserPlus size={12} /> new
+                          </span>
                         )}
                       </td>
-                      <td className="px-3.5 py-2.5 text-[0.83rem] text-ink-soft">{row.statusText ?? "—"}</td>
+                      <td className="px-3.5 py-2.5 text-[0.83rem] text-ink-soft">
+                        {row.statusText ?? "—"}
+                        {row.statusText && !row.mappedStatus && (
+                          <span
+                            title="No confident pipeline-status equivalent — stored as-is on mondayStatusText, pipeline status left unchanged"
+                            className="ml-1.5 inline-flex items-center gap-1 align-[-1px] text-[0.72rem] text-warn"
+                          >
+                            <TriangleAlert size={12} /> unmapped
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3.5 py-2.5 text-[0.83rem]">
                         {row.mappedStatus ? (
                           <span className={row.statusChanged ? "text-brass font-semibold" : "text-ink-soft font-normal"}>
                             {row.mappedStatus.replace(/_/g, " ")}
                           </span>
                         ) : (
-                          "—"
+                          <span className="text-ink-faint">unchanged</span>
                         )}
                       </td>
+                      <td className="px-3.5 py-2.5 text-[0.83rem] text-ink-soft capitalize">{row.priorityText ?? "—"}</td>
                       <td className="px-3.5 py-2.5 font-mono text-[0.82rem]">
                         {row.poTotal != null ? row.poTotal.toFixed(2) : "—"}
                       </td>
+                      <td className="px-3.5 py-2.5 text-[0.82rem] text-ink-soft whitespace-nowrap">{row.orderDate ?? "—"}</td>
+                      <td className="px-3.5 py-2.5 text-[0.82rem] text-ink-soft whitespace-nowrap">{row.requestDate ?? "—"}</td>
+                      <td className="px-3.5 py-2.5 text-[0.82rem] text-ink-soft whitespace-nowrap">{row.vendorConfDate ?? "—"}</td>
+                      <td className="px-3.5 py-2.5 font-mono text-[0.8rem] whitespace-nowrap">{row.trackingNumber ?? "—"}</td>
+                      <td className="px-3.5 py-2.5 text-[0.83rem]">{row.joelShipConfirmed ? "Yes" : "No"}</td>
                       <td className="px-3.5 py-2.5 text-[0.83rem]">
                         {row.fileCount > 0 ? (
                           <span className="flex items-center gap-1">

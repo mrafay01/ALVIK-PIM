@@ -5,11 +5,31 @@ import PurchaseOrder from "@/models/PurchaseOrder";
 import Payment from "@/models/Payment";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
-import { CheckCircle2, Circle, MessageSquareCheck, MessageSquare, Ship, FileSpreadsheet } from "lucide-react";
+import {
+  CheckCircle2,
+  Circle,
+  MessageSquareCheck,
+  MessageSquare,
+  Ship,
+  FileSpreadsheet,
+  ExternalLink,
+  Truck,
+  TriangleAlert,
+} from "lucide-react";
 import { PO_STATUS_LABEL, PO_STATUS_TONE, checklistLabel, isChecklistFieldDone } from "@/lib/statusDisplay";
+import { MONDAY_BOARD_ID } from "@/lib/monday/config";
 import { PoActions } from "./PoActions";
 import { RecordPaymentForm } from "./RecordPaymentForm";
 import { MondayUpdates } from "./MondayUpdates";
+
+function fmtDate(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function fmtMoney(n: number | null | undefined): string {
+  return n != null ? `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
+}
 
 export default async function PurchaseOrderDetailPage({
   params,
@@ -39,10 +59,18 @@ export default async function PurchaseOrderDetailPage({
       eyebrow="Purchase order"
       title={po.poNumber}
     >
-      <div className="flex items-center gap-2.5 mb-6">
+      <div className="flex items-center gap-2.5 mb-6 flex-wrap">
         <Pill tone={PO_STATUS_TONE[po.status as keyof typeof PO_STATUS_TONE]}>
           {PO_STATUS_LABEL[po.status as keyof typeof PO_STATUS_LABEL]}
         </Pill>
+        {po.mondayStatusText && po.mondayStatusMapped === false && (
+          <span
+            title="This board item's Monday status has no equivalent in this app's pipeline, so the pipeline status above wasn't moved by it — this is the board's exact current status"
+            className="flex items-center gap-1.5 text-[0.78rem] px-2.5 py-1 rounded-full bg-warn-bg text-warn"
+          >
+            <TriangleAlert size={13} /> Board status: {po.mondayStatusText}
+          </span>
+        )}
         <span className="text-[0.85rem] text-ink-soft">
           {(po.vendorId as unknown as { name?: string } | null)?.name || "—"}
         </span>
@@ -50,14 +78,49 @@ export default async function PurchaseOrderDetailPage({
 
       <div className="grid grid-cols-[1.1fr_0.9fr] gap-5 items-start mb-5">
         <Card>
-          <h2 className="text-[0.95rem] mb-3.5">Details</h2>
-          <dl className="grid grid-cols-[140px_1fr] gap-y-2.5 m-0 text-[0.87rem]">
+          <div className="flex items-center justify-between mb-3.5">
+            <h2 className="text-[0.95rem] m-0">Details</h2>
+            {po.mondayItemId && (
+              <a
+                href={`https://view.monday.com/boards/${MONDAY_BOARD_ID}/pulses/${po.mondayItemId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[0.75rem] text-brass no-underline"
+              >
+                <ExternalLink size={12} /> View on Monday
+              </a>
+            )}
+          </div>
+          <dl className="grid grid-cols-[150px_1fr] gap-y-2.5 m-0 text-[0.87rem]">
             <dt className="text-ink-faint">Purpose</dt>
-            <dd className="m-0 capitalize">{po.orderPurpose?.category}</dd>
+            <dd className="m-0 capitalize">
+              {po.orderPurpose?.category?.replace(/_/g, " ") || "—"}
+              {po.orderPurpose?.tag && <span className="text-ink-faint"> · {po.orderPurpose.tag}</span>}
+            </dd>
             <dt className="text-ink-faint">Priority</dt>
-            <dd className="m-0 capitalize">{po.priority}</dd>
+            <dd className="m-0 capitalize">{po.priority || "—"}</dd>
             <dt className="text-ink-faint">PO total</dt>
-            <dd className="m-0 font-mono">{po.poTotal != null ? `$${po.poTotal.toLocaleString()}` : "—"}</dd>
+            <dd className="m-0 font-mono">{fmtMoney(po.poTotal)}</dd>
+            <dt className="text-ink-faint">Prepayment deposit</dt>
+            <dd className="m-0 font-mono">{fmtMoney(po.prepaymentDeposit)}</dd>
+            <dt className="text-ink-faint">Remaining balance</dt>
+            <dd className="m-0 font-mono">{fmtMoney(po.remainingBalance)}</dd>
+            <dt className="text-ink-faint">Order date</dt>
+            <dd className="m-0">{fmtDate(po.orderDate)}</dd>
+            <dt className="text-ink-faint">Request date</dt>
+            <dd className="m-0">{fmtDate(po.requestDate)}</dd>
+            <dt className="text-ink-faint">Vendor conf. date</dt>
+            <dd className="m-0">{fmtDate(po.vendorConfDate)}</dd>
+            <dt className="text-ink-faint">Tracking number</dt>
+            <dd className="m-0 flex items-center gap-1.5 font-mono">
+              {po.trackingNumber ? (
+                <>
+                  <Truck size={14} color="var(--ink-faint)" /> {po.trackingNumber}
+                </>
+              ) : (
+                "—"
+              )}
+            </dd>
             <dt className="text-ink-faint">Vendor reply</dt>
             <dd className="m-0 flex items-center gap-1.5">
               {po.vendorReplySent ? <MessageSquareCheck size={14} color="var(--good)" /> : <MessageSquare size={14} color="var(--ink-faint)" />}
@@ -67,6 +130,29 @@ export default async function PurchaseOrderDetailPage({
             <dd className="m-0 flex items-center gap-1.5">
               <Ship size={14} color={po.joelShipConfirmed ? "var(--good)" : "var(--ink-faint)"} />
               {po.joelShipConfirmed ? "Yes" : "No"}
+            </dd>
+            <dt className="text-ink-faint">Board status (raw)</dt>
+            <dd className="m-0">
+              {po.mondayStatusText ? (
+                <>
+                  {po.mondayStatusText}
+                  {po.mondayStatusMapped === false && (
+                    <span className="text-warn text-[0.78rem] ml-1.5">(not in app pipeline)</span>
+                  )}
+                </>
+              ) : (
+                "—"
+              )}
+            </dd>
+            <dt className="text-ink-faint">Monday item ID</dt>
+            <dd className="m-0 font-mono text-ink-faint">{po.mondayItemId || "—"}</dd>
+            <dt className="text-ink-faint">Last pulled</dt>
+            <dd className="m-0 text-ink-faint">
+              {po.lastPulledFromMondayAt ? new Date(po.lastPulledFromMondayAt).toLocaleString() : "—"}
+            </dd>
+            <dt className="text-ink-faint">Last pushed</dt>
+            <dd className="m-0 text-ink-faint">
+              {po.lastPushedToMondayAt ? new Date(po.lastPushedToMondayAt).toLocaleString() : "—"}
             </dd>
           </dl>
         </Card>
@@ -80,6 +166,7 @@ export default async function PurchaseOrderDetailPage({
                 sampleSku?: string;
                 vendorSku?: string;
               } | null;
+              const total = li.totalCost ?? (li.qty != null && li.unitCost != null ? li.qty * li.unitCost : null);
               return (
                 <div
                   key={i}
@@ -87,7 +174,7 @@ export default async function PurchaseOrderDetailPage({
                 >
                   <span>{it?.vendorSku || it?.sampleSku || it?.itemNumber || "item"}</span>
                   <span className="text-ink-faint font-mono">
-                    qty {li.qty ?? "—"} · ${li.unitCost ?? "—"}
+                    qty {li.qty ?? "—"} · {fmtMoney(li.unitCost)} each · {fmtMoney(total)}
                   </span>
                 </div>
               );

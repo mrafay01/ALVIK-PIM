@@ -1,13 +1,30 @@
 // Real board/column IDs, captured 2026-09-01 from the token Joel supplied.
-// The "Purchase Orders" board's real Status column has ~25 labels — richer
-// than this app's 8-value PoStatus enum (it also carries side-lane/error
-// states like "Stuck", "Partial received", "Sent back to vendor" that the
-// app doesn't model as first-class statuses). STATUS_TO_MONDAY_LABEL is
+// The "Purchase Orders" board's real Status column has 24 labels (verified
+// live via the board's `columns { settings_str }` on 2026-09-21) — richer
+// than this app's 8-value PoStatus enum, which is a strict linear pipeline
+// (PoActions.tsx / isValidPoTransition in schemas.ts both do index math on
+// PO_STATUSES, so it can never absorb a side-lane/non-linear state without
+// breaking forward-only transition gating). STATUS_TO_MONDAY_LABEL is
 // deliberately one-directional and lossy in that direction only: every app
 // status maps to exactly one board label, but not every board label maps
 // back to an app status — see MONDAY_LABEL_TO_STATUS below, which only
-// covers labels close enough not to need a decision, and unmapped push logs
-// a note that the person accepted the label and it fell where it fell.
+// covers labels close enough not to need a decision.
+//
+// Every board label that ISN'T in MONDAY_LABEL_TO_STATUS is still never
+// silently dropped: pull.ts stores the raw label verbatim on
+// PurchaseOrder.mondayStatusText on every pull regardless of mapping, so a
+// PO sitting in "Stuck", "Canceled", "On Hold", etc. stays fully visible on
+// the detail page even though the app's own `status` pipeline field doesn't
+// move for it.
+//
+// Full live label set, for reference (grouped, not exhaustive if the board
+// changes): pipeline-mapped — see MONDAY_LABEL_TO_STATUS; side-lane/error —
+// Stuck, On Hold, Canceled, Partial received, Sent back to vendor, Forwarded
+// to other vendor, Waiting for other vendor pkg, send back for plating,
+// Ready to ship but still pending, Shipment received pending; other/no
+// confident equivalent — Received, Confirmed to Vendor, Conf. to ship, Need
+// To Send, Received in Jm Need To check Weights, sample Pi Shipped to Photo
+// Guy., Received without images.
 import type { PoStatus } from "@/lib/enums";
 
 export const MONDAY_BOARD_ID = "18426525705"; // "test by joel Purchase Orders"
@@ -45,10 +62,15 @@ export const STATUS_TO_MONDAY_LABEL: Record<PoStatus, string> = {
 // Board label -> app status, for reading inbound webhook/manual overrides.
 // Only labels with an unambiguous app-side equivalent are listed; anything
 // else (Stuck, Partial received, Canceled, etc.) is intentionally omitted
-// so it's treated as "no confident mapping" rather than guessed.
+// so it's treated as "no confident mapping" rather than guessed — see the
+// module comment above for the full live label list and where they land.
 export const MONDAY_LABEL_TO_STATUS: Record<string, PoStatus> = {
   "Send to vendor": "send_to_vendor",
   "PI Confirmed pending": "pi_confirmed_pending",
+  // Textual match, not just a close guess: "received, waiting [on]
+  // confirmation" is the same state as "PI Confirmed pending" worded
+  // differently on this one column value.
+  "PI received waiting confirmation": "pi_confirmed_pending",
   "PI Confirmed": "pi_confirmed",
   "In transit": "in_transit",
   "Ready to ship": "ready_to_ship",

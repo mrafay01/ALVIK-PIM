@@ -77,6 +77,7 @@ const PurchaseOrderSchema = new Schema(
     prepaymentDeposit: Number,
 
     shipmentId: { type: Schema.Types.ObjectId, ref: "Shipment", default: null },
+    trackingNumber: { type: String, default: null },
 
     joelShipConfirmed: { type: Boolean, default: false },
     vendorReplySent: { type: Boolean, default: false },
@@ -87,6 +88,19 @@ const PurchaseOrderSchema = new Schema(
 
     mondayItemId: { type: String, default: null },
     mondayFiles: [MondayFileSchema],
+    // The board's Status-column label verbatim, stored on every pull
+    // regardless of whether it maps to a PoStatus — the app's pipeline
+    // `status` field above is a strict linear enum (PoActions.tsx /
+    // isValidPoTransition do index math on it) and can't absorb side-lane
+    // board states like "Stuck" or "Canceled" without breaking that
+    // ordering, so this is how those states stay visible instead of being
+    // silently dropped by the pull.
+    mondayStatusText: { type: String, default: null },
+    // True when mondayStatusText was confidently mapped to `status` on the
+    // most recent pull (i.e. it's a MONDAY_LABEL_TO_STATUS key); false means
+    // the board is currently sitting in a side-lane state the pipeline
+    // doesn't model, and `status` was left unchanged.
+    mondayStatusMapped: { type: Boolean, default: null },
     lastPulledFromMondayAt: Date,
     // Set after a successful push to Monday; used by the bulk sync to skip
     // POs that haven't changed since they were last pushed.
