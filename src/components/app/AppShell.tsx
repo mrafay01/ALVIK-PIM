@@ -18,7 +18,10 @@ const NAV: (NavItem & { roles: Role[] | null })[] = [
   },
   { href: "/admin/import-review", label: "Legacy Import", icon: "FileSpreadsheet", roles: ["administrator"] as Role[] },
   { href: "/admin/monday-pull", label: "Monday Import", icon: "RefreshCw", roles: ["administrator"] as Role[] },
-  { href: "/admin/users", label: "Users & Roles", icon: "Users", roles: ["administrator"] as Role[] },
+  // Settings is the last item in the main nav list (not a separate footer
+  // block) and expands as a dropdown in place — see Sidebar.tsx. Visible to
+  // everyone; "Users & Roles" inside it is filtered to admins there.
+  { href: "/settings", label: "Settings", icon: "Settings", roles: null },
 ];
 
 export async function AppShell({
@@ -64,9 +67,34 @@ export async function AppShell({
     // content differs. This only silences that one cosmetic warning class,
     // not real content/structure mismatches, which still surface normally.
     <div className="flex min-h-screen" suppressHydrationWarning>
-      <Sidebar nav={visibleNav} activeHref={activeHref} name={name} role={role ?? ""} initials={initials} />
+      <Sidebar nav={visibleNav} activeHref={activeHref} role={role ?? ""} />
 
       <div className="flex-1 min-w-0" suppressHydrationWarning>
+        {/* Top navbar — deliberately holds nothing but the signed-in
+            user's identity (avatar, name, role). Every other action lives
+            in the sidebar's Settings dropdown now, so this strip stays
+            empty on the left by design rather than growing into a second
+            nav. */}
+        <div
+          className="flex items-center justify-end gap-2.5 px-10 py-2.5 border-b border-border bg-surface"
+          suppressHydrationWarning
+        >
+          <span
+            className="w-7 h-7 rounded-full bg-navy-deep text-surface flex items-center justify-center text-[0.7rem] font-bold font-mono shrink-0"
+            suppressHydrationWarning
+          >
+            {initials || "?"}
+          </span>
+          <div className="text-right leading-tight" suppressHydrationWarning>
+            <div className="text-[0.8rem] font-semibold text-ink" suppressHydrationWarning>
+              {name}
+            </div>
+            <div className="text-[0.68rem] text-ink-faint capitalize" suppressHydrationWarning>
+              {role?.replace(/_/g, " ") ?? "—"}
+            </div>
+          </div>
+        </div>
+
         <header className="px-10 py-5 border-b border-border bg-surface sticky top-0 z-10 backdrop-blur-sm">
           {backHref && (
             <Link

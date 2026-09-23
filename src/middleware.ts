@@ -24,6 +24,10 @@ const PAGE_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
   // /catalog itself is read-only for any signed-in user; only the
   // hand-entry form is gated.
   ["/catalog/new", ["marketplace_listing"]],
+  // /settings deliberately has no entry here — firstMatch() returning
+  // undefined means "any signed-in role passes" (see the call site below).
+  // It's every user's own account page; the admin-only bits it links to
+  // (Users & Roles) are still gated by their own /admin prefix above.
 ];
 
 // Middleware runs before the handler and can't see request bodies or
@@ -45,6 +49,8 @@ const API_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
   // /api/catalog: create is marketplace_listing; the approve sub-route is
   // admin-only, enforced in the handler itself.
   ["/api/catalog", ["marketplace_listing"]],
+  // /api/users (self-service notification prefs) deliberately has no entry
+  // — any signed-in role passes, same reasoning as /settings above.
 ];
 
 function firstMatch(
@@ -119,6 +125,7 @@ export const config = {
     "/receiving/:path*",
     "/admin/:path*",
     "/marketplace-export/:path*",
+    "/settings/:path*",
     "/api/items/:path*",
     "/api/catalog/:path*",
     "/api/purchase-orders/:path*",
@@ -127,5 +134,6 @@ export const config = {
     "/api/monday/:path*",
     "/api/admin/:path*",
     "/api/marketplace-export/:path*",
+    "/api/users/:path*",
   ],
 };

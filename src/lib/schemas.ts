@@ -440,6 +440,34 @@ export const UserPatchSchema = z
   })
   .refine((b) => Object.keys(b).length > 0, "empty update");
 
+// Self-service — any signed-in user edits their own notification
+// preferences from Settings > Notifications. Distinct from UserPatchSchema
+// (admin-only, edits *other* users' role/active/password): this one is
+// scoped to the caller's own account and only ever touches this one field.
+export const NotificationPrefsPatchSchema = z
+  .object({
+    poStatusChanges: z.boolean().optional(),
+    mondaySyncErrors: z.boolean().optional(),
+    paymentDue: z.boolean().optional(),
+    weeklyDigest: z.boolean().optional(),
+  })
+  .refine((b) => Object.keys(b).length > 0, "empty update");
+
+// Self-service password change from Settings > Change password. Unlike
+// UserPatchSchema's `password` field (an admin resetting someone else's
+// password with no proof of the old one), this always requires the
+// caller's current password — the route re-verifies it against the hash
+// before writing the new one, same as the sign-in check itself.
+export const ChangePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required"),
+    newPassword: userPassword,
+  })
+  .refine((b) => b.currentPassword !== b.newPassword, {
+    message: "New password must be different from the current password",
+    path: ["newPassword"],
+  });
+
 // -------------------------------------------------- shared query params
 
 export const StatusQuerySchema = z.string().trim().min(1).max(60);
