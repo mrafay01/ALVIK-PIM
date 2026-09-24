@@ -29,6 +29,8 @@ export default {
         brass: "var(--brass)",
         "brass-soft": "var(--brass-soft)",
         "brass-bg": "var(--brass-bg)",
+        "brass-hover": "var(--brass-hover)",
+        "on-brass": "var(--on-brass)",
 
         "navy-deep": "var(--navy-deep)",
         "navy-soft": "var(--navy-soft)",

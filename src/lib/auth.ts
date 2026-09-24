@@ -104,6 +104,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           email: user.email,
           role: user.role as Role,
+          sessionVersion: user.sessionVersion ?? 0,
         };
       },
     }),
@@ -113,10 +114,34 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.role = (user as { role: Role }).role;
         token.id = user.id;
+        token.sessionVersion = (user as { sessionVersion?: number }).sessionVersion ?? 0;
+        return token;
+      }
+
+      // Every subsequent request (not just sign-in) re-checks the stamped
+      // version against the current DB value — see the sessionVersion
+      // strictness note on the User model. A mismatch means "Sign out of
+      // all other devices" (Settings > Security) was used since this token
+      // was minted; token.invalid marks it dead so the session callback
+      // below can null out the session rather than trusting a revoked JWT.
+      if (typeof token.id === "string") {
+        await connectDB();
+        const current = await User.findById(token.id).select("sessionVersion active").lean();
+        if (!current || !current.active || current.sessionVersion !== token.sessionVersion) {
+          token.invalid = true;
+        }
       }
       return token;
     },
     async session({ session, token }) {
+      if (token.invalid) {
+        // Returning an empty object (rather than throwing) is the
+        // documented way to signal "no session" from this callback —
+        // useSession()/getServerSession() then report the caller as
+        // signed out, and middleware's existing "no role -> redirect to
+        // /login" path takes it from there.
+        return {} as typeof session;
+      }
       if (session.user) {
         session.user.role = token.role as Role;
         session.user.id = token.id as string;

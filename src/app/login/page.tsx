@@ -206,12 +206,12 @@ export default function LoginPage() {
         <div className="relative w-full max-w-[460px] px-2 py-16 flex flex-col flex-1">
           <div>
             <Image
-              src="/logos/horizontal logo.png"
+              src="/logos/PIM-transparent.png"
               alt="CZC PIM"
-              width={936}
-              height={348}
+              width={1254}
+              height={1254}
               priority
-              className="h-[42px] w-auto object-contain"
+              className="h-[72px] w-auto object-contain"
             />
 
             <h1 className="mt-14 text-[2.35rem] leading-[1.22] text-ink">

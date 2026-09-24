@@ -67,7 +67,14 @@ export default withAuth(
   function middleware(req) {
     const path = req.nextUrl.pathname;
     const isApi = path.startsWith("/api/");
-    const role = req.nextauth.token?.role as Role | undefined;
+    // Set by the jwt callback (auth.ts) once a request-time check finds
+    // this token's sessionVersion no longer matches the DB — i.e. "Sign
+    // out of all other devices" was used since this token was minted.
+    // Treated exactly like "no role": this layer runs on every request
+    // (unlike the session() callback, which only some code paths call), so
+    // it's the one place that reliably catches a revoked token immediately.
+    const invalidated = req.nextauth.token?.invalid === true;
+    const role = invalidated ? undefined : (req.nextauth.token?.role as Role | undefined);
     const userId = req.nextauth.token?.id as string | undefined;
 
     if (!role) {

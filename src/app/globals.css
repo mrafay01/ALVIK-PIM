@@ -1,16 +1,28 @@
 /* ---------------------------------------------------------------
    CZC PIM — Design tokens & base styles
-   Palette: deep ink navy ground, muted brass accent (jewelry trade
-   without going full gold-on-black), semantic status colors kept
-   separate from the accent hue. Dark is the primary experience;
-   light is available via [data-theme="light"].
+   Palette: brand gold (the logo's ribbon) as the one accent hue, brand
+   grey (the logo's steel ribbon) as the secondary/neutral accent, soft
+   black / soft white as the dark/light grounds — semantic status colors
+   (good/warn/critical) kept as their own distinct hues so a status still
+   reads at a glance instead of blending into the brand palette. Dark is
+   the primary experience; light is available via [data-theme="light"].
+
+   Brand source colors (from the logo), for reference — the tokens below
+   are these, lightly adjusted per theme for contrast/legibility, not a
+   different palette:
+     Dark Golden #B98728 · Golden #D9AC45 · Light Golden #E9C05C
+     Dark Grey   #787878 · Grey   #989898 · Light Grey   #B6B6B6
+
    Type: Montserrat (headings, weight capped at 700) + Quicksand (body/UI
    text) + JetBrains Mono (data)
 
    Tailwind utilities read these tokens via tailwind.config.ts (colors,
    fonts, radii, shadows all resolve through var(--token)) — this file
    stays the single source of truth for both the raw CSS below and
-   every Tailwind class used across the app.
+   every Tailwind class used across the app. Component code never spells
+   out a hex value; it only ever reaches these tokens through the `brass`/
+   `navy`/status Tailwind classes below, so this file is the one place a
+   future brand tweak needs to happen.
 --------------------------------------------------------------- */
 
 @tailwind base;
@@ -18,32 +30,45 @@
 @tailwind utilities;
 
 :root {
-  --ink: #eceaf0;
-  --ink-soft: #b7bccb;
-  --ink-faint: #767e91;
+  /* soft black ground + soft white ink — never pure #000/#fff, so nothing
+     ever reads as a stark, unbranded default. */
+  --ink: #f2f0ec;
+  --ink-soft: #c7c4bd;
+  --ink-faint: #8c8983;
 
-  --surface: #12141b;
-  --surface-sunken: #0b0c11;
-  --surface-raised: #191d27;
-  --surface-overlay: #1f2430;
-  --border: #262b38;
-  --border-strong: #383f52;
+  --surface: #171613;
+  --surface-sunken: #0e0d0b;
+  --surface-raised: #201f1b;
+  --surface-overlay: #29271f;
+  --border: #332f26;
+  --border-strong: #4a4535;
 
-  --brass: #d9b077;
-  --brass-soft: #4a3a22;
-  --brass-bg: #241d13;
-  --brass-glow: rgba(217, 176, 119, 0.18);
+  /* A muted step toward Dark Golden — full Golden (#d9ac45) read as too
+     bright/loud as a solid button fill against the dark surface; this
+     keeps the same hue family but calmer, matching the softer treatment
+     already applied to --brass in light mode. --on-brass stays dark text
+     (Dark Golden reserved for that role) since it still contrasts well
+     (5:1+) against this less saturated gold. */
+  --brass: #b18327;
+  --brass-soft: #4a3a17;
+  --brass-bg: #2b220e;
+  --brass-glow: rgba(177, 131, 39, 0.2);
+  --brass-hover: #c9962f;
+  --on-brass: #241a06;
 
-  --navy-deep: #b7c6e6;
-  --navy-soft: #8fa3c7;
+  /* Brand grey — the logo's secondary ribbon color, used as the app's
+     secondary accent (record links/ids, avatar fills) so gold stays
+     reserved for primary emphasis and doesn't get diluted by overuse. */
+  --navy-deep: #b6b6b6;
+  --navy-soft: #989898;
 
   --good: #7fd4a8;
-  --good-bg: #142a20;
+  --good-bg: #17281f;
   --warn: #eba572;
-  --warn-bg: #2e2015;
+  --warn-bg: #2e2115;
   --critical: #ef8a8a;
-  --critical-bg: #2e1717;
-  --neutral-pill-bg: #232837;
+  --critical-bg: #2e1a1a;
+  --neutral-pill-bg: #262420;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.28);
@@ -59,24 +84,32 @@
 }
 
 :root[data-theme="light"] {
-  --ink: #12151c;
-  --ink-soft: #4a5266;
-  --ink-faint: #8b93a4;
+  --ink: #1c1a16;
+  --ink-soft: #55524a;
+  --ink-faint: #8c8983;
 
   --surface: #ffffff;
-  --surface-sunken: #f5f4f0;
+  --surface-sunken: #f7f5f1;
   --surface-raised: #ffffff;
   --surface-overlay: #ffffff;
-  --border: #e4e1d8;
-  --border-strong: #cdc8b8;
+  --border: #e6e2d8;
+  --border-strong: #d1cbba;
 
-  --brass: #a97c42;
-  --brass-soft: #eee0c9;
-  --brass-bg: #faf3e6;
-  --brass-glow: rgba(169, 124, 66, 0.12);
+  /* A muted step down from Dark Golden — still clearly gold and holds
+     better contrast as both text-on-white and white-on-fill than the
+     brighter #b98728 did (4.01:1 either direction vs. 3.20:1), just less
+     saturated/"loud". --on-brass is white: a solid-gold button (Button.tsx
+     primary) needs to read as gold-with-white-text, not gold-with-
+     near-black-text. */
+  --brass: #a67626;
+  --brass-soft: #f5e6c4;
+  --brass-bg: #fbf3e2;
+  --brass-glow: rgba(166, 118, 38, 0.14);
+  --brass-hover: #8f631c;
+  --on-brass: #ffffff;
 
-  --navy-deep: #1c2b4a;
-  --navy-soft: #3a4d74;
+  --navy-deep: #787878;
+  --navy-soft: #5f5f5f;
 
   --good: #3f7d5c;
   --good-bg: #e3efe7;
@@ -84,33 +117,35 @@
   --warn-bg: #f6e6da;
   --critical: #af3131;
   --critical-bg: #f6dfdf;
-  --neutral-pill-bg: #eceae3;
+  --neutral-pill-bg: #eeece5;
 
-  --shadow-sm: 0 1px 2px rgba(18, 21, 28, 0.06);
-  --shadow-md: 0 2px 8px rgba(18, 21, 28, 0.08), 0 8px 24px rgba(18, 21, 28, 0.05);
-  --shadow-lg: 0 6px 20px rgba(18, 21, 28, 0.1), 0 20px 48px rgba(18, 21, 28, 0.08);
+  --shadow-sm: 0 1px 2px rgba(28, 26, 22, 0.06);
+  --shadow-md: 0 2px 8px rgba(28, 26, 22, 0.08), 0 8px 24px rgba(28, 26, 22, 0.05);
+  --shadow-lg: 0 6px 20px rgba(28, 26, 22, 0.1), 0 20px 48px rgba(28, 26, 22, 0.08);
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --ink: #12151c;
-    --ink-soft: #4a5266;
-    --ink-faint: #8b93a4;
+    --ink: #1c1a16;
+    --ink-soft: #55524a;
+    --ink-faint: #8c8983;
 
     --surface: #ffffff;
-    --surface-sunken: #f5f4f0;
+    --surface-sunken: #f7f5f1;
     --surface-raised: #ffffff;
     --surface-overlay: #ffffff;
-    --border: #e4e1d8;
-    --border-strong: #cdc8b8;
+    --border: #e6e2d8;
+    --border-strong: #d1cbba;
 
-    --brass: #a97c42;
-    --brass-soft: #eee0c9;
-    --brass-bg: #faf3e6;
-    --brass-glow: rgba(169, 124, 66, 0.12);
+    --brass: #a67626;
+    --brass-soft: #f5e6c4;
+    --brass-bg: #fbf3e2;
+    --brass-glow: rgba(166, 118, 38, 0.14);
+    --brass-hover: #8f631c;
+    --on-brass: #ffffff;
 
-    --navy-deep: #1c2b4a;
-    --navy-soft: #3a4d74;
+    --navy-deep: #787878;
+    --navy-soft: #5f5f5f;
 
     --good: #3f7d5c;
     --good-bg: #e3efe7;
@@ -118,11 +153,11 @@
     --warn-bg: #f6e6da;
     --critical: #af3131;
     --critical-bg: #f6dfdf;
-    --neutral-pill-bg: #eceae3;
+    --neutral-pill-bg: #eeece5;
 
-    --shadow-sm: 0 1px 2px rgba(18, 21, 28, 0.06);
-    --shadow-md: 0 2px 8px rgba(18, 21, 28, 0.08), 0 8px 24px rgba(18, 21, 28, 0.05);
-    --shadow-lg: 0 6px 20px rgba(18, 21, 28, 0.1), 0 20px 48px rgba(18, 21, 28, 0.08);
+    --shadow-sm: 0 1px 2px rgba(28, 26, 22, 0.06);
+    --shadow-md: 0 2px 8px rgba(28, 26, 22, 0.08), 0 8px 24px rgba(28, 26, 22, 0.05);
+    --shadow-lg: 0 6px 20px rgba(28, 26, 22, 0.1), 0 20px 48px rgba(28, 26, 22, 0.08);
   }
 }
 

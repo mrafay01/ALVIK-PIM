@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { authOptions } from "@/lib/auth";
 import type { Role } from "@/lib/enums";
 import { Sidebar, type NavItem } from "./Sidebar";
+import { ThemeSwitcherButton } from "./ThemeSwitcherButton";
 
 const NAV: (NavItem & { roles: Role[] | null })[] = [
   { href: "/dashboard", label: "Dashboard", icon: "LayoutDashboard", roles: null },
@@ -70,45 +71,46 @@ export async function AppShell({
       <Sidebar nav={visibleNav} activeHref={activeHref} role={role ?? ""} />
 
       <div className="flex-1 min-w-0" suppressHydrationWarning>
-        {/* Top navbar — deliberately holds nothing but the signed-in
-            user's identity (avatar, name, role). Every other action lives
-            in the sidebar's Settings dropdown now, so this strip stays
-            empty on the left by design rather than growing into a second
-            nav. */}
-        <div
-          className="flex items-center justify-end gap-2.5 px-10 py-2.5 border-b border-border bg-surface"
-          suppressHydrationWarning
-        >
-          <span
-            className="w-7 h-7 rounded-full bg-navy-deep text-surface flex items-center justify-center text-[0.7rem] font-bold font-mono shrink-0"
-            suppressHydrationWarning
-          >
-            {initials || "?"}
-          </span>
-          <div className="text-right leading-tight" suppressHydrationWarning>
-            <div className="text-[0.8rem] font-semibold text-ink" suppressHydrationWarning>
-              {name}
-            </div>
-            <div className="text-[0.68rem] text-ink-faint capitalize" suppressHydrationWarning>
-              {role?.replace(/_/g, " ") ?? "—"}
+        <header className="flex items-start justify-between gap-6 px-10 py-5 border-b border-border bg-surface sticky top-0 z-10 backdrop-blur-sm">
+          <div className="min-w-0">
+            {backHref && (
+              <Link
+                href={backHref}
+                className="inline-flex items-center gap-1.5 text-[0.8rem] font-semibold text-ink-faint no-underline mb-2.5 hover:text-brass transition-colors duration-150"
+              >
+                <ArrowLeft size={14} strokeWidth={2.25} />
+                {backLabel ?? "Back"}
+              </Link>
+            )}
+            {eyebrow && (
+              <div className="text-xs font-bold text-brass uppercase tracking-wider mb-1">{eyebrow}</div>
+            )}
+            <h1 className="text-2xl">{title}</h1>
+          </div>
+
+          {/* Right side: the one place the signed-in user's identity and
+              the theme switcher live — no separate identity strip above
+              this any more, everything else lives in the sidebar's
+              Settings dropdown. */}
+          <div className="flex items-center gap-3.5 shrink-0 pt-0.5" suppressHydrationWarning>
+            <ThemeSwitcherButton />
+            <div className="flex items-center gap-2.5 border-l border-border pl-3.5" suppressHydrationWarning>
+              <span
+                className="w-7 h-7 rounded-full bg-navy-deep text-surface flex items-center justify-center text-[0.7rem] font-bold font-mono shrink-0"
+                suppressHydrationWarning
+              >
+                {initials || "?"}
+              </span>
+              <div className="text-right leading-tight" suppressHydrationWarning>
+                <div className="text-[0.8rem] font-semibold text-ink" suppressHydrationWarning>
+                  {name}
+                </div>
+                <div className="text-[0.68rem] text-ink-faint capitalize" suppressHydrationWarning>
+                  {role?.replace(/_/g, " ") ?? "—"}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-
-        <header className="px-10 py-5 border-b border-border bg-surface sticky top-0 z-10 backdrop-blur-sm">
-          {backHref && (
-            <Link
-              href={backHref}
-              className="inline-flex items-center gap-1.5 text-[0.8rem] font-semibold text-ink-faint no-underline mb-2.5 hover:text-brass transition-colors duration-150"
-            >
-              <ArrowLeft size={14} strokeWidth={2.25} />
-              {backLabel ?? "Back"}
-            </Link>
-          )}
-          {eyebrow && (
-            <div className="text-xs font-bold text-brass uppercase tracking-wider mb-1">{eyebrow}</div>
-          )}
-          <h1 className="text-2xl">{title}</h1>
         </header>
 
         <main className="px-10 pt-8 pb-16">{children}</main>

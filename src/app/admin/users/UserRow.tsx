@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, X, KeyRound } from "lucide-react";
-import { Select, Input } from "@/components/ui/Field";
+import { KeyRound } from "lucide-react";
+import { Select } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import type { Role } from "@/lib/enums";
+import { ResetPasswordPanel } from "./ResetPasswordPanel";
 
 const TD_CLASS = "px-4 py-3 text-[0.85rem] align-top";
 
@@ -35,7 +36,6 @@ export function UserRow({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
 
   async function patch(body: Record<string, unknown>) {
     setSaving(true);
@@ -61,18 +61,6 @@ export function UserRow({
   async function handleRoleChange(next: Role) {
     setRole(next);
     await patch({ role: next });
-  }
-
-  async function handleResetPassword() {
-    if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-    const ok = await patch({ password: newPassword });
-    if (ok) {
-      setResetOpen(false);
-      setNewPassword("");
-    }
   }
 
   return (
@@ -135,33 +123,7 @@ export function UserRow({
               ))}
           </div>
 
-          {resetOpen && (
-            <div className="flex items-center gap-1.5">
-              <Input
-                type="text"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="New password"
-                minLength={8}
-                className="!py-1.5 !px-2 text-[0.8rem] w-[160px]"
-              />
-              <Button size="sm" variant="primary" onClick={handleResetPassword} disabled={saving}>
-                <Check size={13} />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setResetOpen(false);
-                  setNewPassword("");
-                  setError(null);
-                }}
-                disabled={saving}
-              >
-                <X size={13} />
-              </Button>
-            </div>
-          )}
+          {resetOpen && <ResetPasswordPanel targetUserId={user._id} onClose={() => setResetOpen(false)} />}
 
           {error && <p className="text-critical text-[0.76rem] m-0 text-right max-w-[220px]">{error}</p>}
         </div>

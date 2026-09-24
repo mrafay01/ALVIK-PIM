@@ -458,7 +458,7 @@ export function NewCatalogItemForm() {
                 hasVariations === true ? "border-brass bg-brass" : "border-border-strong"
               }`}
             >
-              {hasVariations === true && <Check size={12} className="text-[#1a1409]" />}
+              {hasVariations === true && <Check size={12} className="text-on-brass" />}
             </span>
             <span>
               <span className="block font-semibold text-[0.87rem]">Yes, it has variations</span>
@@ -481,7 +481,7 @@ export function NewCatalogItemForm() {
                 hasVariations === false ? "border-brass bg-brass" : "border-border-strong"
               }`}
             >
-              {hasVariations === false && <Check size={12} className="text-[#1a1409]" />}
+              {hasVariations === false && <Check size={12} className="text-on-brass" />}
             </span>
             <span>
               <span className="block font-semibold text-[0.87rem]">No, just this one SKU</span>

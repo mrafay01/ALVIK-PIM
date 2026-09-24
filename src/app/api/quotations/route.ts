@@ -53,7 +53,8 @@ export async function POST(req: NextRequest) {
   const contentType = req.headers.get("content-type") ?? "";
   await connectDB();
 
-  let vendorId: string;
+  let vendorId: string | undefined;
+  let vendorName: string | undefined;
   let source: "file_upload" | "manual";
   let sourceFileName: string | null = null;
   let poNumber: string | null = null;
@@ -108,6 +109,7 @@ export async function POST(req: NextRequest) {
     const parsed = QuotationManualSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return badRequest(parsed.error);
     vendorId = parsed.data.vendorId;
+    vendorName = parsed.data.vendorName;
     source = "manual";
     poNumber = parsed.data.poNumber ?? null;
     if (parsed.data.receivedDate) receivedDate = new Date(parsed.data.receivedDate);
@@ -115,8 +117,36 @@ export async function POST(req: NextRequest) {
     staged = parsed.data.items.map((it, i) => stageManualRow(i + 1, it.fields, it.custom ?? {}));
   }
 
-  const vendor = await Vendor.findById(vendorId).select("_id").lean();
-  if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
+  if (vendorId) {
+    const vendor = await Vendor.findById(vendorId).select("_id").lean();
+    if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
+  } else if (vendorName) {
+    // Manual-entry path: the vendor doesn't have to exist in PIM yet — find
+    // it by exact name, or create it on the fly. Vendor.name is unique, so
+    // a race with another request creating the same name at the same
+    // moment fails only this insert (caught below), never produces a
+    // duplicate; the re-read then picks up whichever one actually landed.
+    const existing = await Vendor.findOne({ name: vendorName }).select("_id").lean();
+    if (existing) {
+      vendorId = String(existing._id);
+    } else {
+      try {
+        const created = await Vendor.create({ name: vendorName });
+        vendorId = String(created._id);
+      } catch (err) {
+        const isDuplicateKey = (err as { code?: number }).code === 11000;
+        if (!isDuplicateKey) throw err;
+        const reRead = await Vendor.findOne({ name: vendorName }).select("_id").lean();
+        if (!reRead) throw err;
+        vendorId = String(reRead._id);
+      }
+    }
+  } else {
+    // QuotationManualSchema's refine() already guarantees one of the two is
+    // set for the manual (JSON) path; the multipart path always sets
+    // vendorId directly above. This is unreachable in practice.
+    return NextResponse.json({ error: "Choose a vendor for this quote" }, { status: 400 });
+  }
 
   if (staged.length === 0) {
     return NextResponse.json({ error: "No line items found in the quote" }, { status: 400 });

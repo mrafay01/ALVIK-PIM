@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, CircleAlert, X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import { Field, Input, Select, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -32,9 +32,12 @@ function inputType(kind: string): string {
 const INPUT_CLASS =
   "font-body text-[0.86rem] px-3 py-2 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)] disabled:opacity-60";
 
+const MANUAL_VENDOR_OPTION = "__manual__";
+
 export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string }[] }) {
   const router = useRouter();
-  const [vendorId, setVendorId] = useState(vendors[0]?.id ?? "");
+  const [vendorId, setVendorId] = useState(vendors[0]?.id ?? MANUAL_VENDOR_OPTION);
+  const [manualVendorName, setManualVendorName] = useState("");
   const [poNumber, setPoNumber] = useState("");
   const [receivedDate, setReceivedDate] = useState("");
   const [season, setSeason] = useState("");
@@ -92,12 +95,18 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
     );
   }
 
+  const isManualVendor = vendorId === MANUAL_VENDOR_OPTION;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
     if (!vendorId) {
       setError("Choose a vendor.");
+      return;
+    }
+    if (isManualVendor && !manualVendorName.trim()) {
+      setError("Enter the new vendor's name.");
       return;
     }
 
@@ -124,7 +133,8 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          vendorId,
+          vendorId: isManualVendor ? undefined : vendorId,
+          vendorName: isManualVendor ? manualVendorName.trim() : undefined,
           poNumber: poNumber.trim() || undefined,
           receivedDate: receivedDate || undefined,
           season: season.trim() || undefined,
@@ -143,14 +153,6 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
     }
   }
 
-  if (vendors.length === 0) {
-    return (
-      <p className="text-critical text-[0.87rem] flex items-center gap-1.5">
-        <CircleAlert size={15} /> No vendors yet — seed a vendor first.
-      </p>
-    );
-  }
-
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       <Card>
@@ -158,13 +160,25 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
         <div className="flex gap-3.5 flex-wrap items-end">
           <Field label="Vendor" width={200}>
             <Select value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
+              {vendors.length === 0 && <option value="">No vendors yet</option>}
               {vendors.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.name}
                 </option>
               ))}
+              <option value={MANUAL_VENDOR_OPTION}>+ Add new vendor…</option>
             </Select>
           </Field>
+          {isManualVendor && (
+            <Field label="New vendor name" width={200}>
+              <Input
+                value={manualVendorName}
+                onChange={(e) => setManualVendorName(e.target.value)}
+                placeholder="Vendor name"
+                autoFocus
+              />
+            </Field>
+          )}
           <Field label="Vendor PO / quote ref" width={180}>
             <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO-1234" />
           </Field>

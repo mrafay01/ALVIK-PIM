@@ -144,3 +144,14 @@ export type ImageSubfolder = (typeof IMAGE_SUBFOLDERS)[number];
 // title/description that a human then edits in place.
 export const DESCRIPTION_PLATFORMS = ["macys", "kohls", "shopify", "target", "ruelala", "belk"] as const;
 export type DescriptionPlatform = (typeof DESCRIPTION_PLATFORMS)[number];
+
+// What a pending LoginOtp document is proving, beyond a plain sign-in:
+//   login           - the existing two-step credentials sign-in.
+//   change_password - a user changing their own password (Settings).
+//   admin_reset     - an administrator resetting a DIFFERENT user's
+//                      password; the code goes to the ADMIN's own email,
+//                      proving the admin's identity, not the target's.
+//   change_email    - a user changing their own account email; the code
+//                      goes to the NEW address, proving they control it.
+export const OTP_PURPOSES = ["login", "change_password", "admin_reset", "change_email"] as const;
+export type OtpPurpose = (typeof OTP_PURPOSES)[number];

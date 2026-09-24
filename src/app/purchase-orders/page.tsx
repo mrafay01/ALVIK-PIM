@@ -50,7 +50,7 @@ export default async function PurchaseOrdersPage({
       <div className="flex gap-2.5 mb-6 flex-wrap">
         <Link
           href="/purchase-orders/quotes/new"
-          className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-brass text-[#1a1409] border border-brass shadow-[0_2px_10px_var(--brass-glow)] no-underline hover:brightness-110"
+          className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-brass text-on-brass border border-brass shadow-[0_2px_10px_var(--brass-glow)] no-underline hover:bg-brass-hover"
         >
           <FilePlus2 size={15} /> New quote manually
         </Link>

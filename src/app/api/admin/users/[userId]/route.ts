@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { UserPatchSchema, badRequest } from "@/lib/schemas";
@@ -21,9 +20,10 @@ export async function GET(
   return NextResponse.json({ user });
 }
 
-// PATCH: change a user's name, role, active flag, or reset their password.
-// Admin only. An admin can't demote or deactivate their own account here —
-// that's a self-lockout risk with no upside; have another admin do it.
+// PATCH: change a user's name, role, or active flag. Admin only. An admin
+// can't demote or deactivate their own account here — that's a
+// self-lockout risk with no upside; have another admin do it. Password
+// reset lives at .../reset-password (2FA-gated), not here.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
@@ -52,7 +52,6 @@ export async function PATCH(
   if (body.name !== undefined) user.name = body.name;
   if (body.role !== undefined) user.role = body.role;
   if (body.active !== undefined) user.active = body.active;
-  if (body.password !== undefined) user.passwordHash = await bcrypt.hash(body.password, 12);
 
   await user.save();
   return NextResponse.json({

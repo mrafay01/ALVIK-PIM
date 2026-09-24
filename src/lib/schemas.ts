@@ -364,18 +364,30 @@ const QuoteManualItemSchema = z.object({
   custom: quoteStringMap.optional(),
 });
 
-export const QuotationManualSchema = z.object({
-  vendorId: objectId,
-  poNumber: z.string().trim().max(200).optional(),
-  receivedDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
-  season: z.string().trim().max(120).optional(),
-  // Labels of the quote-level custom columns, for reference/echo.
-  customColumns: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
-  items: z.array(QuoteManualItemSchema).min(1, "add at least one item").max(200),
-});
+export const QuotationManualSchema = z
+  .object({
+    // Exactly one of these two is expected — an existing vendor picked from
+    // the dropdown, or a brand-new vendor name typed into the "+ Add new
+    // vendor" option at the end of it. The route resolves vendorName to a
+    // Vendor doc (creating one if the name doesn't exist yet) rather than
+    // requiring the vendor to be seeded first, same as the exact-name
+    // auto-create pattern used by the Monday pull.
+    vendorId: objectId.optional(),
+    vendorName: z.string().trim().min(1).max(200).optional(),
+    poNumber: z.string().trim().max(200).optional(),
+    receivedDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    season: z.string().trim().max(120).optional(),
+    // Labels of the quote-level custom columns, for reference/echo.
+    customColumns: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+    items: z.array(QuoteManualItemSchema).min(1, "add at least one item").max(200),
+  })
+  .refine((b) => !!b.vendorId !== !!b.vendorName, {
+    message: "Provide either vendorId or vendorName, not both or neither",
+    path: ["vendorId"],
+  });
 
 export const QuotationRowPatchSchema = z
   .object({
@@ -426,17 +438,20 @@ export const UserCreateSchema = z.object({
   role: z.enum(ROLES),
 });
 
-// Admin editing an existing user: role and active are the day-to-day
-// controls; name/password are occasionally-used extras. Email is
-// deliberately not editable here — it's the sign-in identity, changing it
-// is a rarer, riskier operation better done deliberately than folded into
-// this form.
+// Admin editing an existing user: role, active, and name are the plain
+// controls handled here. Password reset is deliberately NOT a field on
+// this schema any more — resetting another user's password now requires
+// the admin's own password + a 2FA code sent to the admin's own email
+// (see AdminResetPasswordRequestSchema / .../reset-password/route.ts), so
+// there is no direct "just PATCH a new password in" path left. Email is
+// also not editable here — it's the sign-in identity; changing an
+// account's own email is a self-service, 2FA-gated flow (see
+// ChangeEmailRequestSchema), not something folded into this admin form.
 export const UserPatchSchema = z
   .object({
     name: userName.optional(),
     role: z.enum(ROLES).optional(),
     active: z.boolean().optional(),
-    password: userPassword.optional(),
   })
   .refine((b) => Object.keys(b).length > 0, "empty update");
 
@@ -453,12 +468,22 @@ export const NotificationPrefsPatchSchema = z
   })
   .refine((b) => Object.keys(b).length > 0, "empty update");
 
+// Each 2FA-gated account-security action below follows the same two-step
+// shape as the existing login OTP flow: a "request" call validates the
+// pre-conditions (current password, etc.) and emails a code; a separate
+// "verify" call (shared /api/auth/otp/verify-generic, keyed by purpose)
+// turns that code into a short-lived, single-use sessionTicket; the
+// action's own "confirm" call then takes ONLY that ticket (never the raw
+// code, and never re-sending the sensitive fields) and performs the
+// mutation. This keeps every flow consistent and means a ticket — not a
+// code guess — is what ultimately authorizes the write.
+
 // Self-service password change from Settings > Change password. Unlike
 // UserPatchSchema's `password` field (an admin resetting someone else's
 // password with no proof of the old one), this always requires the
-// caller's current password — the route re-verifies it against the hash
-// before writing the new one, same as the sign-in check itself.
-export const ChangePasswordSchema = z
+// caller's current password up front, re-verified against the hash before
+// a code is even sent.
+export const ChangePasswordRequestSchema = z
   .object({
     currentPassword: z.string().min(1, "Current password is required"),
     newPassword: userPassword,
@@ -467,6 +492,50 @@ export const ChangePasswordSchema = z
     message: "New password must be different from the current password",
     path: ["newPassword"],
   });
+
+// Carries newPassword again (rather than staging it server-side against
+// the OTP record, which would mean holding a not-yet-applied password
+// value in the DB) — the sessionTicket is what actually authorizes the
+// write; newPassword here just says what to write once authorized.
+export const ChangePasswordConfirmSchema = z.object({
+  sessionTicket: z.string().min(1),
+  newPassword: userPassword,
+});
+
+// Admin resetting a DIFFERENT user's password (Users & Roles). The admin
+// proves THEIR OWN identity — their own password, then a code emailed to
+// their own account address — not the target's.
+export const AdminResetPasswordRequestSchema = z.object({
+  adminPassword: z.string().min(1, "Your password is required"),
+  newPassword: userPassword,
+});
+
+export const AdminResetPasswordConfirmSchema = z.object({
+  sessionTicket: z.string().min(1),
+  newPassword: userPassword,
+});
+
+// Self-service email change (Settings > Your account). The code is sent to
+// the NEW address, proving the caller actually controls it before the
+// account's sign-in identity changes.
+export const ChangeEmailRequestSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newEmail: z.string().trim().toLowerCase().email().max(200),
+});
+
+export const ChangeEmailConfirmSchema = z.object({
+  sessionTicket: z.string().min(1),
+});
+
+// Shared verify step for all three flows above (and reusable by any future
+// one) — takes the purpose + code, returns a sessionTicket on success. Kept
+// separate from the existing login OtpVerifySchema-equivalent in
+// /api/auth/otp/verify/route.ts, which is wired specifically into
+// NextAuth's authorize() and stays untouched.
+export const OtpVerifyGenericSchema = z.object({
+  purpose: z.enum(["change_password", "admin_reset", "change_email"]),
+  code: z.string().trim().regex(/^\d{6}$/, "must be a 6-digit code"),
+});
 
 // -------------------------------------------------- shared query params
 

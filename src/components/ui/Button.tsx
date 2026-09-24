@@ -4,7 +4,7 @@ type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary:
-    "bg-brass text-[#1a1409] border border-brass shadow-[0_2px_10px_var(--brass-glow)] hover:enabled:brightness-110 hover:enabled:-translate-y-px hover:enabled:shadow-[0_4px_16px_var(--brass-glow)] active:enabled:brightness-95 active:enabled:translate-y-0 active:enabled:shadow-[0_1px_4px_var(--brass-glow)]",
+    "bg-brass text-on-brass border border-brass shadow-[0_2px_10px_var(--brass-glow)] hover:enabled:bg-brass-hover hover:enabled:border-brass-hover hover:enabled:-translate-y-px hover:enabled:shadow-[0_4px_16px_var(--brass-glow)] active:enabled:brightness-95 active:enabled:translate-y-0 active:enabled:shadow-[0_1px_4px_var(--brass-glow)]",
   secondary:
     "bg-surface text-ink border border-border-strong hover:enabled:border-brass hover:enabled:text-brass active:enabled:bg-surface-sunken",
   danger:

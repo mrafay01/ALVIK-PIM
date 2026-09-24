@@ -23,6 +23,13 @@ const UserSchema = new Schema(
     role: { type: String, enum: ROLES, required: true },
     active: { type: Boolean, default: true },
     notificationPrefs: { type: NotificationPrefsSchema, default: () => ({}) },
+    // Bumped by "Sign out of all other devices" (Settings > Security).
+    // Stamped into every JWT at sign-in (see auth.ts's jwt callback); the
+    // session callback rejects a token whose stamped version doesn't match
+    // the current value here, which is what actually invalidates every
+    // previously-issued token without a server-side session store — NextAuth
+    // runs on stateless JWTs, so there's nothing else to revoke directly.
+    sessionVersion: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

@@ -68,7 +68,7 @@ export default function NotFound() {
         <div className="flex justify-center mb-8">
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-2 text-[#1a1409] rounded-sm px-[22px] py-[11px] font-bold text-[0.87rem] no-underline border border-brass"
+            className="inline-flex items-center gap-2 text-on-brass rounded-sm px-[22px] py-[11px] font-bold text-[0.87rem] no-underline border border-brass"
             style={{
               background: "linear-gradient(135deg, var(--brass) 0%, var(--brass-soft) 160%)",
               boxShadow: "0 2px 10px var(--brass-glow)",
