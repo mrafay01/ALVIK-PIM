@@ -66,7 +66,7 @@ export function PoActions({
             {blockedByChecklist && (
               <p className="text-[0.8rem] text-warn flex items-center gap-1.5 mt-2">
                 <TriangleAlert size={14} />
-                Blocked — checklist incomplete: {incompleteFields.map(([f]) => f).join(", ")}
+                Blocked: checklist incomplete, {incompleteFields.map(([f]) => f).join(", ")}
               </p>
             )}
           </div>

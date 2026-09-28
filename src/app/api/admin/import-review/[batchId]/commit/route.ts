@@ -71,7 +71,7 @@ export async function POST(
   const validRows = toCommit.filter((row) => {
     const itemNumber = (row.coerced as Record<string, unknown> | undefined)?.itemNumber;
     if (!itemNumber || typeof itemNumber !== "string") {
-      errors.push({ rowId: row._id.toString(), message: "Row has no itemNumber — cannot commit" });
+      errors.push({ rowId: row._id.toString(), message: "Row has no itemNumber; cannot commit" });
       return false;
     }
     return true;

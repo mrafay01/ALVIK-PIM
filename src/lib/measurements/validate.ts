@@ -54,7 +54,7 @@ function validateMeasurementValue(
       field: fieldKey,
       label,
       row,
-      message: `${label} has unrealistic precision (${value}) — check the source value.`,
+      message: `${label} has unrealistic precision (${value}); check the source value.`,
     });
   }
   if (!unit || !ALL_UNITS.has(unit)) {

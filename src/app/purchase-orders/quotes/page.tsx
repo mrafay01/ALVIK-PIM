@@ -38,7 +38,7 @@ export default async function QuotesListPage() {
       title="Quotes"
     >
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Every vendor quote intaken here — as an uploaded file or entered by hand. Parsed line
+        Every vendor quote intaken here, as an uploaded file or entered by hand. Parsed line
         items are staged for review; nothing becomes an item until you approve and commit it.
       </p>
 

@@ -24,7 +24,7 @@ export default async function SettingsPage() {
   return (
     <AppShell activeHref="/settings" eyebrow="Account" title="Settings">
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Your account details, security, and — for administrators — user &amp; role management. Notification
+        Your account details, security, and (for administrators) user &amp; role management. Notification
         preferences live on their own page.
       </p>
 
@@ -44,7 +44,7 @@ export default async function SettingsPage() {
           </dd>
         </dl>
         <p className="text-[0.78rem] text-ink-faint mt-3.5 mb-0">
-          Need your name or role changed? Ask an administrator. Email and password are self-service, both below —
+          Need your name or role changed? Ask an administrator. Email and password are self-service, both below;
           each requires your current password and a verification code.
         </p>
       </Card>
@@ -56,7 +56,7 @@ export default async function SettingsPage() {
         </div>
         <ThemeToggle />
         <p className="text-[0.78rem] text-ink-faint mt-3 mb-0">
-          &quot;System&quot; follows your device&apos;s own dark/light setting. Saved to this browser only — a
+          &quot;System&quot; follows your device&apos;s own dark/light setting. Saved to this browser only; a
           different device keeps its own choice.
         </p>
       </Card>

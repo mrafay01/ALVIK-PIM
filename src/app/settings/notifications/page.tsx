@@ -40,7 +40,7 @@ export default async function NotificationsSettingsPage() {
           <h2 className="text-[0.95rem] m-0">Notification preferences</h2>
         </div>
         <p className="text-[0.8rem] text-ink-faint mb-1">
-          These control what you&apos;re alerted about, not how (email vs. in-app) — that&apos;s not configurable yet.
+          These control what you&apos;re alerted about, not how (email vs. in-app); that&apos;s not configurable yet.
         </p>
         <NotificationPrefsForm initialPrefs={prefs} />
       </Card>

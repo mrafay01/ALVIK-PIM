@@ -19,7 +19,7 @@ export default function MarketplaceExportIndexPage() {
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
         Pick a marketplace, choose which items to include, review and fill in any
         marketplace-specific details, then download the exact bulk-import file for that
-        platform. Nothing is sent anywhere automatically — you upload the downloaded file
+        platform. Nothing is sent anywhere automatically; you upload the downloaded file
         yourself on the marketplace&apos;s side.
       </p>
 

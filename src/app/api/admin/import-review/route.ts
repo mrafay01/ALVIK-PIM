@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   const contentLength = Number(req.headers.get("content-length") ?? 0);
   if (contentLength > MAX_UPLOAD_BYTES) {
     return NextResponse.json(
-      { error: `File too large — the limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
+      { error: `File too large. The limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
       { status: 413 }
     );
   }
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   }
   if (file.size > MAX_UPLOAD_BYTES) {
     return NextResponse.json(
-      { error: `File too large — the limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
+      { error: `File too large. The limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
       { status: 413 }
     );
   }
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
   }
   if (rows.length > MAX_ROWS) {
     return NextResponse.json(
-      { error: `Too many rows (${rows.length}) — the limit per file is ${MAX_ROWS}. Split the file and upload in parts.` },
+      { error: `Too many rows (${rows.length}). The limit per file is ${MAX_ROWS}. Split the file and upload in parts.` },
       { status: 413 }
     );
   }
@@ -114,14 +114,14 @@ export async function POST(req: NextRequest) {
     if (sku && withinBatchDupes.has(sku)) {
       flags.push({
         field: "itemNumber",
-        message: `SKU "${sku}" appears more than once in this file — later approved rows will overwrite earlier ones`,
+        message: `SKU "${sku}" appears more than once in this file; later approved rows will overwrite earlier ones`,
         rawValue: sku,
       });
     }
     if (sku && existingSkus.has(sku)) {
       flags.push({
         field: "itemNumber",
-        message: `SKU "${sku}" already exists in the database — approving this row will merge into the existing item, not create a new one`,
+        message: `SKU "${sku}" already exists in the database; approving this row will merge into the existing item, not create a new one`,
         rawValue: sku,
       });
     }

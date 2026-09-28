@@ -133,7 +133,7 @@ export function VariationsStep({
             <h1 className="text-lg font-semibold text-ink m-0 mb-1">Variations</h1>
             <p className="text-[0.85rem] text-ink-soft m-0">
               Building variations for <span className="font-mono font-semibold text-ink">{base.sku || "—"}</span>
-              {base.title && <> — {base.title}</>}. Category, brand, gender, metal, and MSRP are locked to the
+              {base.title && <> ({base.title})</>}. Category, brand, gender, metal, and MSRP are locked to the
               base item&apos;s values on every variation; title, description, plating, and stone details can
               differ per row.
             </p>
@@ -171,7 +171,7 @@ export function VariationsStep({
         {variations.length === 0 ? (
           <div className="px-5 py-10 text-center">
             <p className="text-ink-faint text-[0.87rem] m-0 mb-3">
-              Add a row for each plating / stone / size variant of this product — e.g. suffix{" "}
+              Add a row for each plating / stone / size variant of this product, e.g. suffix{" "}
               <code className="font-mono">GP</code>, <code className="font-mono">RP</code>,{" "}
               <code className="font-mono">GP-6</code>.
             </p>
@@ -271,7 +271,7 @@ export function VariationsStep({
                             />
                             <p className="text-[0.76rem] text-warn mt-2 mb-0 flex items-center gap-1.5">
                               <AlertTriangle size={12} /> This breaks the automatic {base.sku || "base"}-
-                              {v.suffix || "suffix"} SKU pattern — the two items stay linked as a family
+                              {v.suffix || "suffix"} SKU pattern. The two items stay linked as a family
                               internally, but the SKU itself won&apos;t show the relationship.
                             </p>
                           </>
@@ -429,7 +429,7 @@ function VariationMeasurements({
           onClick={() => setOpen(true)}
           className="text-[0.78rem] text-ink-faint hover:text-brass transition-colors duration-150 bg-transparent border-none p-0 cursor-pointer mt-1.5"
         >
-          Same as base — click to override for this variation
+          Same as base, click to override for this variation
         </button>
       ) : (
         <div className="mt-3">

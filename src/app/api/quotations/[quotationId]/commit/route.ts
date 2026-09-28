@@ -52,7 +52,7 @@ export async function POST(
     const vsku = typeof c.vendorSku === "string" ? c.vendorSku.trim() : "";
     const key = cz ? `cz:${cz}` : vsku ? `vsku:${vsku}` : "";
     if (!key) {
-      errors.push({ rowId: String(row._id), message: "Row has no CZ item number and no vendor item# — cannot commit" });
+      errors.push({ rowId: String(row._id), message: "Row has no CZ item number and no vendor item#; cannot commit" });
       continue;
     }
     const group = rowsByKey.get(key);

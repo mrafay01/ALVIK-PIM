@@ -18,7 +18,7 @@ export async function POST() {
   const rl = rateLimit("monday:sync", { limit: 3, windowMs: 60_000 });
   if (!rl.allowed) {
     return NextResponse.json(
-      { error: "Sync already ran recently — wait a minute before retrying." },
+      { error: "Sync already ran recently. Wait a minute before retrying." },
       { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } }
     );
   }

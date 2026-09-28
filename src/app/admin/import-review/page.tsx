@@ -27,7 +27,7 @@ export default async function ImportReviewPage() {
   return (
     <AppShell activeHref="/admin/import-review" eyebrow="Data migration" title="Legacy Import Review">
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Upload the Master File export. Every row is parsed and staged here first — nothing writes
+        Upload the Master File export. Every row is parsed and staged here first; nothing writes
         to the product database until you approve it, row by row.
       </p>
 

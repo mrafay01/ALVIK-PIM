@@ -118,7 +118,7 @@ export function MediaUpload({
       <p className="text-[0.78rem] text-ink-faint mb-3">
         Name files <code className="font-mono">{folderKey}.jpg</code> for the main shot,{" "}
         <code className="font-mono">{folderKey}-S1.jpg</code> for sides,{" "}
-        <code className="font-mono">{folderKey}-M1.jpg</code> for models — routed to SharePoint
+        <code className="font-mono">{folderKey}-M1.jpg</code> for models, routed to SharePoint
         automatically by the suffix.
       </p>
 
@@ -158,7 +158,7 @@ export function MediaUpload({
             >
               <ExternalLink size={12} />
               <span className="capitalize">{m.subfolder}</span>
-              <span className="text-ink-faint">— view on SharePoint</span>
+              <span className="text-ink-faint">(view on SharePoint)</span>
             </a>
           ))}
         </div>

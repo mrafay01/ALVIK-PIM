@@ -122,7 +122,7 @@ function coerceDate(raw: unknown, field: string, flags: FieldFlag[]): string | n
       }
     }
   }
-  flags.push({ field, message: `Could not parse date "${String(raw)}" — needs manual entry`, rawValue: raw });
+  flags.push({ field, message: `Could not parse date "${String(raw)}"; needs manual entry`, rawValue: raw });
   return null;
 }
 
@@ -206,7 +206,7 @@ export function stageRow(
   if (!coerced.itemNumber && !coerced.vendorSku) {
     flags.push({
       field: "itemNumber",
-      message: "No CZ item number and no vendor item# — the row needs one of them to be committed",
+      message: "No CZ item number and no vendor item#; the row needs one of them to be committed",
       rawValue: byKey.itemNumber ?? byKey.vendorSku ?? null,
     });
   }
@@ -318,7 +318,7 @@ export async function parseQuoteFileBuffer(
       xlsxData = await convertXlsToXlsxBuffer(data);
     } catch {
       throw new QuoteParseError(
-        "Couldn't read this .xls file — it may be corrupted or password-protected. " +
+        "Couldn't read this .xls file; it may be corrupted or password-protected. " +
           "Open it in Excel and use “Save As” to save a .xlsx or .csv copy, then upload that."
       );
     }

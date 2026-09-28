@@ -16,7 +16,7 @@ export default async function NewQuotePage() {
       title="New Quote"
     >
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Enter a vendor quote by hand. One quote can carry many line items — add a row per item.
+        Enter a vendor quote by hand. One quote can carry many line items; add a row per item.
         On save, every row is staged for review before it becomes an item.
       </p>
       <NewQuoteForm vendors={vendors.map((v) => ({ id: String(v._id), name: v.name }))} />

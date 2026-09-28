@@ -29,7 +29,7 @@ export async function POST(
   }
   if (!isMasterRecordComplete(item)) {
     return NextResponse.json(
-      { error: "The item's master record isn't complete yet — fill in the missing fields first" },
+      { error: "The item's master record isn't complete yet. Fill in the missing fields first" },
       { status: 400 }
     );
   }

@@ -18,7 +18,9 @@ const NAV: (NavItem & { roles: Role[] | null })[] = [
     roles: ["administrator", "marketplace_listing"] as Role[],
   },
   { href: "/admin/import-review", label: "Legacy Import", icon: "FileSpreadsheet", roles: ["administrator"] as Role[] },
-  { href: "/admin/monday-pull", label: "Monday Import", icon: "RefreshCw", roles: ["administrator"] as Role[] },
+  // Monday Import ("/admin/monday-pull") is deliberately not in this list
+  // any more — it's reached from a button on the Purchase Orders page
+  // instead (still admin-only, still /admin-prefix gated in middleware.ts).
   // Settings is the last item in the main nav list (not a separate footer
   // block) and expands as a dropdown in place — see Sidebar.tsx. Visible to
   // everyone; "Users & Roles" inside it is filtered to admins there.

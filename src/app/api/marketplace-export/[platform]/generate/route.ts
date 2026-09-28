@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
   }
   if (itemIds.length > MAX_EXPORT_ITEMS) {
     return NextResponse.json(
-      { error: `Too many items selected (${itemIds.length}) — the limit per export is ${MAX_EXPORT_ITEMS}.` },
+      { error: `Too many items selected (${itemIds.length}); the limit per export is ${MAX_EXPORT_ITEMS}.` },
       { status: 413 }
     );
   }

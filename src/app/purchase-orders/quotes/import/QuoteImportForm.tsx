@@ -2,17 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CircleAlert } from "lucide-react";
+import { Upload } from "lucide-react";
 import { Field, Input, Select, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 
+const MANUAL_VENDOR_OPTION = "__manual__";
+
 export function QuoteImportForm({ vendors }: { vendors: { id: string; name: string }[] }) {
   const router = useRouter();
-  const [vendorId, setVendorId] = useState(vendors[0]?.id ?? "");
+  const [vendorId, setVendorId] = useState(vendors[0]?.id ?? MANUAL_VENDOR_OPTION);
+  const [manualVendorName, setManualVendorName] = useState("");
   const [poNumber, setPoNumber] = useState("");
   const [season, setSeason] = useState("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isManualVendor = vendorId === MANUAL_VENDOR_OPTION;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -28,12 +33,20 @@ export function QuoteImportForm({ vendors }: { vendors: { id: string; name: stri
       setError("Choose a vendor.");
       return;
     }
+    if (isManualVendor && !manualVendorName.trim()) {
+      setError("Enter the new vendor's name.");
+      return;
+    }
 
     setUploading(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("vendorId", vendorId);
+      if (isManualVendor) {
+        formData.append("vendorName", manualVendorName.trim());
+      } else {
+        formData.append("vendorId", vendorId);
+      }
       if (poNumber.trim()) formData.append("poNumber", poNumber.trim());
       if (season.trim()) formData.append("season", season.trim());
 
@@ -45,34 +58,39 @@ export function QuoteImportForm({ vendors }: { vendors: { id: string; name: stri
       }
       router.push(`/purchase-orders/quotes/${data.quotationId}`);
     } catch {
-      setError("Upload failed — check your connection and try again.");
+      setError("Upload failed. Check your connection and try again.");
     } finally {
       setUploading(false);
     }
-  }
-
-  if (vendors.length === 0) {
-    return (
-      <p className="text-critical text-[0.87rem] flex items-center gap-1.5">
-        <CircleAlert size={15} /> No vendors yet — seed a vendor first.
-      </p>
-    );
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Field label="Vendor">
         <Select value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
+          {vendors.length === 0 && <option value="">No vendors yet</option>}
           {vendors.map((v) => (
             <option key={v.id} value={v.id}>
               {v.name}
             </option>
           ))}
+          <option value={MANUAL_VENDOR_OPTION}>+ Add new vendor…</option>
         </Select>
       </Field>
 
+      {isManualVendor && (
+        <Field label="New vendor name">
+          <Input
+            value={manualVendorName}
+            onChange={(e) => setManualVendorName(e.target.value)}
+            placeholder="Vendor name"
+            autoFocus
+          />
+        </Field>
+      )}
+
       <div className="flex gap-3.5 flex-wrap">
-        <Field label="Vendor PO / quote ref (optional)" width={220}>
+        <Field label="Vendor PO (optional)" width={220}>
           <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO-1234" />
         </Field>
         <Field label="Season (optional)" width={160}>

@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   const base = splitSku(d.sku);
   if (base.variantSuffix) {
     return NextResponse.json(
-      { error: "The main SKU shouldn't contain a hyphen — add variations separately" },
+      { error: "The main SKU shouldn't contain a hyphen. Add variations separately" },
       { status: 400 }
     );
   }

@@ -83,7 +83,7 @@ export function MondayUpdates({ mondayItemId }: { mondayItemId: string }) {
           <RefreshCw size={12} /> {loading ? "Loading…" : "Refresh"}
         </button>
       </div>
-      <p className="text-[0.8rem] text-ink-faint mb-1.5">Read-only — fetched live from the board, never stored in PIM.</p>
+      <p className="text-[0.8rem] text-ink-faint mb-1.5">Read-only; fetched live from the board, never stored in PIM.</p>
 
       {error && (
         <div className="flex gap-1.5 items-start text-critical text-[0.83rem] py-2.5">

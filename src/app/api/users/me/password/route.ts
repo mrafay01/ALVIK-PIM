@@ -58,7 +58,7 @@ export async function PATCH(req: NextRequest) {
   await connectDB();
   const ticketOk = await redeemSessionTicket(new Types.ObjectId(userId), sessionTicket, "change_password");
   if (!ticketOk) {
-    return NextResponse.json({ error: "Verification expired or already used — start over." }, { status: 400 });
+    return NextResponse.json({ error: "Verification expired or already used. Start over." }, { status: 400 });
   }
 
   const user = await User.findById(userId);

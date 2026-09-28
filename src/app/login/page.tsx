@@ -12,17 +12,17 @@ const HIGHLIGHTS = [
   {
     icon: Gem,
     title: "One product spine",
-    body: "Every vendor quote, sample SKU, and review decision lives in a single record — no more chasing Excel Master Files.",
+    body: "Every vendor quote, sample SKU, and review decision lives in a single record, no more chasing Excel Master Files.",
   },
   {
     icon: ClipboardList,
     title: "Purchase orders that enforce themselves",
-    body: "A PO can't move to Ready to Ship until the back-office checklist is actually complete — the server checks, not just the eye.",
+    body: "A PO can't move to Ready to Ship until the back-office checklist is actually complete; the server checks, not just the eye.",
   },
   {
     icon: Workflow,
     title: "Monday & SharePoint, connected",
-    body: "Vendor PI files, status updates, and product imagery sync in — without replacing the boards vendors already know.",
+    body: "Vendor PI files, status updates, and product imagery sync in, without replacing the boards vendors already know.",
   },
 ];
 
@@ -219,7 +219,7 @@ export default function LoginPage() {
             </h1>
             <p className="mt-[18px] text-base text-ink-soft leading-[1.7]">
               CZC PIM replaces scattered Excel Master Files and Monday boards with a single
-              source of truth — from vendor intake to purchase orders to payables, built for
+              source of truth, from vendor intake to purchase orders to payables, built for
               how the wholesale jewelry business actually runs.
             </p>
           </div>

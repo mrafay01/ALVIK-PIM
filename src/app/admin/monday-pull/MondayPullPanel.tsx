@@ -105,12 +105,12 @@ export function MondayPullPanel() {
           <div>
             <h2 className="text-base mb-1">Pull updates from Monday.com</h2>
             <p className="text-[0.85rem] text-ink-soft m-0 max-w-[560px]">
-              Reads every item on the live Purchase Orders board — status, checklist progress, PO totals, dates,
-              priority, tracking, and vendor-uploaded PI files — and shows what would change before anything is
+              Reads every item on the live Purchase Orders board (status, checklist progress, PO totals, dates,
+              priority, tracking, and vendor-uploaded PI files) and shows what would change before anything is
               written. Never modifies the Monday board. A vendor name on the board that doesn&apos;t exist in
               PIM yet is created automatically (matched by exact name, so it&apos;s never duplicated). The
               board&apos;s exact status label is always captured, even when it&apos;s a side-lane state (Stuck,
-              Canceled, On Hold, …) with no equivalent in this app&apos;s pipeline — only an item with no vendor
+              Canceled, On Hold, …) with no equivalent in this app&apos;s pipeline; only an item with no vendor
               set at all is skipped.
             </p>
           </div>
@@ -137,7 +137,7 @@ export function MondayPullPanel() {
           <div className={`flex gap-2 items-start text-good text-[0.88rem] ${result.errors.length ? "mb-2.5" : ""}`}>
             <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
             <span>
-              Import complete — {result.updated} PO(s) updated, {result.created} created, {result.skipped} skipped.
+              Import complete: {result.updated} PO(s) updated, {result.created} created, {result.skipped} skipped.
             </span>
           </div>
           {result.errors.length > 0 && (
@@ -222,7 +222,7 @@ export function MondayPullPanel() {
                         {row.statusText ?? "—"}
                         {row.statusText && !row.mappedStatus && (
                           <span
-                            title="No confident pipeline-status equivalent — stored as-is on mondayStatusText, pipeline status left unchanged"
+                            title="No confident pipeline-status equivalent; stored as-is on mondayStatusText, pipeline status left unchanged"
                             className="ml-1.5 inline-flex items-center gap-1 align-[-1px] text-[0.72rem] text-warn"
                           >
                             <TriangleAlert size={12} /> unmapped
@@ -267,7 +267,7 @@ export function MondayPullPanel() {
       )}
 
       <p className="text-[0.78rem] text-ink-faint flex items-center gap-1.5">
-        <ExternalLink size={12} /> Vendor PI files stay on Monday — imported POs link to them and fetch a fresh
+        <ExternalLink size={12} /> Vendor PI files stay on Monday; imported POs link to them and fetch a fresh
         download link on click rather than copying the file into PIM.
       </p>
     </div>

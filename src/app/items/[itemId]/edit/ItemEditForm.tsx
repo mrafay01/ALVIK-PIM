@@ -66,7 +66,7 @@ function SectionHeader({ icon, title, hint }: { icon: React.ReactNode; title: st
     <div className="flex items-center gap-2 mb-4">
       <span className="text-brass shrink-0 flex items-center">{icon}</span>
       <h2 className="text-[0.92rem] font-semibold m-0">{title}</h2>
-      {hint && <span className="text-[0.78rem] text-ink-faint">— {hint}</span>}
+      {hint && <span className="text-[0.78rem] text-ink-faint">({hint})</span>}
     </div>
   );
 }
@@ -273,7 +273,7 @@ export function ItemEditForm({
           </Field>
           <div>
             <span className="text-[0.72rem] font-semibold text-ink-faint uppercase tracking-wide block mb-2">
-              Feature points — first 3 required, up to 10
+              Feature points (first 3 required, up to 10)
             </span>
             <BulletFeaturesEditor
               values={bulletFeatures}

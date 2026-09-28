@@ -205,7 +205,7 @@ export default async function ItemDetailPage({
                 label="Review decision"
                 value={
                   item.reviewDecision?.decision
-                    ? `${item.reviewDecision.decision}${item.reviewDecision.note ? ` — ${item.reviewDecision.note}` : ""}`
+                    ? `${item.reviewDecision.decision}${item.reviewDecision.note ? ` (${item.reviewDecision.note})` : ""}`
                     : "pending"
                 }
               />

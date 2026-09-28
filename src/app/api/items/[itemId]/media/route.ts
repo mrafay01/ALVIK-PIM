@@ -50,7 +50,7 @@ export async function POST(
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
   }
   if (files.length > MAX_FILES) {
-    return NextResponse.json({ error: `Too many files — max ${MAX_FILES} per upload` }, { status: 413 });
+    return NextResponse.json({ error: `Too many files, max ${MAX_FILES} per upload` }, { status: 413 });
   }
   const oversized = files.find((f) => f.size > MAX_FILE_BYTES);
   if (oversized) {

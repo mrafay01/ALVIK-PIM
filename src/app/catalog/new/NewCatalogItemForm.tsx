@@ -30,7 +30,7 @@ function SectionHeader({ icon, title, hint }: { icon: React.ReactNode; title: st
     <div className="flex items-center gap-2 mb-4">
       <span className="text-brass shrink-0 flex items-center">{icon}</span>
       <h2 className="text-[0.92rem] font-semibold m-0">{title}</h2>
-      {hint && <span className="text-[0.78rem] text-ink-faint">— {hint}</span>}
+      {hint && <span className="text-[0.78rem] text-ink-faint">({hint})</span>}
     </div>
   );
 }
@@ -119,7 +119,7 @@ export function NewCatalogItemForm() {
       return "SKU, title and category are required.";
     }
     if (sku.includes("-")) {
-      return "The main SKU shouldn't contain a hyphen — variations get their SKU from the confirmation step next.";
+      return "The main SKU shouldn't contain a hyphen; variations get their SKU from the confirmation step next.";
     }
     if (bulletFeatures.slice(0, 3).some((b) => !b.trim())) {
       return "The first 3 feature points are required.";
@@ -295,7 +295,7 @@ export function NewCatalogItemForm() {
           </Field>
           <div>
             <span className="text-[0.72rem] font-semibold text-ink-faint uppercase tracking-wide block mb-2">
-              Feature points — first 3 required, up to 10
+              Feature points (first 3 required, up to 10)
             </span>
             <BulletFeaturesEditor
               values={bulletFeatures}
@@ -354,7 +354,7 @@ export function NewCatalogItemForm() {
       <Card>
         <SectionHeader icon={<Megaphone size={16} />} title="Marketplace descriptions" />
         <p className="text-ink-soft text-[0.83rem] -mt-2 mb-4">
-          Per-marketplace copy — falls back to the general description above until a platform gets its
+          Per-marketplace copy, falling back to the general description above until a platform gets its
           own. AI-assisted drafting from the title/description is planned; for now these are entered by
           hand.
         </p>
@@ -439,7 +439,7 @@ export function NewCatalogItemForm() {
       <Card>
         <SectionHeader icon={<Layers size={16} />} title="Variations" />
         <p className="text-ink-soft text-[0.85rem] mb-4">
-          Does this item come in multiple platings, stone colors, or sizes — each needing its own SKU?
+          Does this item come in multiple platings, stone colors, or sizes, each needing its own SKU?
           Category, brand, gender, metal, and MSRP always stay the same across every variation; title,
           description, and stone/plating details can differ.
         </p>

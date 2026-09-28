@@ -140,7 +140,7 @@ export function ExportReviewTable({ platform, rows: initialRows }: { platform: s
       {rows.length === 0 ? (
         <Card>
           <p className="text-ink-faint m-0 text-[0.88rem]">
-            No exportable items yet — items need a permanent SKU and to be past sample review.
+            No exportable items yet. Items need a permanent SKU and to be past sample review.
           </p>
         </Card>
       ) : (

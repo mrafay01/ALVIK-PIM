@@ -41,7 +41,7 @@ export function UploadForm() {
 
       router.push(`/admin/import-review/${data.batchId}`);
     } catch {
-      setError("Upload failed — check your connection and try again.");
+      setError("Upload failed. Check your connection and try again.");
     } finally {
       setUploading(false);
     }

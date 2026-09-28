@@ -1,3 +1,5 @@
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import PurchaseOrder from "@/models/PurchaseOrder";
@@ -6,8 +8,9 @@ import { Pill } from "@/components/ui/Pill";
 import { StatCard } from "@/components/ui/StatCard";
 import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import Link from "next/link";
-import { ClipboardList, Ship, TriangleAlert, DollarSign, FilePlus2, Upload } from "lucide-react";
+import { ClipboardList, Ship, TriangleAlert, DollarSign, FilePlus2, Upload, RefreshCw } from "lucide-react";
 import { PO_STATUS_LABEL, PO_STATUS_TONE } from "@/lib/statusDisplay";
+import type { Role } from "@/lib/enums";
 
 const TH_CLASS =
   "text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap";
@@ -20,6 +23,9 @@ export default async function PurchaseOrdersPage({
 }) {
   const { page: pageParam } = await searchParams;
   const page = parsePage(pageParam);
+  const session = await getServerSession(authOptions);
+  const role = session?.user?.role as Role | undefined;
+  const isAdmin = role === "administrator";
   await connectDB();
 
   const [pos, total, shippedCount, highPriorityCount, valueAgg] = await Promise.all([
@@ -43,11 +49,11 @@ export default async function PurchaseOrdersPage({
   return (
     <AppShell activeHref="/purchase-orders" eyebrow="Vendor pipeline" title="Purchase Orders">
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        One collection replaces six separate Monday.com stage boards — each was really a filtered
+        One collection replaces six separate Monday.com stage boards; each was really a filtered
         view of the same list. Create a PO from an item&apos;s detail page once it has a sample SKU.
       </p>
 
-      <div className="flex gap-2.5 mb-6 flex-wrap">
+      <div className="flex items-center gap-2.5 mb-6 flex-wrap">
         <Link
           href="/purchase-orders/quotes/new"
           className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-brass text-on-brass border border-brass shadow-[0_2px_10px_var(--brass-glow)] no-underline hover:bg-brass-hover"
@@ -66,6 +72,19 @@ export default async function PurchaseOrdersPage({
         >
           View all quotes
         </Link>
+
+        {/* Monday Import moved here from the sidebar — admin-only, same as
+            before (the /admin/monday-pull route itself stays middleware-
+            gated regardless). Pushed to the right of the row via ml-auto
+            while the rest of the buttons stay left-aligned. */}
+        {isAdmin && (
+          <Link
+            href="/admin/monday-pull"
+            className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-transparent text-ink-soft border border-border-strong no-underline hover:border-brass hover:text-brass ml-auto"
+          >
+            <RefreshCw size={15} /> Monday Import
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-4 gap-3.5 mb-7">
@@ -78,7 +97,7 @@ export default async function PurchaseOrdersPage({
       {total === 0 ? (
         <Card>
           <p className="text-ink-faint m-0 text-[0.88rem]">
-            None yet — create one from an item&apos;s detail page once it has a sample SKU.
+            None yet. Create one from an item&apos;s detail page once it has a sample SKU.
           </p>
         </Card>
       ) : (

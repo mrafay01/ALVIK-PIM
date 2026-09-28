@@ -258,7 +258,7 @@ export default async function DashboardPage() {
   return (
     <AppShell activeHref="/dashboard" eyebrow="Overview" title="Dashboard">
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        A snapshot of the whole pipeline — items, purchase orders, catalog, and payables — as of
+        A snapshot of the whole pipeline (items, purchase orders, catalog, and payables) as of
         right now.
       </p>
 

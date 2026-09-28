@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     const contentLength = Number(req.headers.get("content-length") ?? 0);
     if (contentLength > MAX_UPLOAD_BYTES) {
       return NextResponse.json(
-        { error: `File too large — the limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
+        { error: `File too large. The limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
         { status: 413 }
       );
     }
@@ -74,19 +74,27 @@ export async function POST(req: NextRequest) {
     const form = await req.formData();
     const file = form.get("file");
     const vendorField = form.get("vendorId");
+    const vendorNameField = form.get("vendorName");
     if (!file || !(file instanceof File)) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
     if (file.size > MAX_UPLOAD_BYTES) {
       return NextResponse.json(
-        { error: `File too large — the limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
+        { error: `File too large. The limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
         { status: 413 }
       );
     }
-    if (typeof vendorField !== "string" || !/^[0-9a-fA-F]{24}$/.test(vendorField)) {
+    // Same either/or as the manual (JSON) path — an existing vendor picked
+    // from the dropdown, or a brand-new name typed into its "+ Add new
+    // vendor" option, resolved/created below alongside the manual path's
+    // identical logic.
+    if (typeof vendorField === "string" && /^[0-9a-fA-F]{24}$/.test(vendorField)) {
+      vendorId = vendorField;
+    } else if (typeof vendorNameField === "string" && vendorNameField.trim()) {
+      vendorName = vendorNameField.trim().slice(0, 200);
+    } else {
       return NextResponse.json({ error: "Choose a vendor for this quote" }, { status: 400 });
     }
-    vendorId = vendorField;
     source = "file_upload";
     sourceFileName = file.name;
     const poField = form.get("poNumber");
@@ -142,9 +150,10 @@ export async function POST(req: NextRequest) {
       }
     }
   } else {
-    // QuotationManualSchema's refine() already guarantees one of the two is
-    // set for the manual (JSON) path; the multipart path always sets
-    // vendorId directly above. This is unreachable in practice.
+    // Unreachable in practice: QuotationManualSchema's refine() guarantees
+    // one of the two is set for the manual (JSON) path, and the multipart
+    // branch above already returns early if neither vendorId nor
+    // vendorName was present in the form.
     return NextResponse.json({ error: "Choose a vendor for this quote" }, { status: 400 });
   }
 
@@ -153,7 +162,7 @@ export async function POST(req: NextRequest) {
   }
   if (staged.length > MAX_ROWS) {
     return NextResponse.json(
-      { error: `Too many rows (${staged.length}) — the limit per quote is ${MAX_ROWS}` },
+      { error: `Too many rows (${staged.length}); the limit per quote is ${MAX_ROWS}` },
       { status: 413 }
     );
   }

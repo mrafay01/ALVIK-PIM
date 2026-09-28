@@ -61,7 +61,7 @@ export default async function PayablesPage({
   return (
     <AppShell activeHref="/payables" eyebrow="Vendor finance" title="Payables">
       <p className="text-ink-soft max-w-[68ch] mb-5 text-[0.92rem]">
-        Every payment tranche — deposit, balance, prepayment, or credit — recorded against its PO,
+        Every payment tranche (deposit, balance, prepayment, or credit) recorded against its PO,
         with due dates calculated from vendor terms.
       </p>
 

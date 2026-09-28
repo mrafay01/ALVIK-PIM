@@ -40,7 +40,7 @@ export async function PATCH(
   const isSelf = session.user?.id === userId;
   if (isSelf && (body.role !== undefined || body.active !== undefined)) {
     return NextResponse.json(
-      { error: "You can't change your own role or active status — ask another administrator" },
+      { error: "You can't change your own role or active status. Ask another administrator" },
       { status: 400 }
     );
   }

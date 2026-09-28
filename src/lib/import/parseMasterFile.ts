@@ -59,7 +59,7 @@ function coerceMetal(raw: unknown, flags: FieldFlag[]): string | null {
   if (mapped) return mapped;
   flags.push({
     field: "specs.metal",
-    message: `Unrecognized metal value "${str}" — not in the known mapping table`,
+    message: `Unrecognized metal value "${str}"; not in the known mapping table`,
     rawValue: raw,
   });
   return str; // keep the raw text so the reviewer can see and correct it
@@ -88,7 +88,7 @@ function coerceDate(raw: unknown, field: string, flags: FieldFlag[]): string | n
     }
     flags.push({
       field,
-      message: `Could not parse date "${trimmed}" — needs manual entry`,
+      message: `Could not parse date "${trimmed}"; needs manual entry`,
       rawValue: raw,
     });
     return null;
@@ -314,7 +314,7 @@ export async function parseMasterFileBuffer(
     }
 
     if (!coerced.itemNumber) {
-      flags.push({ field: "itemNumber", message: "Missing SKU — row cannot be imported without one", rawValue: null });
+      flags.push({ field: "itemNumber", message: "Missing SKU; row cannot be imported without one", rawValue: null });
     }
 
     staged.push({ rowNumber, raw: rawRow, coerced, flags });

@@ -191,7 +191,7 @@ export function MeasurementFieldsEditor({
         </h3>
         <p className="text-ink-faint text-[0.78rem] mb-3 mt-0">
           A catch-all for supplier text that doesn&apos;t cleanly map to one of the fields above (e.g.
-          combined dimensions like &quot;5x4mm&quot; from an import) — kept instead of dropped or guessed.
+          combined dimensions like &quot;5x4mm&quot; from an import), kept instead of dropped or guessed.
         </p>
         <Field label="Raw measurement note">
           <Input value={value.raw ?? ""} onChange={(e) => onChange({ ...value, raw: e.target.value })} />
@@ -218,7 +218,7 @@ function SectionHeader({ hint }: { hint?: string }) {
         <Ruler size={16} />
       </span>
       <h2 className="text-[0.92rem] font-semibold m-0">Measurements</h2>
-      {hint && <span className="text-[0.78rem] text-ink-faint">— {hint}</span>}
+      {hint && <span className="text-[0.78rem] text-ink-faint">({hint})</span>}
     </div>
   );
 }

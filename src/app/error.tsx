@@ -31,7 +31,7 @@ export default function Error({
         </span>
         <h1 className="text-lg mb-2">Something went wrong</h1>
         <p className="text-ink-soft text-sm mb-[18px]">
-          This screen couldn&apos;t load. It&apos;s usually temporary — try again in a
+          This screen couldn&apos;t load. It&apos;s usually temporary; try again in a
           moment.
         </p>
         <div className="flex justify-center gap-2">

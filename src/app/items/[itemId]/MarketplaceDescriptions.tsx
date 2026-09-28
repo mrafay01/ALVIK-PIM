@@ -63,7 +63,7 @@ export function MarketplaceDescriptions({
     <Card>
       <h2 className="text-[0.95rem] mb-1.5">Marketplace descriptions</h2>
       <p className="text-ink-soft text-[0.83rem] mb-3.5">
-        Per-marketplace copy — falls back to the general description above until a platform gets its
+        Per-marketplace copy, falling back to the general description above until a platform gets its
         own. AI-assisted drafting from the title/description is planned; for now these are edited by
         hand.
       </p>

@@ -85,9 +85,9 @@ export function ItemActions({
     <div className="flex flex-col gap-4">
       {hasReviewDecision && status === "approved" && !hasSampleSku && (
         <Card>
-          <SectionTitle>Step 2 — Assign sample SKU</SectionTitle>
+          <SectionTitle>Step 2: Assign sample SKU</SectionTitle>
           <p className="text-[0.83rem] text-ink-soft mb-3">
-            A temporary SKU for the sample stage — kept permanently for audit history even after
+            A temporary SKU for the sample stage, kept permanently for audit history even after
             a real item number is assigned later.
           </p>
           <div className="flex gap-2.5 items-end">
@@ -105,9 +105,9 @@ export function ItemActions({
 
       {hasSampleSku && status !== "po_sent" && (
         <Card>
-          <SectionTitle>Step 3 — Create purchase order</SectionTitle>
+          <SectionTitle>Step 3: Create purchase order</SectionTitle>
           <p className="text-[0.83rem] text-ink-soft mb-3">
-            Opens the PO/PI pipeline for this item — sample quantity and vendor unit cost, if known.
+            Opens the PO/PI pipeline for this item, with sample quantity and vendor unit cost, if known.
           </p>
           <form onSubmit={createPO} className="flex gap-2.5 items-end flex-wrap">
             <Field label="PO number" width={140}>

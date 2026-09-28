@@ -67,12 +67,12 @@ export async function PATCH(req: NextRequest) {
   const userObjectId = new Types.ObjectId(userId);
   const ticketOk = await redeemSessionTicket(userObjectId, sessionTicket, "change_email");
   if (!ticketOk) {
-    return NextResponse.json({ error: "Verification expired or already used — start over." }, { status: 400 });
+    return NextResponse.json({ error: "Verification expired or already used. Start over." }, { status: 400 });
   }
 
   const newEmail = await getVerifiedTargetEmail(userObjectId, sessionTicket);
   if (!newEmail) {
-    return NextResponse.json({ error: "Could not determine the verified email — start over." }, { status: 400 });
+    return NextResponse.json({ error: "Could not determine the verified email. Start over." }, { status: 400 });
   }
 
   // Re-check for a race: someone else could have claimed this email in the

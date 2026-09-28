@@ -109,7 +109,7 @@ export function NotificationPrefsForm({ initialPrefs }: { initialPrefs: Notifica
       )}
       {!error && !savedAt && (
         <p className="text-ink-faint text-[0.76rem] mt-3 flex items-center gap-1.5">
-          <TriangleAlert size={12} /> These control who gets notified once the notification jobs are wired up — your
+          <TriangleAlert size={12} /> These control who gets notified once the notification jobs are wired up; your
           choice is saved now either way.
         </p>
       )}

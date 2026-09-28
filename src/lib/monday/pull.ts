@@ -199,7 +199,7 @@ export async function buildPullPlan(): Promise<PullPlan> {
         fileCount: files.length,
         reason:
           statusText && !mappedStatus
-            ? `Board status "${statusText}" has no confident app-status mapping — stored as-is, pipeline status unchanged`
+            ? `Board status "${statusText}" has no confident app-status mapping; stored as-is, pipeline status unchanged`
             : undefined,
       });
       continue;
@@ -223,7 +223,7 @@ export async function buildPullPlan(): Promise<PullPlan> {
         trackingNumber,
         joelShipConfirmed,
         fileCount: files.length,
-        reason: "No vendor set on this board item — cannot create a PO without one",
+        reason: "No vendor set on this board item; cannot create a PO without one",
       });
       continue;
     }
@@ -250,12 +250,12 @@ export async function buildPullPlan(): Promise<PullPlan> {
       joelShipConfirmed,
       fileCount: files.length,
       reason: [
-        vendorMatched ? null : `Vendor "${vendorName}" not found in PIM — will be created automatically on import`,
+        vendorMatched ? null : `Vendor "${vendorName}" not found in PIM; will be created automatically on import`,
         mappedStatus
           ? null
           : statusText
-            ? `Board status "${statusText}" has no confident app-status mapping — will default to "Send to vendor"`
-            : "No status set on board item — will default to \"Send to vendor\"",
+            ? `Board status "${statusText}" has no confident app-status mapping; will default to "Send to vendor"`
+            : "No status set on board item; will default to \"Send to vendor\"",
       ]
         .filter(Boolean)
         .join("; ") || undefined,
@@ -424,7 +424,7 @@ export async function commitPullPlan(rows: PullPlanRow[]): Promise<PullCommitRes
 
     if (row.action === "create") {
       if (!row.vendorName) {
-        errors.push({ mondayItemId: row.mondayItemId, message: "Cannot create — board item has no vendor set" });
+        errors.push({ mondayItemId: row.mondayItemId, message: "Cannot create; board item has no vendor set" });
         continue;
       }
       // Resolved either from the pre-commit lookup above or from the

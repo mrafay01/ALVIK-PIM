@@ -65,7 +65,7 @@ export default async function PurchaseOrderDetailPage({
         </Pill>
         {po.mondayStatusText && po.mondayStatusMapped === false && (
           <span
-            title="This board item's Monday status has no equivalent in this app's pipeline, so the pipeline status above wasn't moved by it — this is the board's exact current status"
+            title="This board item's Monday status has no equivalent in this app's pipeline, so the pipeline status above wasn't moved by it; this is the board's exact current status"
             className="flex items-center gap-1.5 text-[0.78rem] px-2.5 py-1 rounded-full bg-warn-bg text-warn"
           >
             <TriangleAlert size={13} /> Board status: {po.mondayStatusText}
@@ -188,12 +188,12 @@ export default async function PurchaseOrderDetailPage({
           <h2 className="text-[0.95rem]">Back-office checklist</h2>
           <span className={`text-[0.78rem] font-mono font-semibold ${allDone ? "text-good" : "text-ink-faint"}`}>
             {doneCount}/{checklistEntries.length}
-            {allDone && " — ready to ship"}
+            {allDone && " (ready to ship)"}
           </span>
         </div>
         <p className="text-[0.82rem] text-ink-soft mb-3">
           A purchase order can&apos;t move to <strong>Ready to ship</strong> until every item below is
-          complete — enforced by the server, not just this checklist.
+          complete; enforced by the server, not just this checklist.
         </p>
         <div className="flex flex-wrap gap-2">
           {checklistEntries.map(([field, value]) => {
@@ -218,7 +218,7 @@ export default async function PurchaseOrderDetailPage({
         <Card className="mb-5">
           <h2 className="text-[0.95rem] mb-1">Vendor PI files</h2>
           <p className="text-[0.8rem] text-ink-faint mb-3">
-            Uploaded by the vendor on Monday.com — files stay there; each link fetches a fresh copy on click.
+            Uploaded by the vendor on Monday.com; files stay there, and each link fetches a fresh copy on click.
           </p>
           <div className="flex flex-col gap-1.5">
             {po.mondayFiles.map((f) => (

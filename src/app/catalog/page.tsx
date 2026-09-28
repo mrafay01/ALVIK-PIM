@@ -232,7 +232,7 @@ export default async function CatalogPage({
   return (
     <AppShell activeHref="/catalog" eyebrow="Finalized database" title="Catalog">
       <p className="text-ink-soft max-w-[68ch] mb-3 text-[0.92rem]">
-        The company&apos;s verified product database — Master File items, hand-added items, and
+        The company&apos;s verified product database: Master File items, hand-added items, and
         quote items an admin has approved. Vendor-quote items in the pipeline don&apos;t appear here.
         Click a SKU for the full item.
       </p>

@@ -110,7 +110,7 @@ export function QuoteReviewTable({
               .join("; ")}${data.errors.length > 3 ? "…" : ""}`
           : "";
       setCommitResult(
-        `Committed ${data.committed} row(s) — ${data.created} new item(s), ${data.merged} merged into existing.` +
+        `Committed ${data.committed} row(s): ${data.created} new item(s), ${data.merged} merged into existing.` +
           errorTail
       );
       router.refresh();
