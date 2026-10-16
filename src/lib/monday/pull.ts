@@ -2,8 +2,23 @@ import { mondayRequest } from "./client";
 import { MONDAY_BOARD_ID, MONDAY_COLUMN_IDS, MONDAY_LABEL_TO_STATUS } from "./config";
 import PurchaseOrder from "@/models/PurchaseOrder";
 import Vendor from "@/models/Vendor";
+import Item from "@/models/Item";
 import type { PoStatus, Priority } from "@/lib/enums";
 import { PRIORITIES } from "@/lib/enums";
+
+// The PO status at which a Monday-pulled board item is also materialized
+// as an un-verified Item (shown on /items). Per the client's rule:
+// "In Monday's case, items should only be added in the items page once
+// it reached the status as 'In Production'" — board label "PI Confirmed"
+// maps to `pi_confirmed` via MONDAY_LABEL_TO_STATUS. Pipeline stages
+// after this one (in_transit, ready_to_ship, shipment_received) also
+// qualify since the item has already been produced by the vendor.
+const MATERIALIZE_FROM_STATUS: PoStatus[] = [
+  "pi_confirmed",
+  "in_transit",
+  "ready_to_ship",
+  "shipment_received",
+];
 
 const PULL_COLUMN_IDS = [
   MONDAY_COLUMN_IDS.status,
@@ -399,6 +414,11 @@ export async function commitPullPlan(rows: PullPlanRow[]): Promise<PullCommitRes
         mondayItemId: item.id,
         mondayFiles: files,
         lastPulledFromMondayAt: now,
+        // After a pull the PO matches the board, so it's "in sync": without
+        // this, the pull's own write made every pulled PO (~7,000) look
+        // changed-since-last-push, and the bulk sync would push them all.
+        lastPushedToMondayAt: now,
+        updatedAt: now,
         joelShipConfirmed,
         // Always stored verbatim, mapped or not — this is what keeps a PO
         // sitting in "Stuck"/"Canceled"/etc. fully visible even though the
@@ -444,6 +464,7 @@ export async function commitPullPlan(rows: PullPlanRow[]): Promise<PullCommitRes
           document: {
             poNumber: row.mondayItemName,
             vendorId,
+            source: "monday",
             orderPurpose: { category: "stock" },
             // Falls back to the schema's own default ("send_to_vendor")
             // when the board's status label has no confident pipeline
@@ -464,6 +485,7 @@ export async function commitPullPlan(rows: PullPlanRow[]): Promise<PullCommitRes
             mondayItemId: item.id,
             mondayFiles: files,
             lastPulledFromMondayAt: now,
+            lastPushedToMondayAt: now,
             createdAt: now,
             updatedAt: now,
           },
@@ -475,7 +497,9 @@ export async function commitPullPlan(rows: PullPlanRow[]): Promise<PullCommitRes
 
   if (ops.length > 0) {
     try {
-      await PurchaseOrder.bulkWrite(ops as never, { ordered: false });
+      // timestamps off: updatedAt is set explicitly above, equal to
+      // lastPushedToMondayAt, so the PO doesn't read as unsynced.
+      await PurchaseOrder.bulkWrite(ops as never, { ordered: false, timestamps: false });
     } catch (err) {
       // bulkWrite with ordered:false still applies the writes it can; report
       // the ones it couldn't without failing the whole run.
@@ -488,5 +512,121 @@ export async function commitPullPlan(rows: PullPlanRow[]): Promise<PullCommitRes
     }
   }
 
+  // Materialize an un-verified Item for every pulled PO that has reached
+  // "In Production" or later (per the client's rule — only POs at that
+  // stage flow onto the Un-Verified Items page). Keyed by Monday item id
+  // so a re-pull updates the Item in place rather than duplicating it.
+  // Done as a separate pass after the PO writes so a materialization
+  // failure can't take down the PO sync; errors are collected and
+  // reported but don't propagate.
+  const materializeTargets = rows.filter(
+    (r) =>
+      (r.action === "update" || r.action === "create") &&
+      r.mappedStatus != null &&
+      (MATERIALIZE_FROM_STATUS as readonly PoStatus[]).includes(r.mappedStatus)
+  );
+  if (materializeTargets.length > 0) {
+    try {
+      const materializedCount = await materializeItemsFromPull(materializeTargets, vendorIdByName);
+      // Not reported as "created" above (that counter is for POs); the
+      // caller sees it via sync_logs if needed.
+      void materializedCount;
+    } catch (err) {
+      errors.push({
+        mondayItemId: "(materialize)",
+        message: err instanceof Error ? err.message : "Un-Verified Items materialization failed",
+      });
+    }
+  }
+
   return { processed: rows.length, updated, created, skipped, errored: errors.length, errors };
+}
+
+// Creates (or updates in place) one Item per qualifying PO, keyed by
+// Monday item id so a re-pull doesn't duplicate. The item lives in the
+// "quoted" status with intakeSource: "monday_pull" — it stays off the
+// catalog until someone uploads the vendor's real PI file for this PO
+// and goes through the normal catalog-approval flow. Vendor SKU, PO
+// number, and the current Monday status label are captured so the
+// Un-Verified Items page can show "From PO 23101 · PI Confirmed".
+async function materializeItemsFromPull(
+  rows: PullPlanRow[],
+  vendorIdByName: Map<string, unknown>
+): Promise<number> {
+  // Resolve the PO's _id and vendorId for each row. "Update" rows
+  // already carry a poId; "create" rows need a lookup by poNumber
+  // because the insert above assigned the _id but we don't have it in
+  // this function's scope. One batch query by (poNumber, mondayItemId)
+  // covers both cases.
+  const keys = rows.map((r) => ({ mondayItemId: r.mondayItemId, poNumber: r.mondayItemName }));
+  const pos = await PurchaseOrder.find({
+    $or: keys.map((k) => ({ mondayItemId: k.mondayItemId })).concat(
+      keys.map((k) => ({ poNumber: k.poNumber })) as never
+    ),
+  })
+    .select("_id poNumber vendorId mondayItemId status mondayStatusText")
+    .lean();
+  const poByMondayId = new Map(pos.filter((p) => p.mondayItemId).map((p) => [p.mondayItemId, p]));
+  const poByNumber = new Map(pos.map((p) => [p.poNumber, p]));
+
+  type ItemUpsert = {
+    updateOne: {
+      filter: Record<string, unknown>;
+      update: Record<string, unknown>;
+      upsert: true;
+    };
+  };
+  const ops: ItemUpsert[] = [];
+
+  for (const row of rows) {
+    const po = poByMondayId.get(row.mondayItemId) ?? poByNumber.get(row.mondayItemName);
+    if (!po) continue; // defensive; the PO write pass should have made one
+    const vendorId = row.vendorName ? vendorIdByName.get(row.vendorName) : po.vendorId;
+    if (!vendorId) continue;
+
+    // Keyed by sourceMondayItemId — the one identity that's stable
+    // across re-pulls when the Monday row itself has no CZ/vendor SKU.
+    // $setOnInsert carries the fields we only want to set on first
+    // materialization (status, origin, timestamps); $set carries the
+    // ones a re-pull should refresh (current Monday status label,
+    // sourcePoNumber if it changed, lastPulledFromMondayAt mirror).
+    ops.push({
+      updateOne: {
+        filter: { sourceMondayItemId: row.mondayItemId },
+        update: {
+          $set: {
+            sourcePoNumber: po.poNumber,
+            sourceMondayStatus: row.statusText,
+            vendorId,
+          },
+          $setOnInsert: {
+            status: "quoted",
+            origin: "quotation",
+            intakeSource: "monday_pull",
+            sourceMondayItemId: row.mondayItemId,
+            // No CZ SKU yet — Monday rows don't carry one at the PO
+            // level, and the real PI file (uploaded later) is where the
+            // CZ numbers come from. Left null so a reviewer can fill it
+            // in without a unique-index collision in the meantime.
+            itemNumber: null,
+            baseSku: undefined,
+            variantSuffix: null,
+            pricingHistory: [],
+            inCatalog: false,
+          },
+        },
+        upsert: true,
+      },
+    });
+  }
+
+  if (ops.length === 0) return 0;
+  try {
+    const result = await Item.bulkWrite(ops as never, { ordered: false });
+    return (result.upsertedCount ?? 0) + (result.modifiedCount ?? 0);
+  } catch (err) {
+    const writeErrors = (err as { writeErrors?: unknown[] }).writeErrors;
+    if (!writeErrors) throw err;
+    return 0;
+  }
 }

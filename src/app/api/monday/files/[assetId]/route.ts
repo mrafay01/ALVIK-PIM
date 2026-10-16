@@ -11,7 +11,7 @@ interface AssetResult {
 // resolves a fresh short-lived signed S3 link (public_url) on every request
 // and redirects to it — nothing is copied or cached in PIM.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ assetId: string }> }) {
-  const gate = await requireRole(ROLE_SETS.purchaseOrders);
+  const gate = await requireRole(ROLE_SETS.quotes);
   if (isAuthFail(gate)) return gate.response;
 
   const { assetId } = await params;

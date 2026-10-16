@@ -1,19 +1,19 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import { rateLimit } from "@/lib/rateLimit";
 import { redeemSessionTicket } from "@/lib/otp";
+import { verifyCredentials, normalizeEmail } from "@/lib/credentials";
+import { clientIp } from "@/lib/clientIp";
 import logger from "@/lib/logger";
 import User from "@/models/User";
 import type { Role } from "@/lib/enums";
 
-class LoginRateLimitError extends Error {
-  constructor() {
-    super("Too many sign-in attempts. Wait a minute and try again.");
-    this.name = "LoginRateLimitError";
-  }
-}
+// Thrown (not returned null) so its message reaches the client: with
+// redirect:false, signIn() resolves to { error: <this message> }. The login
+// page recognises it by this exact prefix to show it instead of the generic
+// "invalid credentials" text.
+export const RATE_LIMIT_MESSAGE = "Too many sign-in attempts. Wait a minute and try again.";
 
 // NextAuth silently falls back to an unstable/insecure signing behavior if
 // NEXTAUTH_SECRET is missing. Fail loudly in production instead — a
@@ -29,9 +29,24 @@ if (process.env.NODE_ENV === "production" && !process.env.NEXTAUTH_SECRET) {
 const OTP_2FA_ENABLED = process.env.OTP_2FA_ENABLED === "true";
 
 export const authOptions: NextAuthOptions = {
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    // 7-day inactivity timeout — if a session cookie goes a week without
+    // being used it expires, instead of NextAuth's 30-day default. Short
+    // enough that a stolen laptop or a long-abandoned browser session
+    // becomes dead weight within a reasonable window, long enough that
+    // regular users never meet the login screen in a normal week.
+    maxAge: 7 * 24 * 60 * 60,
+    // Refresh the cookie every 24h of activity rather than on every
+    // request — reduces how often JWTs are reissued without materially
+    // changing the inactivity window above.
+    updateAge: 24 * 60 * 60,
+  },
   pages: {
     signIn: "/login",
+    // Any NextAuth error page (e.g. a malformed callback) lands back on the
+    // app's own login screen instead of NextAuth's unstyled default.
+    error: "/login",
   },
   providers: [
     CredentialsProvider({
@@ -51,36 +66,25 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const email = credentials.email.toLowerCase();
+        // Same normalization as the OTP routes — previously this only
+        // lowercased, so an email with a stray space (common with mobile
+        // autofill) passed the OTP step and then failed here.
+        const email = normalizeEmail(credentials.email);
 
-        // Throttle credential-stuffing: cap attempts per email and per
-        // client IP over a 1-minute window. Throwing here surfaces to the
-        // client as a CredentialsSignin error (the form shows a message);
-        // NextAuth doesn't distinguish error kinds for this provider.
-        const ip =
-          (req?.headers?.["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
-          (req?.headers?.["x-real-ip"] as string | undefined) ||
-          "unknown";
-        const perEmail = rateLimit(`login:email:${email}`, { limit: 5, windowMs: 60_000 });
-        const perIp = rateLimit(`login:ip:${ip}`, { limit: 20, windowMs: 60_000 });
+        // Throttle credential-stuffing: cap attempts per email and per client IP.
+        const ip = clientIp(req?.headers as Record<string, string | string[] | undefined> | undefined);
+        const [perEmail, perIp] = await Promise.all([
+          rateLimit(`login:email:${email}`, { limit: 5, windowMs: 60_000 }),
+          rateLimit(`login:ip:${ip}`, { limit: 20, windowMs: 60_000 }),
+        ]);
         if (!perEmail.allowed || !perIp.allowed) {
-          logger.warn("Login rate limit exceeded", { email, ip, perEmailRemaining: perEmail.remaining, perIpRemaining: perIp.remaining });
-          throw new LoginRateLimitError();
+          logger.warn("Login rate limit exceeded", { email, ip });
+          throw new Error(RATE_LIMIT_MESSAGE);
         }
 
-        await connectDB();
-        const user = await User.findOne({
-          email,
-          active: true,
-        });
+        const user = await verifyCredentials(email, credentials.password);
         if (!user) {
-          logger.warn("Login failed: user not found", { email, ip });
-          return null;
-        }
-
-        const valid = await bcrypt.compare(credentials.password, user.passwordHash);
-        if (!valid) {
-          logger.warn("Login failed: invalid password", { email, ip });
+          logger.warn("Login failed: invalid credentials", { email, ip });
           return null;
         }
 
@@ -118,12 +122,15 @@ export const authOptions: NextAuthOptions = {
         return token;
       }
 
-      // Every subsequent request (not just sign-in) re-checks the stamped
-      // version against the current DB value — see the sessionVersion
-      // strictness note on the User model. A mismatch means "Sign out of
-      // all other devices" (Settings > Security) was used since this token
-      // was minted; token.invalid marks it dead so the session callback
-      // below can null out the session rather than trusting a revoked JWT.
+      // Runs whenever the server resolves a session (getServerSession in
+      // pages and API handlers, /api/auth/session from the client) — not in
+      // middleware, which only decodes the cookie. Re-checks the stamped
+      // version against the DB: a mismatch means "Sign out of all other
+      // devices" was used since this token was minted, or the account was
+      // deactivated. token.invalid is then written back into the cookie, so
+      // middleware sees it on the next navigation; API handlers already
+      // reject it immediately because getServerSession returns no user.
+      if (token.invalid) return token;
       if (typeof token.id === "string") {
         await connectDB();
         const current = await User.findById(token.id).select("sessionVersion active").lean();

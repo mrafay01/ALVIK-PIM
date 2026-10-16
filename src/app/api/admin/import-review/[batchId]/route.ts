@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import ImportBatch from "@/models/ImportBatch";
 import ImportBatchRow from "@/models/ImportBatchRow";
+import { isObjectId } from "@/lib/ids";
 
 export async function GET(
   _req: NextRequest,
@@ -12,6 +13,7 @@ export async function GET(
   if (isAuthFail(gate)) return gate.response;
 
   const { batchId } = await params;
+  if (!isObjectId(batchId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   await connectDB();
   const batch = await ImportBatch.findById(batchId).lean();
   if (!batch) return NextResponse.json({ error: "Batch not found" }, { status: 404 });

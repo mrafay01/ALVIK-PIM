@@ -18,7 +18,7 @@ interface UpdatesResult {
 // PO's detail page can show the vendor/staff conversation without it ever
 // being copied into PIM's own database — always current, never stale.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ mondayItemId: string }> }) {
-  const gate = await requireRole(ROLE_SETS.purchaseOrders);
+  const gate = await requireRole(ROLE_SETS.quotes);
   if (isAuthFail(gate)) return gate.response;
 
   const { mondayItemId } = await params;

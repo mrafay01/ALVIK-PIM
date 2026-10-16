@@ -1,25 +1,23 @@
-// Minimal in-process fixed-window rate limiter.
+// Fixed-window rate limiter — MongoDB-backed, serverless-safe.
 //
-// Scope/limitation: state lives in this instance's memory, so with multiple
-// instances behind a load balancer each enforces the limit independently
-// (effective limit = configured × instances). That's an acceptable first
-// line of defence against credential stuffing on a small single/low-instance
-// deployment; move to a shared store (Redis/Upstash) if the app is scaled
-// out horizontally.
+// Scope: every instance (serverless invocation or long-lived Node process)
+// shares one authoritative counter per (key, window) pair via an atomic
+// upsert, so limits hold under horizontal scaling and across cold starts.
+// The previous in-memory Map version only worked on a single process and
+// was effectively a no-op on serverless — see the project's deployment
+// target in the security pass notes.
+//
+// Storage: one small document per (key, window), auto-reaped by Mongo's
+// TTL index on expiresAt (see src/models/RateLimit.ts).
+//
+// Fallback: if the DB round-trip itself fails (connection down, etc.), the
+// limiter fails *open* and logs — the alternative (deny every request on
+// a transient DB blip) would create a self-inflicted outage. The outer
+// handler's own auth/validation layers still run.
 
-type Bucket = { count: number; resetAt: number };
-
-const buckets = new Map<string, Bucket>();
-
-// Opportunistic cleanup so the map doesn't grow unbounded.
-let lastSweep = 0;
-function sweep(now: number) {
-  if (now - lastSweep < 60_000) return;
-  lastSweep = now;
-  for (const [key, b] of buckets) {
-    if (b.resetAt <= now) buckets.delete(key);
-  }
-}
+import RateLimit from "@/models/RateLimit";
+import { connectDB } from "@/lib/db";
+import logger from "@/lib/logger";
 
 export type RateLimitResult = {
   allowed: boolean;
@@ -27,26 +25,42 @@ export type RateLimitResult = {
   retryAfterSeconds: number;
 };
 
-export function rateLimit(
+export async function rateLimit(
   key: string,
   { limit, windowMs }: { limit: number; windowMs: number }
-): RateLimitResult {
+): Promise<RateLimitResult> {
   const now = Date.now();
-  sweep(now);
+  // Align every request in the same wall-clock window onto the same
+  // `resetAt`, so one window = one document, counting atomically.
+  const resetAt = new Date(Math.ceil(now / windowMs) * windowMs);
 
-  const existing = buckets.get(key);
-  if (!existing || existing.resetAt <= now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
+  try {
+    await connectDB();
+    // Atomic increment-or-create. The $setOnInsert handles the "first
+    // request in a brand-new window" case; everything after increments
+    // the same document in place. `expiresAt` doubles as the TTL anchor.
+    const doc = await RateLimit.findOneAndUpdate(
+      { key, resetAt },
+      {
+        $inc: { count: 1 },
+        $setOnInsert: { expiresAt: resetAt },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean<{ count: number }>();
+
+    const count = doc?.count ?? 1;
+    const retryAfterSeconds = Math.max(0, Math.ceil((resetAt.getTime() - now) / 1000));
+
+    if (count > limit) {
+      return { allowed: false, remaining: 0, retryAfterSeconds };
+    }
+    return { allowed: true, remaining: Math.max(0, limit - count), retryAfterSeconds: 0 };
+  } catch (err) {
+    // Fail-open on infrastructure failure — see module comment.
+    logger.error("rateLimit: backing store unavailable, failing open", {
+      key,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return { allowed: true, remaining: limit - 1, retryAfterSeconds: 0 };
   }
-
-  existing.count += 1;
-  if (existing.count > limit) {
-    return {
-      allowed: false,
-      remaining: 0,
-      retryAfterSeconds: Math.ceil((existing.resetAt - now) / 1000),
-    };
-  }
-  return { allowed: true, remaining: limit - existing.count, retryAfterSeconds: 0 };
 }

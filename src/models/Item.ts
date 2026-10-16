@@ -236,6 +236,37 @@ const ItemSchema = new Schema(
 
     // How the item entered the system.
     origin: { type: String, enum: ITEM_ORIGINS },
+
+    // Un-Verified Items page intake tracking (added 2026-10-12 per the
+    // client's "items only come from POs" rule). Set on every item that
+    // enters via a quote commit or a Monday-pull materialization; left
+    // null for Master File imports and manual catalog entries (those
+    // skip the Un-Verified page entirely by going straight to
+    // inCatalog: true).
+    //
+    //   intakeSource     — "manual_quote" | "monday_pull" | null
+    //   sourcePoNumber   — the PO number this item was first associated
+    //                      with, free text ("23101", "#22906", or the
+    //                      preamble PO like "20711"). Shown as the
+    //                      "From PO" column on /items.
+    //   sourceMondayItemId — Monday board item id for materialized
+    //                      rows; null for manual-quote origins. Lets a
+    //                      re-pull update in place rather than create
+    //                      duplicates.
+    //   sourceMondayStatus — Monday's current status label verbatim for
+    //                      materialized rows ("PI Confirmed", "In
+    //                      transit", etc.). Shown on /items so the
+    //                      reviewer sees what stage this item is at on
+    //                      the vendor-pipeline side. Updated by every
+    //                      pull; left blank for manual intake.
+    intakeSource: {
+      type: String,
+      enum: ["manual_quote", "monday_pull"],
+      default: null,
+    },
+    sourcePoNumber: { type: String, default: null, index: true },
+    sourceMondayItemId: { type: String, default: null, index: true, sparse: true },
+    sourceMondayStatus: { type: String, default: null },
     // Whether this item belongs in the finalized company catalog. Master
     // File imports and manual catalog entries are in it directly; a
     // quotation-origin item only after someone submits it and an admin
@@ -261,6 +292,15 @@ const ItemSchema = new Schema(
     // but carries no "by whom"). Shown on the Catalog list as "Last
     // edited" — see src/app/catalog/page.tsx.
     lastEditedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+
+    // Count of unresolved CatalogConflict documents pointing at this
+    // item. Maintained by the quote-commit reconciliation (on write)
+    // and the conflict-resolve endpoint (on resolution), so the catalog
+    // list can badge rows with pending conflicts via a single projected
+    // field instead of a per-row aggregation. 0 for every item that
+    // hasn't gone through reconciliation yet — set as a default so
+    // existing rows don't need a backfill query to be queryable.
+    conflictCount: { type: Number, default: 0, index: true },
   },
   { timestamps: true }
 );
@@ -296,6 +336,17 @@ ItemSchema.index({ mondayItemId: 1 }, { sparse: true });
 // call would otherwise fall back to an in-memory sort over the whole
 // collection before skip/limit could apply.
 ItemSchema.index({ updatedAt: -1 });
+// Catalog list sorts by itemNumber (alphabetical, clustering a variation
+// family by its leading base SKU) within inCatalog — the compound
+// (inCatalog, itemNumber) above already covers that; this one covers the
+// variations tab which filters by baseSku + inCatalog.
+ItemSchema.index({ inCatalog: 1, baseSku: 1 });
+// Catalog filter "Pending approval" tab.
+ItemSchema.index({ "catalogApproval.status": 1 }, { sparse: true });
+// Marketplace export filters by masterRecordComplete and active together.
+ItemSchema.index({ active: 1, masterRecordComplete: 1 });
+// Un-Verified Items page: filter by intake source, newest first.
+ItemSchema.index({ intakeSource: 1, createdAt: -1 });
 
 export type ItemDoc = InferSchemaType<typeof ItemSchema>;
 export default (models.Item as Model<ItemDoc>) ||

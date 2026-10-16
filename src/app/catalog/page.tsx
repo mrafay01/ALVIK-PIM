@@ -4,11 +4,12 @@ import { connectDB } from "@/lib/db";
 import { getSessionRole } from "@/lib/authz";
 import type { PipelineStage } from "mongoose";
 import Item from "@/models/Item";
+import CatalogConflict from "@/models/CatalogConflict";
 import { checkMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
-import { ShieldCheck, Plus } from "lucide-react";
+import { ShieldCheck, Plus, TriangleAlert } from "lucide-react";
 import { CatalogRowFlags } from "./CatalogRowFlags";
 import { CatalogFilters } from "./CatalogFilters";
 
@@ -88,27 +89,27 @@ export default async function CatalogPage({
   const sort = sp.sort && sp.sort in SORT_STAGES ? sp.sort : "sku";
 
   await connectDB();
-  const role = await getSessionRole();
-  const canApprove = role === "administrator";
 
   // A SKU having a hyphen doesn't make it a variation — e.g. A80219-ROSE
   // may be the only row with that base SKU, in which case the hyphen is
   // just encoding its plating, not marking a sibling relationship. A row
   // is a real variation only when another catalog item shares its baseSku,
-  // so that has to be counted across the whole catalog before the page's
-  // own filters/pagination are applied.
-  const baseSkuCounts = await Item.aggregate([
-    { $match: { inCatalog: true } },
+  // so that has to be counted across the whole catalog. Only the
+  // "variations" tab needs it before the main query can be built; every
+  // other tab fetches it alongside.
+  const familySkusQuery = Item.aggregate<{ _id: string }>([
+    { $match: { inCatalog: true, baseSku: { $ne: null } } },
     { $group: { _id: "$baseSku", count: { $sum: 1 } } },
     { $match: { count: { $gt: 1 } } },
-  ]);
-  const familySkus = (baseSkuCounts as { _id: string }[]).map((r) => r._id);
+    { $project: { _id: 1 } },
+  ]).then((rows) => rows.map((r) => r._id));
+  const familySkusEarly = tab === "variations" ? await familySkusQuery : null;
 
   // Base match — the tab filter + always inCatalog.
   const match: Record<string, unknown> = { inCatalog: true };
   if (tab === "incomplete") match.masterRecordComplete = false;
   if (tab === "pending") match["catalogApproval.status"] = "pending";
-  if (tab === "variations") match.baseSku = { $in: familySkus };
+  if (tab === "variations") match.baseSku = { $in: familySkusEarly };
   if (tab === "inactive") match.active = false;
   if (category) match.category = category;
   if (plating) match["specs.plating"] = plating;
@@ -125,8 +126,29 @@ export default async function CatalogPage({
 
   const pipeline: PipelineStage[] = [
     { $match: match },
+    // Trim each document to what the list renders *before* the sort: the
+    // sort runs over every matched row, and full item documents (media,
+    // descriptions, cost history) would make that sort many times heavier
+    // and can hit the server's in-memory sort limit on a large catalog.
     {
-      $addFields: {
+      $project: {
+        itemNumber: 1,
+        baseSku: 1,
+        variantSuffix: 1,
+        title: 1,
+        category: 1,
+        brand: 1,
+        upc: 1,
+        "specs.plating": 1,
+        "specs.metal": 1,
+        "pricingHistory.msrp": 1,
+        imageCompleteness: 1,
+        masterRecordComplete: 1,
+        "catalogApproval.status": 1,
+        active: 1,
+        updatedAt: 1,
+        lastEditedBy: 1,
+        conflictCount: 1,
         latestMsrp: { $ifNull: [{ $last: "$pricingHistory.msrp" }, null] },
       },
     },
@@ -148,6 +170,7 @@ export default async function CatalogPage({
             from: "users",
             localField: "lastEditedBy",
             foreignField: "_id",
+            pipeline: [{ $project: { name: 1 } }],
             as: "lastEditedByUser",
           },
         },
@@ -156,37 +179,21 @@ export default async function CatalogPage({
             lastEditedByName: { $arrayElemAt: ["$lastEditedByUser.name", 0] },
           },
         },
-        {
-          $project: {
-            itemNumber: 1,
-            baseSku: 1,
-            variantSuffix: 1,
-            title: 1,
-            category: 1,
-            brand: 1,
-            upc: 1,
-            "specs.plating": 1,
-            "specs.metal": 1,
-            pricingHistory: 1,
-            imageCompleteness: 1,
-            masterRecordComplete: 1,
-            catalogApproval: 1,
-            latestMsrp: 1,
-            active: 1,
-            updatedAt: 1,
-            lastEditedByName: 1,
-          },
-        },
+        { $project: { lastEditedByUser: 0, lastEditedBy: 0 } },
       ],
       count: [{ $count: "n" }],
     },
   });
 
-  const [facetResult, categories, platings] = await Promise.all([
+  const [facetResult, categories, platings, pendingConflictCount, familySkus, role] = await Promise.all([
     Item.aggregate(pipeline).collation({ locale: "en", numericOrdering: true }),
     Item.distinct("category", { inCatalog: true }),
     Item.distinct("specs.plating", { inCatalog: true }),
+    CatalogConflict.countDocuments({ status: "pending" }),
+    familySkusEarly ?? familySkusQuery,
+    getSessionRole(),
   ]);
+  const canApprove = role === "administrator";
   const familySkuSet = new Set(familySkus);
 
   const items = (facetResult[0]?.rows ?? []) as Array<{
@@ -207,6 +214,7 @@ export default async function CatalogPage({
     active?: boolean;
     updatedAt?: string | Date;
     lastEditedByName?: string;
+    conflictCount?: number;
   }>;
   const total: number = facetResult[0]?.count?.[0]?.n ?? 0;
 
@@ -257,6 +265,27 @@ export default async function CatalogPage({
           <Plus size={15} /> New catalog item
         </Link>
       </div>
+
+      {pendingConflictCount > 0 && (
+        <Card className="mb-5 border-warn flex items-center gap-3.5">
+          <TriangleAlert size={18} className="text-warn shrink-0" />
+          <div className="flex-1">
+            <div className="font-semibold text-[0.92rem] mb-1">
+              {pendingConflictCount} unresolved conflict{pendingConflictCount === 1 ? "" : "s"} from new PIs
+            </div>
+            <div className="text-[0.82rem] text-ink-soft">
+              A new PI tried to change weight, size, or vendor SKU on a catalog item. The stored value
+              stays until each one is reviewed.
+            </div>
+          </div>
+          <Link
+            href="/catalog/conflicts"
+            className="font-body font-semibold text-[0.85rem] px-3.5 py-2 rounded-sm bg-warn-bg text-warn border border-warn-bg no-underline hover:brightness-110"
+          >
+            Review
+          </Link>
+        </Card>
+      )}
 
       <div className="flex gap-1.5 mb-4 flex-wrap">
         {TABS.map((t) => {
@@ -386,6 +415,7 @@ export default async function CatalogPage({
                         missing={missing}
                         pending={pending}
                         canApprove={canApprove}
+                        conflictCount={it.conflictCount ?? 0}
                       />
                     </td>
                   </tr>

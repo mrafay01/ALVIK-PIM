@@ -51,10 +51,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
   await connectDB();
   const startedAt = new Date();
 
-  const items = await Item.find({ _id: { $in: itemIds } })
-    .select("itemNumber category specs pricingHistory active")
-    .lean();
-  const listings = await MarketplaceListing.find({ platform, itemId: { $in: itemIds } }).lean();
+  const [items, listings] = await Promise.all([
+    Item.find({ _id: { $in: itemIds } })
+      .select("itemNumber category specs pricingHistory active")
+      .lean(),
+    MarketplaceListing.find({ platform, itemId: { $in: itemIds } }).lean(),
+  ]);
   const listingByItemId = new Map(listings.map((l) => [String(l.itemId), l]));
 
   const skippedNoSku: string[] = [];

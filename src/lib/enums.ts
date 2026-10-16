@@ -5,7 +5,6 @@ export const ROLES = [
   "warehouse_receiving",
   "photography",
   "marketplace_listing",
-  "accounts_finance",
 ] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -97,15 +96,6 @@ export const DESCRIPTIONS_STATUSES = ["pending", "waiting_for_more_items", "done
 
 export const QC_RESULTS = ["good", "flagged"] as const;
 export type QcResult = (typeof QC_RESULTS)[number];
-
-export const PAYMENT_TRANCHES = ["deposit", "balance", "prepayment", "credit"] as const;
-export type PaymentTranche = (typeof PAYMENT_TRANCHES)[number];
-
-export const PAYMENT_STATUSES = ["deposit_submitted", "open", "paid", "archived"] as const;
-export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
-
-export const PAYMENT_METHODS = ["check", "wire"] as const;
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const QUOTATION_IMPORT_STATUSES = ["parsed", "needs_review", "imported"] as const;
 export type QuotationImportStatus = (typeof QUOTATION_IMPORT_STATUSES)[number];

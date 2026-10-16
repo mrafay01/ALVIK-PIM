@@ -5,6 +5,7 @@ import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { ImportRowPatchSchema, badRequest } from "@/lib/schemas";
 import ImportBatch from "@/models/ImportBatch";
 import ImportBatchRow from "@/models/ImportBatchRow";
+import { isObjectId } from "@/lib/ids";
 
 // PATCH: record a reviewer's decision on one staged row — approve it
 // (optionally with corrected field values), reject it, or edit its coerced
@@ -19,6 +20,7 @@ export async function PATCH(
   const { session } = gate;
 
   const { batchId, rowId } = await params;
+  if (!isObjectId(batchId) || !isObjectId(rowId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const parsed = ImportRowPatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
   const { reviewStatus, coercedOverrides, reviewNote } = parsed.data;

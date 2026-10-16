@@ -1,4 +1,5 @@
-import type { ItemStatus, PoStatus, PaymentStatus, Role, DescriptionPlatform } from "@/lib/enums";
+import type { ItemStatus, PoStatus, Role, DescriptionPlatform } from "@/lib/enums";
+import { CHECKLIST_DONE } from "@/lib/purchase-orders/transitions";
 
 type Tone = "good" | "warn" | "critical" | "neutral" | "brass";
 
@@ -58,20 +59,6 @@ export const PO_STATUS_TONE: Record<PoStatus, Tone> = {
   shipment_received: "good",
 };
 
-export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
-  open: "Open",
-  deposit_submitted: "Deposit submitted",
-  paid: "Paid",
-  archived: "Archived",
-};
-
-export const PAYMENT_STATUS_TONE: Record<PaymentStatus, Tone> = {
-  open: "warn",
-  deposit_submitted: "brass",
-  paid: "good",
-  archived: "neutral",
-};
-
 const CHECKLIST_LABEL: Record<string, string> = {
   images: "Images",
   data: "Data",
@@ -81,14 +68,7 @@ const CHECKLIST_LABEL: Record<string, string> = {
   descriptions: "Descriptions",
 };
 
-const CHECKLIST_DONE_VALUE: Record<string, string> = {
-  images: "received",
-  data: "received",
-  pricing: "confirmed",
-  jmUpdate: "updated",
-  onMaster: "done",
-  descriptions: "done",
-};
+const CHECKLIST_DONE_VALUE = CHECKLIST_DONE;
 
 export function checklistLabel(field: string): string {
   return CHECKLIST_LABEL[field] ?? field;
@@ -114,5 +94,4 @@ export const ROLE_LABEL: Record<Role, string> = {
   warehouse_receiving: "Warehouse Receiving",
   photography: "Photography",
   marketplace_listing: "Marketplace Listing",
-  accounts_finance: "Accounts & Finance",
 };

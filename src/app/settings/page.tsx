@@ -1,6 +1,5 @@
-import { getServerSession } from "next-auth";
+import { getSession } from "@/lib/authz";
 import Link from "next/link";
-import { authOptions } from "@/lib/auth";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
@@ -15,7 +14,7 @@ import { SecuritySettings } from "./SecuritySettings";
 import { ThemeToggle } from "./ThemeToggle";
 
 export default async function SettingsPage() {
-  const session = await getServerSession(authOptions);
+  const session = await getSession();
   const role = session?.user?.role as Role | undefined;
 
   await connectDB();

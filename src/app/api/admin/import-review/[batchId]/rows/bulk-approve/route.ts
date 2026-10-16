@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import ImportBatch from "@/models/ImportBatch";
 import ImportBatchRow from "@/models/ImportBatchRow";
+import { isObjectId } from "@/lib/ids";
 
 // POST: approve every unflagged, still-pending row in one shot.
 //
@@ -24,6 +25,7 @@ export async function POST(
   const { session } = gate;
 
   const { batchId } = await params;
+  if (!isObjectId(batchId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   await connectDB();
 
   const batch = await ImportBatch.findById(batchId);

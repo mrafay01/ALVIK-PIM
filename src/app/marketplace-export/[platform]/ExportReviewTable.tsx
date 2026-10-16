@@ -66,11 +66,16 @@ export function ExportReviewTable({ platform, rows: initialRows }: { platform: s
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [field]: value }),
       });
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? `Couldn't save that change (${res.status})`);
+        return;
+      }
       setRows((prev) =>
         prev.map((r) => (r.item._id === itemId ? { ...r, listing: data.listing } : r))
       );
+    } catch {
+      setError("Couldn't reach the server to save that change");
     } finally {
       setSavingId(null);
     }
@@ -106,6 +111,8 @@ export function ExportReviewTable({ platform, rows: initialRows }: { platform: s
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+    } catch {
+      setError("Couldn't reach the server to generate the file");
     } finally {
       setGenerating(false);
     }

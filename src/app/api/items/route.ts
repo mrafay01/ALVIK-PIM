@@ -4,6 +4,7 @@ import { requireSession, requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz"
 import { ItemCreateSchema, badRequest } from "@/lib/schemas";
 import { ITEM_STATUSES } from "@/lib/enums";
 import Item from "@/models/Item";
+import { jsonWithCache } from "@/lib/httpCache";
 
 // GET: list items (most recently updated first). Supports ?status=..., ?limit=50, ?skip=0 filters.
 export async function GET(req: NextRequest) {
@@ -27,17 +28,20 @@ export async function GET(req: NextRequest) {
   const skip = Math.max(0, parseInt(skipParam ?? "0", 10) || 0);
 
   const query = status ? { status } : {};
-  const items = await Item.find(query)
-    .select("status sampleSku itemNumber vendorId vendorSku category updatedAt")
-    .populate("vendorId", "name")
-    .sort({ updatedAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean();
+  // Parallelize the two trips — the countDocuments doesn't depend on the
+  // find result and was previously running sequentially after it.
+  const [items, total] = await Promise.all([
+    Item.find(query)
+      .select("status sampleSku itemNumber vendorId vendorSku category updatedAt")
+      .populate("vendorId", "name")
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Item.countDocuments(query),
+  ]);
 
-  const total = await Item.countDocuments(query);
-
-  return NextResponse.json({ items, pagination: { skip, limit, total } });
+  return jsonWithCache(req, { items, pagination: { skip, limit, total } });
 }
 
 // POST: intake a new quoted item — the start of the pilot lifecycle.

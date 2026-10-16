@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
-import { requireRole, isAuthFail } from "@/lib/authz";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import Quotation from "@/models/Quotation";
 import QuotationRow from "@/models/QuotationRow";
+import { isObjectId } from "@/lib/ids";
 
-const QUOTE_ROLES = ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"] as const;
+const QUOTE_ROLES = ROLE_SETS.quotes;
 
 // POST: approve every still-pending row that carries no flags, in one
 // updateMany — the fast path for a clean quote where the reviewer only
@@ -18,6 +19,7 @@ export async function POST(
   if (isAuthFail(gate)) return gate.response;
 
   const { quotationId } = await params;
+  if (!isObjectId(quotationId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   await connectDB();
   const quotation = await Quotation.findById(quotationId);
   if (!quotation) return NextResponse.json({ error: "Quotation not found" }, { status: 404 });

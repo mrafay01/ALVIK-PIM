@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { NextResponse } from "next/server";
 import { getServerSession, type Session } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -15,6 +16,13 @@ import type { Role } from "@/lib/enums";
 export type AuthOk = { session: Session; role: Role };
 export type AuthFail = { response: NextResponse };
 
+// Resolving a session re-checks the user's sessionVersion in the database
+// (see the jwt callback in auth.ts). A page render calls this from AppShell
+// and usually from the page itself too; cache() makes that one lookup per
+// request instead of one per caller. Outside a React render (route
+// handlers) cache() is a plain pass-through.
+export const getSession = cache(() => getServerSession(authOptions));
+
 function isAdmin(role: Role | undefined): boolean {
   return role === "administrator";
 }
@@ -22,7 +30,7 @@ function isAdmin(role: Role | undefined): boolean {
 // Require only that the caller is signed in (any role). Use for read
 // endpoints that every authenticated user may hit.
 export async function requireSession(): Promise<AuthOk | AuthFail> {
-  const session = await getServerSession(authOptions);
+  const session = await getSession();
   const role = session?.user?.role as Role | undefined;
   if (!session || !role) {
     return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
@@ -53,7 +61,7 @@ export function isAuthFail(gate: AuthOk | AuthFail): gate is AuthFail {
 // render (e.g. hide an action a role would only get a 403 from). Never the
 // security boundary — that's requireRole in the API handlers.
 export async function getSessionRole(): Promise<Role | undefined> {
-  const session = await getServerSession(authOptions);
+  const session = await getSession();
   return session?.user?.role as Role | undefined;
 }
 
@@ -70,10 +78,11 @@ export const ROLE_SETS = {
   items: ["buyer_merchandiser", "buying_purchasing", "marketplace_listing"],
   // Image upload workflow.
   media: ["photography", "buying_purchasing"],
-  // PO / PI pipeline.
+  // PO / PI pipeline: who may change a PO (advance stage, checklist, sync).
   purchaseOrders: ["buying_purchasing"],
-  // Vendor payables.
-  payables: ["accounts_finance"],
+  // Who may intake and review vendor quotes, and view the Purchase Orders
+  // list and detail pages (read-only unless also in purchaseOrders).
+  quotes: ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"],
   // Admin-only areas: legacy import, Monday sync/pull.
   adminOnly: [] as Role[],
   // Marketplace listing review + bulk-import file export.

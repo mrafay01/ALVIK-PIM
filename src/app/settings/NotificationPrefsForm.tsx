@@ -7,7 +7,6 @@ import { ErrorText } from "@/components/ui/Field";
 export type NotificationPrefs = {
   poStatusChanges: boolean;
   mondaySyncErrors: boolean;
-  paymentDue: boolean;
   weeklyDigest: boolean;
 };
 
@@ -21,11 +20,6 @@ const TOGGLES: { key: keyof NotificationPrefs; label: string; helper: string }[]
     key: "mondaySyncErrors",
     label: "Monday.com sync errors",
     helper: "When a push or pull to the Monday board fails or needs review.",
-  },
-  {
-    key: "paymentDue",
-    label: "Payment due reminders",
-    helper: "When a vendor payment tranche is coming up or overdue.",
   },
   {
     key: "weeklyDigest",

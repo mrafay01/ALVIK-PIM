@@ -18,7 +18,9 @@ import { isMarketplaceDescriptionOverridden } from "@/lib/marketplaceDescription
 import { MeasurementsDisplay } from "@/components/ui/MeasurementsDisplay";
 import type { ItemMeasurements } from "@/lib/measurements/types";
 import { findSiblingVariations } from "@/lib/catalog/variationFamily";
+import { ChangeHistory } from "./ChangeHistory";
 import { DollarSign, GitBranch, Layers, History, Copy } from "lucide-react";
+import { isObjectId } from "@/lib/ids";
 
 function fmtDate(d: Date | string | null | undefined): string {
   if (!d) return "—";
@@ -44,14 +46,16 @@ export default async function ItemDetailPage({
   params: Promise<{ itemId: string }>;
 }) {
   const { itemId } = await params;
+  if (!isObjectId(itemId)) notFound();
   await connectDB();
 
-  const role = await getSessionRole();
+  const [role, item] = await Promise.all([
+    getSessionRole(),
+    Item.findById(itemId).populate("vendorId", "name").lean(),
+  ]);
+  if (!item) notFound();
   const canEditItem = roleCan(role, ROLE_SETS.items);
   const canUploadMedia = roleCan(role, ROLE_SETS.media);
-
-  const item = await Item.findById(itemId).populate("vendorId", "name").lean();
-  if (!item) notFound();
 
   const siblingVariations = await findSiblingVariations(item);
 
@@ -74,9 +78,9 @@ export default async function ItemDetailPage({
 
   return (
     <AppShell
-      activeHref={item.inCatalog ? "/catalog" : "/dashboard"}
-      backHref={item.inCatalog ? "/catalog" : "/dashboard"}
-      backLabel={item.inCatalog ? "Catalog" : "Dashboard"}
+      activeHref={item.inCatalog ? "/catalog" : "/items"}
+      backHref={item.inCatalog ? "/catalog" : "/items"}
+      backLabel={item.inCatalog ? "Catalog" : "Un-Verified Items"}
       eyebrow="Item detail"
       title={item.title || item.vendorSku || "Item"}
     >
@@ -160,6 +164,12 @@ export default async function ItemDetailPage({
             </div>
           )}
         </Card>
+
+        {/* Change history — only interesting after an item is in the catalog,
+            which is when its authoritative fields become subject to the
+            conflict/change-log flow. Pipeline items don't accumulate rows
+            here, so showing an empty accordion would just be noise. */}
+        {item.inCatalog && <ChangeHistory itemId={String(item._id)} />}
 
         {/* ---------- Pricing & lifecycle ---------- */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">

@@ -1,15 +1,22 @@
-import { getServerSession } from "next-auth";
+import { getSession } from "@/lib/authz";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { authOptions } from "@/lib/auth";
 import type { Role } from "@/lib/enums";
 import { Sidebar, type NavItem } from "./Sidebar";
 import { ThemeSwitcherButton } from "./ThemeSwitcherButton";
 
 const NAV: (NavItem & { roles: Role[] | null })[] = [
   { href: "/dashboard", label: "Dashboard", icon: "LayoutDashboard", roles: null },
-  { href: "/purchase-orders", label: "Purchase Orders", icon: "ClipboardList", roles: null },
-  { href: "/payables", label: "Payables", icon: "Wallet", roles: ["administrator", "accounts_finance"] as Role[] },
+  // Matches middleware's /purchase-orders gate — warehouse and photography
+  // roles would only ever get "Not authorized" from this link.
+  {
+    href: "/purchase-orders",
+    label: "Purchase Orders",
+    icon: "ClipboardList",
+    roles: ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"] as Role[],
+  },
+  { href: "/items", label: "Un-Verified Items", icon: "PackageSearch", roles: null },
   { href: "/catalog", label: "Catalog", icon: "BookOpenCheck", roles: null },
   {
     href: "/marketplace-export",
@@ -48,8 +55,16 @@ export async function AppShell({
   backHref?: string;
   backLabel?: string;
 }) {
-  const session = await getServerSession(authOptions);
+  const session = await getSession();
   const role = session?.user?.role as Role | undefined;
+
+  // Server-side backstop. Middleware only decodes the cookie, so a session
+  // revoked moments ago ("sign out of all other devices", or a deactivated
+  // account) still looks valid there until the cookie is rewritten.
+  // getServerSession re-checks the database, so no app page renders for a
+  // revoked session. The ?session=expired marker tells middleware to clear
+  // the stale cookie on /login — otherwise it would bounce straight back here.
+  if (!role) redirect("/login?session=expired");
   const name = session?.user?.name ?? "—";
   const initials = name
     .split(" ")

@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail } from "@/lib/authz";
 import Item from "@/models/Item";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
+import { isObjectId } from "@/lib/ids";
 
 const CATALOG_ROLES = ["marketplace_listing"] as const;
 
@@ -20,6 +21,7 @@ export async function POST(
   const { session } = gate;
 
   const { itemId } = await params;
+  if (!isObjectId(itemId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   await connectDB();
   const item = await Item.findById(itemId);
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });

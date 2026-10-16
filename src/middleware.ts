@@ -1,6 +1,7 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import type { Role } from "@/lib/enums";
+import { safeCallbackPath } from "@/lib/safeCallback";
 
 // The Edge runtime (where middleware always executes) doesn't support
 // Node's `fs`/`path` modules, which the shared Winston logger (@/lib/logger)
@@ -16,8 +17,9 @@ const logger = {
 // in src/lib/authz.ts (which enforces the same thing inside API handlers —
 // this is the outer, defence-in-depth layer).
 const PAGE_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
-  ["/payables", ["accounts_finance"]],
-  ["/purchase-orders", ["buying_purchasing"]],
+  // Viewable by everyone who works quotes; changing a PO is gated to
+  // buying_purchasing in the API (and its controls hidden for others).
+  ["/purchase-orders", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
   ["/receiving", ["warehouse_receiving"]],
   ["/admin", []], // administrator only
   ["/marketplace-export", ["marketplace_listing"]],
@@ -40,8 +42,10 @@ const API_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
   ["/api/admin", []], // administrator only
   ["/api/monday/sync", []],
   ["/api/monday/pull", []],
+  // Read-only views on the PO detail page (vendor PI files, conversation).
+  ["/api/monday/files", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
+  ["/api/monday/updates", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
   ["/api/monday", ["buying_purchasing"]],
-  ["/api/payables", ["accounts_finance"]],
   ["/api/purchase-orders", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
   ["/api/quotations", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
   ["/api/items", ["buyer_merchandiser", "buying_purchasing", "marketplace_listing", "photography"]],
@@ -63,26 +67,133 @@ function firstMatch(
   return undefined;
 }
 
+// CSRF defence for mutating API requests. NextAuth's session cookie is
+// SameSite=Lax, which covers top-level navigation but not a cross-site
+// fetch() carrying credentials. On every state-changing API call we also
+// require the browser-sent Origin header to match the request's host —
+// if the origin is cross-site, no browser will attach the cookie to a
+// request that returns 403 here, and a tampered server-to-server call
+// has no session cookie to begin with. Safe methods are unaffected so
+// read endpoints keep working from any origin that has a valid session.
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+// Body-size caps per content-type. JSON stays small — the biggest JSON
+// payload the app legitimately sends is a quote-commit of a few thousand
+// rows, well under 1 MB. Multipart uploads need their own, larger cap
+// since Master-File imports and image batches land that way; the per-
+// route code also enforces a stricter cap inside the handler.
+const MAX_JSON_BYTES = 1_000_000; // 1 MB
+const MAX_MULTIPART_BYTES = 64 * 1024 * 1024; // 64 MB, aligned with import route
+
+function tooLargeResponse(limit: number) {
+  return NextResponse.json(
+    { error: `Request body too large (limit ${Math.floor(limit / 1024)} KB)` },
+    { status: 413 }
+  );
+}
+
+function isSameOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) {
+    // Non-browser clients (curl, server-to-server) don't send Origin.
+    // Fall back to Referer; if neither is present, treat it as same-origin
+    // only for cookie-less requests — a request with our auth cookie that
+    // omits both is nearly always a browser bug or an attacker stripping
+    // headers, so this is the safe deny path handled by the caller.
+    const referer = req.headers.get("referer");
+    if (!referer) return true;
+    try {
+      const refUrl = new URL(referer);
+      const host = req.headers.get("host") ?? "";
+      return refUrl.host === host;
+    } catch {
+      return false;
+    }
+  }
+  try {
+    const originUrl = new URL(origin);
+    const host = req.headers.get("host") ?? "";
+    return originUrl.host === host;
+  } catch {
+    return false;
+  }
+}
+
 export default withAuth(
   function middleware(req) {
     const path = req.nextUrl.pathname;
     const isApi = path.startsWith("/api/");
-    // Set by the jwt callback (auth.ts) once a request-time check finds
-    // this token's sessionVersion no longer matches the DB — i.e. "Sign
-    // out of all other devices" was used since this token was minted.
-    // Treated exactly like "no role": this layer runs on every request
-    // (unlike the session() callback, which only some code paths call), so
-    // it's the one place that reliably catches a revoked token immediately.
+
+    // CSRF: block cross-origin mutating API requests before any handler sees
+    // them. NextAuth's /api/auth/* endpoints handle their own origin logic
+    // (and must keep accepting the sign-in POST from the login page);
+    // everything else that mutates goes through this gate.
+    if (
+      isApi &&
+      MUTATING_METHODS.has(req.method) &&
+      !path.startsWith("/api/auth/") &&
+      !isSameOrigin(req)
+    ) {
+      logger.warn("CSRF: cross-origin mutating API request blocked", {
+        path,
+        method: req.method,
+        origin: req.headers.get("origin"),
+      });
+      return NextResponse.json({ error: "Cross-origin requests not allowed" }, { status: 403 });
+    }
+
+    // Early body-size cap on mutating API requests via Content-Length.
+    // The per-route handler is still responsible for the hard cap after
+    // reading (content-length is advisory and absent in some transports),
+    // but rejecting an oversized header here saves the request from ever
+    // being read into a handler.
+    if (isApi && MUTATING_METHODS.has(req.method)) {
+      const contentLength = Number(req.headers.get("content-length") ?? "");
+      if (Number.isFinite(contentLength) && contentLength > 0) {
+        const contentType = (req.headers.get("content-type") ?? "").toLowerCase();
+        const isMultipart = contentType.startsWith("multipart/form-data");
+        const limit = isMultipart ? MAX_MULTIPART_BYTES : MAX_JSON_BYTES;
+        if (contentLength > limit) {
+          logger.warn("Request body exceeds size cap", { path, method: req.method, contentLength, limit });
+          return tooLargeResponse(limit);
+        }
+      }
+    }
+    // Written into the cookie by the jwt callback (auth.ts) once a server-
+    // side session check finds the token revoked (sessionVersion bumped or
+    // account deactivated). Treated exactly like "no session".
     const invalidated = req.nextauth.token?.invalid === true;
     const role = invalidated ? undefined : (req.nextauth.token?.role as Role | undefined);
     const userId = req.nextauth.token?.id as string | undefined;
+
+    // The login page: open to signed-out visitors; a signed-in user is sent
+    // on to where they were heading (or the dashboard) instead of seeing the
+    // form again.
+    if (path === "/login") {
+      // Sent here by AppShell after the server found this session revoked.
+      // Clear the stale cookie so it can't keep bouncing the user back.
+      if (req.nextUrl.searchParams.get("session") === "expired") {
+        const res = NextResponse.next();
+        for (const name of req.cookies.getAll().map((c) => c.name)) {
+          if (name.includes("next-auth.session-token")) res.cookies.delete(name);
+        }
+        return res;
+      }
+      if (!role) return NextResponse.next();
+      const target = safeCallbackPath(req.nextUrl.searchParams.get("callbackUrl")) ?? "/dashboard";
+      return NextResponse.redirect(new URL(target, req.url));
+    }
 
     if (!role) {
       if (isApi) {
         logger.warn("API request without role", { path, method: req.method });
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-      return NextResponse.redirect(new URL("/login", req.url));
+      // Remember where they were going so login can send them back there.
+      const loginUrl = new URL("/login", req.url);
+      const back = safeCallbackPath(path + req.nextUrl.search);
+      if (back && back !== "/" && back !== "/dashboard") loginUrl.searchParams.set("callbackUrl", back);
+      return NextResponse.redirect(loginUrl);
     }
 
     if (role === "administrator") {
@@ -120,14 +231,15 @@ export default withAuth(
 
 export const config = {
   // Every real app screen and every mutating API route requires a session.
-  // /login, /unauthorized, and the NextAuth endpoints are excluded so the
-  // auth flow itself stays reachable; the health check is public on purpose.
+  // /login is matched only so signed-in users get bounced past it (the
+  // handler always lets signed-out visitors through). /unauthorized and the
+  // NextAuth endpoints are excluded; the health check is public on purpose.
   matcher: [
     "/",
+    "/login",
     "/dashboard/:path*",
     "/items/:path*",
     "/purchase-orders/:path*",
-    "/payables/:path*",
     "/catalog/:path*",
     "/receiving/:path*",
     "/admin/:path*",
@@ -137,7 +249,6 @@ export const config = {
     "/api/catalog/:path*",
     "/api/purchase-orders/:path*",
     "/api/quotations/:path*",
-    "/api/payables/:path*",
     "/api/monday/:path*",
     "/api/admin/:path*",
     "/api/marketplace-export/:path*",

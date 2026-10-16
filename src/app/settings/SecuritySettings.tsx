@@ -20,12 +20,9 @@ export function SecuritySettings() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Couldn't sign out other devices.");
 
-      // The bump invalidates every JWT stamped with the old sessionVersion
-      // — including this browser's own cookie, since NextAuth doesn't
-      // rotate a JWT mid-life on its own. getSession() forces exactly that
-      // rotation (it hits /api/auth/session, which re-runs the jwt
-      // callback), so this device gets a fresh, valid cookie immediately
-      // instead of also being logged out on its next request.
+      // The response already carried a re-issued cookie for this device
+      // (see /api/users/me/sessions). Refresh the client-side session copy
+      // so useSession() reflects it.
       await getSession();
       setSuccess(true);
     } catch (err) {

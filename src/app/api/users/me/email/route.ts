@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import { requireSession, isAuthFail } from "@/lib/authz";
 import { rateLimit } from "@/lib/rateLimit";
-import { issueOtp, redeemSessionTicket, getVerifiedTargetEmail } from "@/lib/otp";
+import { issueOtp, redeemSessionTicket, getVerifiedTargetEmail, OtpDeliveryError, otpDeliveryFailed } from "@/lib/otp";
 import { ChangeEmailRequestSchema, ChangeEmailConfirmSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
 
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const userId = gate.session.user?.id;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const perUser = rateLimit(`change-email-request:${userId}`, { limit: 5, windowMs: 60_000 });
+  const perUser = await rateLimit(`change-email-request:${userId}`, { limit: 5, windowMs: 60_000 });
   if (!perUser.allowed) {
     return NextResponse.json({ error: "Too many attempts. Wait a minute and try again." }, { status: 429 });
   }
@@ -42,7 +42,12 @@ export async function POST(req: NextRequest) {
   const taken = await User.findOne({ email: newEmail }).select("_id").lean();
   if (taken) return NextResponse.json({ error: "That email is already in use" }, { status: 400 });
 
-  await issueOtp(user._id, newEmail, "change_email", newEmail);
+  try {
+    await issueOtp(user._id, newEmail, "change_email", newEmail);
+  } catch (err) {
+    if (err instanceof OtpDeliveryError) return otpDeliveryFailed();
+    throw err;
+  }
   return NextResponse.json({ sent: true });
 }
 

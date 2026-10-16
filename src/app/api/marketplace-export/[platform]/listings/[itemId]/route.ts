@@ -5,6 +5,7 @@ import { MARKETPLACE_EXPORT_PLATFORMS } from "@/lib/enums";
 import { MarketplaceListingPatchSchema, badRequest } from "@/lib/schemas";
 import Item from "@/models/Item";
 import MarketplaceListing from "@/models/MarketplaceListing";
+import { isObjectId } from "@/lib/ids";
 
 function isExportPlatform(p: string): p is (typeof MARKETPLACE_EXPORT_PLATFORMS)[number] {
   return (MARKETPLACE_EXPORT_PLATFORMS as readonly string[]).includes(p);
@@ -23,6 +24,7 @@ export async function PATCH(
   const { session } = gate;
 
   const { platform, itemId } = await params;
+  if (!isObjectId(itemId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!isExportPlatform(platform)) {
     return NextResponse.json({ error: `No export template for platform "${platform}"` }, { status: 404 });
   }

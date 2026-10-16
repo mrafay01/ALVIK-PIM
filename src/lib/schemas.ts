@@ -4,8 +4,6 @@ import {
   PO_STATUSES,
   ORDER_PURPOSE_CATEGORIES,
   PRIORITIES,
-  PAYMENT_TRANCHES,
-  PAYMENT_METHODS,
   IMAGES_CHECKLIST_STATUSES,
   DATA_CHECKLIST_STATUSES,
   PRICING_CHECKLIST_STATUSES,
@@ -306,36 +304,9 @@ export const PoPatchSchema = z
   })
   .refine((b) => Object.keys(b).length > 0, "empty update");
 
-// PO pipeline is an ordered progression; only forward-by-one or staying
-// put is allowed (side-lane skips at the start are handled by starting the
-// PO on the right status, not by jumping mid-pipeline).
-export function isValidPoTransition(from: string, to: string): boolean {
-  if (from === to) return true;
-  const fromIdx = PO_STATUSES.indexOf(from as (typeof PO_STATUSES)[number]);
-  const toIdx = PO_STATUSES.indexOf(to as (typeof PO_STATUSES)[number]);
-  if (fromIdx === -1 || toIdx === -1) return false;
-  return toIdx === fromIdx + 1;
-}
-
-// ------------------------------------------------------------- payables
-
-export const PaymentCreateSchema = z.object({
-  poId: objectId,
-  vendorId: objectId,
-  tranche: z.enum(PAYMENT_TRANCHES),
-  invoiceRef: z.string().trim().max(200).optional(),
-  amountDue: money.optional(),
-  dueDate: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
-  creditAppliedFrom: objectId.optional().nullable(),
-});
-
-export const PaymentPatchSchema = z
-  .object({
-    paymentMethod: z.enum(PAYMENT_METHODS).optional(),
-    proofOfPaymentUrl: z.string().trim().url().max(2000).optional(),
-    status: z.enum(["paid", "archived"]).optional(),
-  })
-  .refine((b) => Object.keys(b).length > 0, "empty update");
+// Pipeline transition rules live in one client-safe module shared with the
+// PO detail page's buttons — see src/lib/purchase-orders/transitions.ts.
+export { isValidPoTransition } from "@/lib/purchase-orders/transitions";
 
 // --------------------------------------------------- import review rows
 
@@ -396,6 +367,26 @@ export const QuotationRowPatchSchema = z
     reviewNote: z.string().trim().max(2000).optional(),
   })
   .refine((b) => Object.keys(b).length > 0, "empty update");
+
+// PATCH /api/quotations/[quotationId] — quote-level additions. Today only
+// drives the "+ Add column" / "remove column" controls on the review page;
+// kept as a discriminated union so new quote-level actions can be added
+// without widening a single schema into something ambiguous.
+const customColumnLabel = z
+  .string()
+  .trim()
+  .min(1, "label is required")
+  .max(60, "label is too long")
+  // Reject labels that would collide with a standard quote field — those
+  // already have their own column, and letting a reviewer add a custom
+  // column with the same label would hide the standard value under a
+  // custom key with no linkage back.
+  .refine((s) => !/^[.\s]+$/.test(s), "label can't be blank or dots only");
+
+export const QuotationPatchSchema = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("add_custom_column"), label: customColumnLabel }),
+  z.object({ op: z.literal("remove_custom_column"), label: customColumnLabel }),
+]);
 
 // ------------------------------------------------- marketplace listings
 
@@ -463,7 +454,6 @@ export const NotificationPrefsPatchSchema = z
   .object({
     poStatusChanges: z.boolean().optional(),
     mondaySyncErrors: z.boolean().optional(),
-    paymentDue: z.boolean().optional(),
     weeklyDigest: z.boolean().optional(),
   })
   .refine((b) => Object.keys(b).length > 0, "empty update");
@@ -536,6 +526,20 @@ export const OtpVerifyGenericSchema = z.object({
   purpose: z.enum(["change_password", "admin_reset", "change_email"]),
   code: z.string().trim().regex(/^\d{6}$/, "must be a 6-digit code"),
 });
+
+// ----------------------------------------------- catalog conflicts
+
+// Reviewer's decision on a pending catalog conflict. `accept` applies
+// the incoming PI value to the item; `keep` closes the conflict without
+// mutating the item; `custom` writes a third value the reviewer typed.
+export const ConflictResolveSchema = z.discriminatedUnion("decision", [
+  z.object({ decision: z.literal("keep") }),
+  z.object({ decision: z.literal("accept") }),
+  z.object({
+    decision: z.literal("custom"),
+    customValue: z.union([z.string().trim().max(500), z.number().finite()]),
+  }),
+]);
 
 // -------------------------------------------------- shared query params
 

@@ -10,19 +10,45 @@ import {
 } from "./fields";
 
 // Parses a vendor quote file (.xlsx, legacy .xls, or .csv) into staged
-// rows, treating every cell as untrusted text and coercing with the same
-// discipline as the legacy Master File import
-// (src/lib/import/parseMasterFile.ts): coerce by the field's declared
-// kind, flag anything that fails instead of guessing or silently dropping
-// it, and keep the raw value so a reviewer can see and fix it.
+// rows. Every cell is treated as untrusted text and coerced with the same
+// discipline as the legacy Master File import (src/lib/import/parseMasterFile.ts):
+// coerce by the field's declared kind, flag anything that fails instead
+// of guessing or silently dropping it, and keep the raw value so a
+// reviewer can see and fix it.
 //
-// exceljs for .xlsx/.csv, matching the project's stack decision in
-// PROJECT-REPORT.md §2. exceljs cannot read legacy .xls (Excel 97-2003) at
-// all, so a .xls upload is first converted to an equivalent .xlsx buffer
-// in memory (src/lib/xlsToXlsx.ts — the one place SheetJS is used, kept to
-// the smallest possible surface) and then handed to the exact same
-// exceljs path below as any native .xlsx upload.
+// What this file handles that a naive "first sheet, first row" reader
+// doesn't — all seen in real vendor files under /public:
+//
+//   - Multi-sheet workbooks (23146.xls has 4 tabs; the item table is on
+//     a sheet named "CZ", not the first worksheet by position)
+//   - Preamble blocks (19756.xlsx / 20711.xls: 4+ lines of "Performa
+//     Invoice / TO / Material" before the real header row)
+//   - Headers not on row 1 — can appear anywhere in the top 15 rows,
+//     occasionally with blank separator rows between header and data
+//     (23146.xls)
+//   - Trailing footer rows that look like notes rather than items
+//     (22906.xlsx has an "RMB 13.5 Per gram" row below the real data)
+//   - PO number buried in a preamble cell instead of a column header
+//     ("CZ's PO: 20711 2025FFCZ052" in 20711.xls)
+//
+// exceljs is used for .xlsx/.csv parsing. exceljs cannot read .xls at
+// all, so a .xls upload is first converted in memory via xlsToXlsx.ts.
+
 export class QuoteParseError extends Error {}
+
+// Thrown when a workbook has more than one plausible item sheet and the
+// caller needs to re-submit with an explicit `sheetName` chosen. Carries
+// the candidate list so the route can hand it to the UI picker.
+export class SheetChoiceNeededError extends Error {
+  readonly candidates: SheetCandidate[];
+  readonly fileToken?: string;
+  constructor(candidates: SheetCandidate[], fileToken?: string) {
+    super("Multiple sheets look like they could be the item table.");
+    this.name = "SheetChoiceNeededError";
+    this.candidates = candidates;
+    this.fileToken = fileToken;
+  }
+}
 
 export type FieldFlag = {
   field: string;
@@ -35,6 +61,29 @@ export type StagedQuoteRow = {
   raw: Record<string, unknown>;
   coerced: Record<string, unknown>;
   flags: FieldFlag[];
+};
+
+export type SheetCandidate = {
+  name: string;
+  rowCount: number;
+  headerScore: number;
+  headerRow: number | null;
+  dataRows: number;
+  sample: string[]; // first few header cells, for the picker UI
+};
+
+export type ParseResult = {
+  rows: StagedQuoteRow[];
+  // Which sheet the parser actually read. Null for CSV uploads.
+  sheetName: string | null;
+  // All sheets found in the workbook, with their header-match scores —
+  // surfaced on the staged quote so a reviewer can see the parser's
+  // choice and spot a mis-pick before committing.
+  candidates: SheetCandidate[];
+  // PO number pulled from preamble cells above the header row, if any
+  // (e.g. "CZ's PO: 20711 2025FFCZ052" -> "20711"). The route uses this
+  // as a fallback when the user didn't type a PO number into the form.
+  preamblePoNumber: string | null;
 };
 
 const N_A_TOKENS = new Set(["/", "n/a", "na", "-", "--", "", "tbd", "n.a."]);
@@ -95,7 +144,6 @@ function coerceDate(raw: unknown, field: string, flags: FieldFlag[]): string | n
     return raw.toISOString().slice(0, 10);
   }
   if (typeof raw === "number") {
-    // Excel serial date (days since 1899-12-30), when a CSV carries a raw serial.
     const ms = Math.round((raw - 25569) * 86400 * 1000);
     const d = new Date(ms);
     if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
@@ -144,30 +192,137 @@ function coerceByKind(
     case "date":
       return coerceDate(raw, fieldKey, flags);
     case "image":
-      // Never trusted from the file — directory-select + SharePoint upload
-      // is a later feature. Drop a fixed note so the reviewer knows.
       return IMAGE_PLACEHOLDER_NOTE;
   }
 }
 
 function normalizeHeader(header: string): string | null {
-  return QUOTE_HEADER_TO_KEY[header.trim().toLowerCase()] ?? null;
+  // Vendor headers in the wild carry trailing suffixes like "(mm)" /
+  // "(QTY)" / " (g)" / "- Per gram" that make an exact alias lookup
+  // miss. Strip trailing parenthesized annotations and collapse
+  // whitespace before matching; the lookup table is still exact beyond
+  // that so we never mis-map two superficially similar headers.
+  const key = header
+    .replace(/\s*\([^)]*\)\s*$/u, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  if (QUOTE_HEADER_TO_KEY[key]) return QUOTE_HEADER_TO_KEY[key];
+  // Second pass: alias lookup without the parens stripping, in case the
+  // declared alias itself has parens (rare but allowed).
+  const literal = header.trim().toLowerCase();
+  return QUOTE_HEADER_TO_KEY[literal] ?? null;
 }
 
-// Key under which a row's unmapped columns are stashed on `coerced` — the
-// vendor's exact header -> plain-text value, never coerced. The commit step
-// writes these to Item.customFields; the review editor renders them as an
-// editable block.
 export const CUSTOM_KEY = "__custom";
 
-// Headers that look like a spreadsheet artifact rather than a real column
-// (blank, unnamed export placeholders) — don't carry these as custom fields.
 function isNoiseHeader(header: string): boolean {
   const h = header.trim().toLowerCase();
   return h === "" || /^(column|unnamed|field|__empty)\d*$/.test(h);
 }
 
-// Turn one row's { header -> raw value } map into a staged row.
+// A row counts as "data" (not a header, not a trailing note) when it
+// looks like it carries an item: has at least one SKU-ish value in a
+// known identity column, OR fills enough known columns to be plausible.
+//
+// Trailing "Total" footer rows and vendor-template filler rows (one
+// placeholder character per cell — openpyxl renders them as "�") are
+// rejected: these put identical short tokens into every column, which
+// is a pattern no real item row produces.
+const FOOTER_FIRST_CELL_TOKENS = new Set([
+  "total",
+  "totals",
+  "grand total",
+  "subtotal",
+  "sum",
+]);
+
+function looksLikeFillerRow(cells: unknown[]): boolean {
+  // A filler row has every non-blank cell set to the same short token
+  // (often a single glyph like "�" or "-"). Real item rows carry
+  // genuinely different values across their columns.
+  let firstToken: string | null = null;
+  let seen = 0;
+  for (const c of cells) {
+    if (c === null || c === undefined) continue;
+    const s = String(c).trim();
+    if (!s) continue;
+    seen++;
+    if (s.length > 3) return false;
+    if (firstToken === null) firstToken = s;
+    else if (s !== firstToken) return false;
+  }
+  return seen >= 3;
+}
+
+// Short tokens vendors put in a sub-header row to denote the unit of
+// the column above (e.g. row 7 of 20711.xls has just "pcs | USD | USD"
+// under the money/qty columns). A row made up entirely of these — with
+// no identity column populated — is a sub-header, not a line item.
+const UNIT_LABEL_TOKENS = new Set([
+  "pcs",
+  "pc",
+  "piece",
+  "pieces",
+  "usd",
+  "us$",
+  "rmb",
+  "cny",
+  "eur",
+  "gbp",
+  "g",
+  "gram",
+  "grams",
+  "mm",
+  "cm",
+  "in",
+  "qty",
+  "ea",
+  "each",
+]);
+
+function looksLikeDataRow(
+  headerKeys: (string | null)[],
+  cells: unknown[]
+): boolean {
+  if (looksLikeFillerRow(cells)) return false;
+  // Vendor "Total" footer row: first non-blank cell is a totals label.
+  const firstNonBlank = cells.find((c) => c !== null && c !== undefined && String(c).trim() !== "");
+  if (
+    typeof firstNonBlank === "string" &&
+    FOOTER_FIRST_CELL_TOKENS.has(firstNonBlank.trim().toLowerCase())
+  ) {
+    return false;
+  }
+
+  // Repeat-header row: some vendor templates put the same labels on two
+  // consecutive rows (header on row 6, unit sub-row on row 7 that reads
+  // "LABOR COST PER GRAM / pcs / USD / USD / ..."). A row where more
+  // than half of its known-column cells match that column's own header
+  // text, or a known header anywhere else in the file, is treated as
+  // another header line rather than data.
+  let fillCount = 0;
+  let hasIdentity = false;
+  let headerishCount = 0;
+  let unitTokenCount = 0;
+  for (let i = 0; i < headerKeys.length; i++) {
+    const key = headerKeys[i];
+    if (!key) continue;
+    const v = cells[i];
+    if (v === null || v === undefined || String(v).trim() === "") continue;
+    fillCount++;
+    if (key === "itemNumber" || key === "vendorSku") hasIdentity = true;
+    const s = String(v).trim().toLowerCase();
+    if (normalizeHeader(String(v))) headerishCount++;
+    if (UNIT_LABEL_TOKENS.has(s)) unitTokenCount++;
+  }
+  if (fillCount > 0 && headerishCount / fillCount >= 0.5) return false;
+  // Unit sub-header row: no identity, and every populated known column
+  // is a unit label like "pcs"/"USD".
+  if (!hasIdentity && fillCount > 0 && unitTokenCount === fillCount) return false;
+  return hasIdentity || fillCount >= 3;
+}
+
 export function stageRow(
   rowNumber: number,
   rawByHeader: Record<string, unknown>
@@ -182,8 +337,6 @@ export function stageRow(
       byKey[key] = value;
       continue;
     }
-    // Unrecognized column — keep it as a custom field rather than dropping
-    // it, since a quote sheet's column set isn't fixed.
     if (isNoiseHeader(header)) continue;
     const text = value === null || value === undefined ? "" : String(value).trim();
     if (text !== "") custom[header.trim()] = text;
@@ -199,10 +352,6 @@ export function stageRow(
   }
   if (Object.keys(custom).length > 0) coerced[CUSTOM_KEY] = custom;
 
-  // A row needs *some* stable identity to commit. Many vendor quote sheets
-  // (23337.xls among them) carry no CZ item number — the CZ number is
-  // assigned later — so the vendor's own item number stands in. Only flag
-  // when neither is present.
   if (!coerced.itemNumber && !coerced.vendorSku) {
     flags.push({
       field: "itemNumber",
@@ -214,48 +363,84 @@ export function stageRow(
   return { rowNumber, raw: rawByHeader, coerced, flags };
 }
 
-// Some vendor sheets have a blank or title row above the real header
-// (the 23337 sheet: row 1 empty, row 2 is "Image / Po number / company
-// box# …"). Pick the row, within the first `SCAN_ROWS`, that matches the
-// most known column names — that's the header; everything below it is data.
-const SCAN_ROWS = 3;
+// How far down to look for the header row — real vendor files have been
+// seen with up to 5 lines of "Performa Invoice / TO: … / Material: …"
+// preamble before the real column headers (19756.xlsx, 20711.xls). 15
+// is comfortably past that without inviting a false positive from a
+// repeated label halfway through the data.
+const SCAN_ROWS = 15;
+
+// A sheet needs at least this many known headers in a candidate row to
+// be considered an item table at all. Anything less and the sheet is
+// treated as a non-item sheet (PI document, packing list, cover page,
+// etc. — e.g. 23146.xls's PI-HT / SHI / PL sheets score 0 here).
+const MIN_HEADER_SCORE = 3;
 
 function headerRowScore(cells: unknown[]): number {
   let hits = 0;
   for (const c of cells) {
     if (c === null || c === undefined) continue;
-    const key = String(c).trim().toLowerCase();
-    if (key && QUOTE_HEADER_TO_KEY[key]) hits++;
+    const str = String(c).trim();
+    if (!str) continue;
+    if (normalizeHeader(str)) hits++;
   }
   return hits;
 }
 
-// Given a matrix of rows (each an array of cell values), find the header
-// row and turn every row beneath it into a staged row. Shared by the
-// spreadsheet and CSV paths. `rowOffset` is added to the reported
-// rowNumber so it lines up 1-based with the source file.
-function stageMatrix(matrix: unknown[][], rowOffset = 1): StagedQuoteRow[] {
-  if (matrix.length === 0) return [];
-
-  let headerIdx = 0;
+// Pick the row (within the first SCAN_ROWS of a matrix) with the highest
+// known-header score — that's the real header. Returns `null` if nothing
+// scores above the floor, meaning this sheet probably isn't an item
+// table (packing list, cover page, etc).
+function findHeaderRow(matrix: unknown[][]): { index: number; score: number } | null {
+  let bestIdx = -1;
   let bestScore = -1;
   for (let i = 0; i < Math.min(SCAN_ROWS, matrix.length); i++) {
-    const score = headerRowScore(matrix[i]);
-    if (score > bestScore) {
-      bestScore = score;
-      headerIdx = i;
+    const s = headerRowScore(matrix[i]);
+    if (s > bestScore) {
+      bestScore = s;
+      bestIdx = i;
     }
   }
-  if (bestScore <= 0) return []; // no recognizable header in the first rows
+  if (bestScore < MIN_HEADER_SCORE) return null;
+  return { index: bestIdx, score: bestScore };
+}
 
+// Harvest preamble cells (rows above the header) for a PO number. Real
+// vendor files have been seen with "CZ's PO: 20711 2025FFCZ052" sitting
+// in a merged cell on row 2, nowhere near a labeled column. If one
+// matches, pull the first 4-6 digit run — that's the CZ PO number.
+function extractPreamblePoNumber(matrix: unknown[][], headerRow: number): string | null {
+  const re = /CZ'?s?\s*PO:?\s*#?(\d{4,6})/i;
+  for (let r = 0; r < headerRow; r++) {
+    for (const cell of matrix[r] ?? []) {
+      if (cell === null || cell === undefined) continue;
+      const s = String(cell);
+      const m = s.match(re);
+      if (m) return m[1];
+    }
+  }
+  return null;
+}
+
+// Turn one matrix (one sheet or a parsed CSV) into staged rows, given
+// its known header row. Blank rows between header and data are skipped;
+// trailing rows that don't look like real items (footer notes) are
+// skipped rather than being flagged as broken.
+function stageAfterHeader(
+  matrix: unknown[][],
+  headerIdx: number,
+  rowOffset: number
+): StagedQuoteRow[] {
   const headers = matrix[headerIdx].map((h) =>
     h === null || h === undefined ? "" : String(h).trim()
   );
+  const headerKeys = headers.map((h) => (h ? normalizeHeader(h) : null));
 
   const staged: StagedQuoteRow[] = [];
   for (let r = headerIdx + 1; r < matrix.length; r++) {
     const cells = matrix[r];
     if (cells.every((v) => v === null || v === undefined || String(v).trim() === "")) continue;
+    if (!looksLikeDataRow(headerKeys, cells)) continue;
     const rawRow: Record<string, unknown> = {};
     headers.forEach((header, idx) => {
       if (header) rawRow[header] = cells[idx] ?? "";
@@ -278,15 +463,7 @@ function cellText(cell: ExcelJS.Cell): string {
   return String(v);
 }
 
-// .xlsx only (see the module header for why not .xls). Flattens the first
-// worksheet to a row/column matrix, then shares stageMatrix with the CSV
-// path so header-row detection and coercion behave identically.
-async function parseXlsx(data: ArrayBuffer): Promise<StagedQuoteRow[]> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(data);
-  const sheet = wb.worksheets[0];
-  if (!sheet) return [];
-
+function sheetToMatrix(sheet: ExcelJS.Worksheet): unknown[][] {
   const matrix: unknown[][] = [];
   sheet.eachRow({ includeEmpty: true }, (row) => {
     const cells: unknown[] = [];
@@ -295,22 +472,121 @@ async function parseXlsx(data: ArrayBuffer): Promise<StagedQuoteRow[]> {
     });
     matrix.push(cells);
   });
-  return stageMatrix(matrix, 1);
+  return matrix;
 }
 
-function parseCsvBuffer(data: ArrayBuffer): StagedQuoteRow[] {
+// Produce a SheetCandidate for every worksheet, so the picker UI can
+// show the user all tabs and their match scores. A sheet whose score
+// is below MIN_HEADER_SCORE is still listed (so the user sees we
+// looked), but is not auto-pickable.
+function scoreSheets(wb: ExcelJS.Workbook): SheetCandidate[] {
+  return wb.worksheets.map((sheet) => {
+    const matrix = sheetToMatrix(sheet);
+    const header = findHeaderRow(matrix);
+    const sample =
+      header && matrix[header.index]
+        ? matrix[header.index]
+            .slice(0, 6)
+            .map((v) => (v == null ? "" : String(v).trim().slice(0, 40)))
+            .filter(Boolean)
+        : [];
+    const dataRows = header ? Math.max(0, matrix.length - header.index - 1) : 0;
+    return {
+      name: sheet.name,
+      rowCount: matrix.length,
+      headerScore: header?.score ?? 0,
+      headerRow: header?.index ?? null,
+      dataRows,
+      sample,
+    };
+  });
+}
+
+export type ParseOptions = {
+  // Explicit sheet choice from the UI picker. When omitted and the
+  // workbook has more than one plausible item sheet, the parser throws
+  // SheetChoiceNeededError so the route can prompt.
+  sheetName?: string;
+};
+
+async function parseXlsx(data: ArrayBuffer, opts: ParseOptions): Promise<ParseResult> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(data);
+  const candidates = scoreSheets(wb);
+
+  const parseable = candidates.filter((c) => c.headerRow !== null);
+  if (parseable.length === 0) {
+    throw new QuoteParseError(
+      "No sheet in this file has a recognizable item-table header. " +
+        "Check the file in Excel and confirm the column names match the quote template (CZ Collections Item no#, Vendor item#, etc.)."
+    );
+  }
+
+  // Pick the sheet to parse:
+  //   1. explicit sheetName from the picker, if provided
+  //   2. otherwise: if exactly one sheet is parseable, use it
+  //   3. otherwise: throw SheetChoiceNeededError and let the UI pick
+  let chosen: SheetCandidate;
+  if (opts.sheetName) {
+    const match = candidates.find((c) => c.name === opts.sheetName);
+    if (!match || match.headerRow === null) {
+      throw new QuoteParseError(
+        `Sheet "${opts.sheetName}" doesn't have a recognizable item-table header.`
+      );
+    }
+    chosen = match;
+  } else if (parseable.length === 1) {
+    chosen = parseable[0];
+  } else {
+    throw new SheetChoiceNeededError(parseable);
+  }
+
+  const sheet = wb.getWorksheet(chosen.name);
+  if (!sheet) throw new QuoteParseError(`Sheet "${chosen.name}" vanished mid-parse.`);
+  const matrix = sheetToMatrix(sheet);
+  const headerIdx = chosen.headerRow ?? 0;
+  const rows = stageAfterHeader(matrix, headerIdx, 1);
+  const preamblePoNumber = extractPreamblePoNumber(matrix, headerIdx);
+  return { rows, sheetName: chosen.name, candidates, preamblePoNumber };
+}
+
+function parseCsvBuffer(data: ArrayBuffer): ParseResult {
   const text = new TextDecoder("utf-8").decode(data);
-  const rows = parseCsv(text);
-  return stageMatrix(rows, 1);
+  const matrix = parseCsv(text);
+  const header = findHeaderRow(matrix);
+  if (!header) {
+    throw new QuoteParseError(
+      "No recognizable item-table header in this CSV. Check that the column names match the quote template."
+    );
+  }
+  return {
+    rows: stageAfterHeader(matrix, header.index, 1),
+    sheetName: null,
+    candidates: [
+      {
+        name: "(csv)",
+        rowCount: matrix.length,
+        headerScore: header.score,
+        headerRow: header.index,
+        dataRows: matrix.length - header.index - 1,
+        sample: matrix[header.index]
+          .slice(0, 6)
+          .map((v) => (v == null ? "" : String(v).trim().slice(0, 40)))
+          .filter(Boolean),
+      },
+    ],
+    preamblePoNumber: extractPreamblePoNumber(matrix, header.index),
+  };
 }
 
 export async function parseQuoteFileBuffer(
   data: ArrayBuffer,
-  fileName: string
-): Promise<StagedQuoteRow[]> {
+  fileName: string,
+  opts: ParseOptions = {}
+): Promise<ParseResult> {
   const lower = fileName.toLowerCase();
   const head = new Uint8Array(data.slice(0, 8));
-  const isZip = head[0] === 0x50 && head[1] === 0x4b; // .xlsx (ZIP)
+  const isZip = head[0] === 0x50 && head[1] === 0x4b;
 
   if (isXlsBuffer(data, fileName)) {
     let xlsxData: ArrayBuffer;
@@ -322,22 +598,73 @@ export async function parseQuoteFileBuffer(
           "Open it in Excel and use “Save As” to save a .xlsx or .csv copy, then upload that."
       );
     }
-    return parseXlsx(xlsxData);
+    return parseXlsx(xlsxData, opts);
   }
   if (lower.endsWith(".csv")) return parseCsvBuffer(data);
-  if (lower.endsWith(".xlsx") || isZip) return parseXlsx(data);
+  if (lower.endsWith(".xlsx") || isZip) return parseXlsx(data, opts);
   return parseCsvBuffer(data);
+}
+
+// Lightweight inspection — returns workbook structure WITHOUT parsing
+// every row. Used by the route's two-step upload flow: first POST
+// introspects; if multiple sheets are candidates, the UI asks the user
+// to pick; the user's choice is sent back and the full parse runs. For
+// a CSV or a single-sheet workbook, the route can skip straight to the
+// full parse since there's no choice to make.
+export async function inspectQuoteFile(
+  data: ArrayBuffer,
+  fileName: string
+): Promise<{ candidates: SheetCandidate[]; preamblePoNumber: string | null; isCsv: boolean }> {
+  const lower = fileName.toLowerCase();
+  const head = new Uint8Array(data.slice(0, 8));
+  const isZip = head[0] === 0x50 && head[1] === 0x4b;
+
+  if (lower.endsWith(".csv") && !isXlsBuffer(data, fileName) && !isZip) {
+    const text = new TextDecoder("utf-8").decode(data);
+    const matrix = parseCsv(text);
+    const header = findHeaderRow(matrix);
+    return {
+      candidates: header
+        ? [
+            {
+              name: "(csv)",
+              rowCount: matrix.length,
+              headerScore: header.score,
+              headerRow: header.index,
+              dataRows: matrix.length - header.index - 1,
+              sample: [],
+            },
+          ]
+        : [],
+      preamblePoNumber: header ? extractPreamblePoNumber(matrix, header.index) : null,
+      isCsv: true,
+    };
+  }
+
+  const buffer = isXlsBuffer(data, fileName) ? await convertXlsToXlsxBuffer(data) : data;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const candidates = scoreSheets(wb);
+  // Preamble PO is taken from the best sheet's own preamble — that's
+  // where it realistically lives (same sheet as the item table).
+  const best = candidates
+    .filter((c) => c.headerRow !== null)
+    .sort((a, b) => b.headerScore - a.headerScore)[0];
+  let preamblePoNumber: string | null = null;
+  if (best) {
+    const sheet = wb.getWorksheet(best.name);
+    if (sheet) {
+      const matrix = sheetToMatrix(sheet);
+      preamblePoNumber = extractPreamblePoNumber(matrix, best.headerRow ?? 0);
+    }
+  }
+  return { candidates, preamblePoNumber, isCsv: false };
 }
 
 // Build coerced values + flags from a manually-entered row (the "new quote"
 // page). The person typed each field, so it's already the right shape — but
 // run it through the same coercion so numbers/dates land as the correct
 // types and an unparseable entry is flagged rather than stored as text.
-//
-// `values` keys are QUOTE_FIELDS keys for the fixed fields; `customValues`
-// keys are the quote-level custom column labels the person defined. Both go
-// in as { header -> raw text } so stageRow handles them the same way it
-// handles a file's columns.
 export function stageManualRow(
   rowNumber: number,
   values: Record<string, string>,

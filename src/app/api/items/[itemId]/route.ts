@@ -6,6 +6,7 @@ import Item from "@/models/Item";
 import { Types } from "mongoose";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { validateItemMeasurements, formatValidationIssues } from "@/lib/measurements/validate";
+import { isObjectId } from "@/lib/ids";
 
 // GET: single item detail.
 export async function GET(
@@ -16,6 +17,7 @@ export async function GET(
   if (isAuthFail(gate)) return gate.response;
 
   const { itemId } = await params;
+  if (!isObjectId(itemId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   await connectDB();
   const item = await Item.findById(itemId).populate("vendorId", "name").lean();
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
@@ -36,6 +38,7 @@ export async function PATCH(
   const { session } = gate;
 
   const { itemId } = await params;
+  if (!isObjectId(itemId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const parsed = ItemPatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
   const body = parsed.data;
@@ -141,6 +144,16 @@ export async function PATCH(
 
   if (session.user?.id) item.lastEditedBy = new Types.ObjectId(session.user.id);
 
-  await item.save();
+  try {
+    await item.save();
+  } catch (err) {
+    if ((err as { code?: number }).code === 11000) {
+      return NextResponse.json(
+        { error: `Item number "${item.itemNumber}" is already used by another item` },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
   return NextResponse.json({ item });
 }

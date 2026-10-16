@@ -20,6 +20,7 @@ export async function POST(
   const { session } = gate;
 
   const { itemId } = await params;
+  if (!Types.ObjectId.isValid(itemId)) return NextResponse.json({ error: "Item not found" }, { status: 404 });
   await connectDB();
 
   const item = await Item.findById(itemId);
@@ -78,6 +79,11 @@ export async function POST(
     try {
       const bytes = Buffer.from(await file.arrayBuffer());
       const result = await uploadItemImage(ctx, folderKey, file.name, bytes);
+      // Re-uploading a file with the same name overwrites it in SharePoint
+      // and Graph returns the same drive-item id, so replace the existing
+      // entry instead of listing the same image twice.
+      const existing = item.media.findIndex((m) => m.sharePointItemId === result.sharePointItemId);
+      if (existing !== -1) item.media.splice(existing, 1);
       item.media.push({
         sharePointItemId: result.sharePointItemId,
         url: result.url,
@@ -106,5 +112,14 @@ export async function POST(
 
   await item.save();
 
-  return NextResponse.json({ uploaded, failed, imageCompleteness: item.imageCompleteness });
+  return NextResponse.json({
+    uploaded,
+    failed,
+    imageCompleteness: item.imageCompleteness,
+    media: item.media.map((m) => ({
+      sharePointItemId: m.sharePointItemId,
+      url: m.url,
+      subfolder: m.subfolder,
+    })),
+  });
 }

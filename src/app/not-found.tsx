@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { LayoutDashboard, BookOpenCheck, ClipboardList, Wallet, ArrowLeft, Compass } from "lucide-react";
+import { LayoutDashboard, BookOpenCheck, ClipboardList, PackageSearch, ArrowLeft, Compass } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 
 const SHORTCUTS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/catalog", label: "Catalog", icon: BookOpenCheck },
   { href: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList },
-  { href: "/payables", label: "Payables", icon: Wallet },
+  { href: "/items", label: "Un-Verified Items", icon: PackageSearch },
 ];
 
 export default function NotFound() {

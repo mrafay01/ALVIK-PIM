@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { safeCallbackPath } from "@/lib/safeCallback";
 import { LogIn, Gem, ClipboardList, ShieldCheck, Workflow, MailCheck, ArrowLeft } from "lucide-react";
 import { Field, Input, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
@@ -35,8 +35,24 @@ type Step = "password" | "otp";
 // ignores (harmless, just a confusing extra step for no reason).
 const OTP_2FA_ENABLED = process.env.NEXT_PUBLIC_OTP_2FA_ENABLED === "true";
 
+const RESEND_COOLDOWN_S = 30;
+
+// Turns a NextAuth signIn() result into the message to show. A thrown error
+// in authorize() (the rate limit) arrives as its own message; a plain
+// "wrong credentials" arrives as the generic "CredentialsSignin" code.
+function signInErrorMessage(error: string | null | undefined, fallback: string): string {
+  if (error && error.startsWith("Too many")) return error;
+  return fallback;
+}
+
+// Where to go after sign-in: the page the user was originally heading to
+// (set by middleware as ?callbackUrl=), or the dashboard.
+function postLoginTarget(): string {
+  if (typeof window === "undefined") return "/dashboard";
+  return safeCallbackPath(new URLSearchParams(window.location.search).get("callbackUrl")) ?? "/dashboard";
+}
+
 export default function LoginPage() {
-  const router = useRouter();
   const [step, setStep] = useState<Step>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,11 +61,38 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
+  // One countdown, driven by state — the previous setInterval-per-send
+  // approach leaked intervals (Back + Continue during a cooldown ran two at
+  // once and counted down twice as fast) and kept ticking after unmount.
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  // NextAuth's own error redirects (pages.error = /login) arrive as ?error=;
+  // a session ended elsewhere (revoked / deactivated) arrives as ?session=expired.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error");
+    if (err) setError(err.startsWith("Too many") ? err : "Sign-in failed. Please try again.");
+    else if (params.get("session") === "expired") setError("Your session has ended. Please sign in again.");
+  }, []);
+
+  const normalizedEmail = () => email.trim().toLowerCase();
+
+  // A full page navigation (not router.push): it guarantees the next request
+  // carries the fresh session cookie and that no pre-login page data is
+  // reused from the client router cache.
+  function finishSignIn() {
+    window.location.replace(postLoginTarget());
+  }
+
   async function requestOtp() {
     const res = await fetch("/api/auth/otp/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email: normalizedEmail(), password }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -59,36 +102,24 @@ export default function LoginPage() {
 
   async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     setError(null);
     setSubmitting(true);
     try {
       if (!OTP_2FA_ENABLED) {
-        // 2FA off — sign in directly on the password step. authorize()
-        // doesn't require sessionTicket while OTP_2FA_ENABLED is unset,
-        // so this is a normal single-step credentials login.
-        const result = await signIn("credentials", { email, password, redirect: false });
-        if (result?.error) {
-          throw new Error("Invalid email or password.");
+        const result = await signIn("credentials", { email: normalizedEmail(), password, redirect: false });
+        if (!result?.ok) {
+          throw new Error(signInErrorMessage(result?.error, "Invalid email or password."));
         }
-        router.push("/dashboard");
+        finishSignIn();
         return;
       }
 
       await requestOtp();
+      setCode("");
       setStep("otp");
-      setResendCooldown(30);
-      const interval = setInterval(() => {
-        setResendCooldown((s) => {
-          if (s <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return s - 1;
-        });
-      }, 1000);
+      setResendCooldown(RESEND_COOLDOWN_S);
     } catch (err) {
-      // Same message whether the account exists or the password is
-      // wrong — the API doesn't distinguish, so neither should this.
       setError(err instanceof Error ? err.message : "Invalid email or password.");
     } finally {
       setSubmitting(false);
@@ -101,16 +132,8 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await requestOtp();
-      setResendCooldown(30);
-      const interval = setInterval(() => {
-        setResendCooldown((s) => {
-          if (s <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return s - 1;
-        });
-      }, 1000);
+      setCode("");
+      setResendCooldown(RESEND_COOLDOWN_S);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't resend the code.");
     } finally {
@@ -120,29 +143,38 @@ export default function LoginPage() {
 
   async function handleOtpSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     setError(null);
     setSubmitting(true);
     try {
       const verifyRes = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ email: normalizedEmail(), code }),
       });
       const verifyData = await verifyRes.json().catch(() => ({}));
       if (!verifyRes.ok) {
+        // A spent code can't be retried — clear it so the next attempt starts fresh.
+        if (verifyData.reason === "too_many_attempts" || verifyData.reason === "expired") setCode("");
         throw new Error(verifyData.error || "That code isn't right.");
       }
 
       const result = await signIn("credentials", {
-        email,
+        email: normalizedEmail(),
         password,
         sessionTicket: verifyData.sessionTicket,
         redirect: false,
       });
-      if (result?.error) {
-        throw new Error("Verification failed. Start over and try again.");
+      if (!result?.ok) {
+        // The code is used up at this point, so staying on this step would
+        // be a dead end — go back to the password step to get a new one.
+        setStep("password");
+        setCode("");
+        throw new Error(
+          signInErrorMessage(result?.error, "Sign-in couldn't be completed. Enter your password again to get a new code.")
+        );
       }
-      router.push("/dashboard");
+      finishSignIn();
     } catch (err) {
       setError(err instanceof Error ? err.message : "That code isn't right.");
     } finally {
@@ -219,7 +251,7 @@ export default function LoginPage() {
             </h1>
             <p className="mt-[18px] text-base text-ink-soft leading-[1.7]">
               CZC PIM replaces scattered Excel Master Files and Monday boards with a single
-              source of truth, from vendor intake to purchase orders to payables, built for
+              source of truth, from vendor intake to purchase orders to catalog, built for
               how the wholesale jewelry business actually runs.
             </p>
           </div>
@@ -263,6 +295,8 @@ export default function LoginPage() {
                 <Field label="Email">
                   <Input
                     type="email"
+                    name="email"
+                    autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -273,6 +307,8 @@ export default function LoginPage() {
                 <Field label="Password">
                   <Input
                     type="password"
+                    name="password"
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -281,7 +317,8 @@ export default function LoginPage() {
                 </Field>
                 <Button type="submit" variant="primary" disabled={submitting} className="mt-1.5 !px-4 !py-[11px]">
                   <span className="flex items-center justify-center gap-1.5">
-                    <LogIn size={16} /> {submitting ? "Sending code…" : "Continue"}
+                    <LogIn size={16} />{" "}
+                    {submitting ? (OTP_2FA_ENABLED ? "Sending code…" : "Signing in…") : OTP_2FA_ENABLED ? "Continue" : "Sign in"}
                   </span>
                 </Button>
                 {error && <ErrorText>{error}</ErrorText>}
@@ -297,7 +334,7 @@ export default function LoginPage() {
                 </span>
                 <h2 className="text-2xl mb-1.5">Check your email</h2>
                 <p className="text-[0.88rem] text-ink-faint m-0">
-                  We sent a 6-digit code to <span className="text-ink font-semibold">{email}</span>. It expires
+                  We sent a 6-digit code to <span className="text-ink font-semibold">{normalizedEmail()}</span>. It expires
                   in 10 minutes.
                 </p>
               </div>

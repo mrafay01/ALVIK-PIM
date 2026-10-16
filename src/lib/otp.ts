@@ -1,4 +1,5 @@
 import { randomInt, randomBytes } from "crypto";
+import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import LoginOtp from "@/models/LoginOtp";
 import { sendOtpEmail } from "@/lib/mailer";
@@ -18,17 +19,25 @@ function generateCode(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
+export class OtpDeliveryError extends Error {}
+
+// Shared 502 for every route that emails a code, so a mail-server outage
+// reads the same everywhere instead of surfacing as a bare 500.
+export function otpDeliveryFailed(): NextResponse {
+  return NextResponse.json(
+    { error: "We couldn't send the verification email. Try again in a moment, or contact your administrator." },
+    { status: 502 }
+  );
+}
+
 // Issue a new OTP for a user and email it. An earlier pending code for
 // this user *and this purpose* is simply superseded — verify() only ever
 // looks at the most recent unconsumed one for that (userId, purpose) pair,
 // so an old code stops being useful once a new one for the same purpose is
-// issued, even though it isn't explicitly deleted. A pending code for a
-// *different* purpose (e.g. a login OTP mid-flight) is untouched.
+// issued. A pending code for a *different* purpose is untouched.
 //
 // `targetEmail` is set for change_email only: the code is sent to the new
-// address being verified, not to `email` at all — callers pass the
-// account's current email as `email` only for purposes where that's where
-// the code should land (login, change_password, admin_reset).
+// address being verified.
 export async function issueOtp(
   userId: Types.ObjectId,
   email: string,
@@ -38,7 +47,7 @@ export async function issueOtp(
   const code = generateCode();
   const codeHash = await bcrypt.hash(code, 10);
 
-  await LoginOtp.create({
+  const record = await LoginOtp.create({
     userId,
     purpose,
     targetEmail: targetEmail ?? null,
@@ -46,70 +55,91 @@ export async function issueOtp(
     expiresAt: new Date(Date.now() + CODE_TTL_MS),
   });
 
-  await sendOtpEmail(email, code);
+  try {
+    await sendOtpEmail(email, code);
+  } catch (err) {
+    // A code nobody received must not stay "most recent" — it would make
+    // an earlier, actually-delivered code unusable.
+    await LoginOtp.deleteOne({ _id: record._id }).catch(() => undefined);
+    throw new OtpDeliveryError(err instanceof Error ? err.message : String(err));
+  }
 }
 
 export type OtpVerifyResult =
   | { ok: true; sessionTicket: string }
   | { ok: false; reason: "invalid" | "expired" | "too_many_attempts" | "none_pending" };
 
-// Verify a submitted code against the most recent unconsumed, unexpired
-// OTP issued for this (userId, purpose) pair. On success, mints a one-time
-// session ticket (and marks the code consumed so it can't be reused) that
-// the caller hands to whatever action this code was gating. On a wrong
-// guess, increments the attempt counter so a code can only be brute-forced
-// MAX_ATTEMPTS times before it's dead.
+// Verify a submitted code against the most recent unconsumed, unexpired OTP
+// for this (userId, purpose). On success, mints a one-time session ticket.
+//
+// Both writes are atomic, conditional updates rather than read-modify-save:
+//   - a wrong guess claims an attempt with $inc guarded by attempts < MAX,
+//     so parallel guesses can't each read "0 attempts" and exceed the cap;
+//   - a right guess consumes the code with a filter on consumedAt: null, so
+//     two parallel correct submissions can't both mint a ticket.
 export async function verifyOtp(
   userId: Types.ObjectId,
   submittedCode: string,
   purpose: OtpPurpose = "login"
 ): Promise<OtpVerifyResult> {
-  const pending = await LoginOtp.findOne({ userId, purpose, consumedAt: null }).sort({ createdAt: -1 }).exec();
+  const pending = await LoginOtp.findOne({ userId, purpose, consumedAt: null })
+    .sort({ createdAt: -1 })
+    .lean();
 
   if (!pending) return { ok: false, reason: "none_pending" };
   if (pending.expiresAt.getTime() < Date.now()) return { ok: false, reason: "expired" };
-  if (pending.attempts >= MAX_ATTEMPTS) return { ok: false, reason: "too_many_attempts" };
+
+  // Claim one attempt before comparing — the slot is spent whether or not
+  // the guess is right, which is what makes the cap hold under concurrency.
+  const claimed = await LoginOtp.findOneAndUpdate(
+    { _id: pending._id, consumedAt: null, attempts: { $lt: MAX_ATTEMPTS } },
+    { $inc: { attempts: 1 } },
+    { new: true }
+  ).lean();
+  if (!claimed) return { ok: false, reason: "too_many_attempts" };
 
   const valid = await bcrypt.compare(submittedCode, pending.codeHash);
   if (!valid) {
-    pending.attempts += 1;
-    await pending.save();
-    return { ok: false, reason: pending.attempts >= MAX_ATTEMPTS ? "too_many_attempts" : "invalid" };
+    return { ok: false, reason: claimed.attempts >= MAX_ATTEMPTS ? "too_many_attempts" : "invalid" };
   }
 
   const sessionTicket = randomBytes(24).toString("hex");
-  pending.consumedAt = new Date();
-  pending.sessionTicket = sessionTicket;
-  await pending.save();
+  const consumed = await LoginOtp.findOneAndUpdate(
+    { _id: pending._id, consumedAt: null },
+    { $set: { consumedAt: new Date(), sessionTicket } },
+    { new: true }
+  ).lean();
+  // Lost a race with a parallel correct submission — that one got the ticket.
+  if (!consumed) return { ok: false, reason: "none_pending" };
   return { ok: true, sessionTicket };
 }
 
-// Redeem a session ticket exactly once, scoped to the purpose it was
-// issued for — a login ticket can't be replayed to authorize a password
-// reset, and vice versa. Called from NextAuth's authorize() for login, or
-// from the relevant PATCH route for the account-security actions, in place
-// of re-verifying the OTP code itself: the ticket already proves the code
-// was checked correctly, and a fresh, unconsumed match on this
-// (user, purpose) is the only thing that lets the action proceed.
+// Redeem a session ticket exactly once, scoped to the purpose it was issued
+// for. A single atomic update: the filter requires the ticket to be
+// unredeemed and still within its TTL, so two parallel redemptions of the
+// same ticket can't both succeed.
 export async function redeemSessionTicket(
   userId: Types.ObjectId,
   ticket: string,
   purpose: OtpPurpose = "login"
 ): Promise<boolean> {
-  const record = await LoginOtp.findOne({ userId, purpose, sessionTicket: ticket, ticketConsumedAt: null }).exec();
-  if (!record) return false;
-  if (record.consumedAt && Date.now() - record.consumedAt.getTime() > TICKET_TTL_MS) return false;
-
-  record.ticketConsumedAt = new Date();
-  await record.save();
-  return true;
+  if (!ticket) return false;
+  const redeemed = await LoginOtp.findOneAndUpdate(
+    {
+      userId,
+      purpose,
+      sessionTicket: ticket,
+      ticketConsumedAt: null,
+      consumedAt: { $gte: new Date(Date.now() - TICKET_TTL_MS) },
+    },
+    { $set: { ticketConsumedAt: new Date() } }
+  ).lean();
+  return !!redeemed;
 }
 
 // change_email only: the new address a verified ticket was actually issued
 // for — the PATCH route needs this to know which email to write, since the
-// client only ever sends back an opaque ticket, never the raw new-email
-// text (which would let a tampered request apply a different address than
-// the one the code was actually sent to and verified for).
+// client only ever sends back an opaque ticket, never the raw new-email text.
 export async function getVerifiedTargetEmail(
   userId: Types.ObjectId,
   ticket: string
@@ -119,7 +149,7 @@ export async function getVerifiedTargetEmail(
     purpose: "change_email",
     sessionTicket: ticket,
     ticketConsumedAt: { $ne: null },
-  }).exec();
+  }).lean();
   if (!record) return null;
   return record.targetEmail ?? null;
 }

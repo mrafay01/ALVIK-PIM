@@ -2,6 +2,7 @@ import { mondayRequest } from "./client";
 import { MONDAY_BOARD_ID, MONDAY_COLUMN_IDS, STATUS_TO_MONDAY_LABEL, backOfficeFieldToMondayLabel } from "./config";
 import type { PurchaseOrderDoc } from "@/models/PurchaseOrder";
 import PurchaseOrder from "@/models/PurchaseOrder";
+import { MONDAY_CLOSED_LABELS } from "@/lib/purchase-orders/listState";
 import type { HydratedDocument } from "mongoose";
 
 interface ColumnValuesResult {
@@ -10,9 +11,16 @@ interface ColumnValuesResult {
 }
 
 function buildColumnValues(po: HydratedDocument<PurchaseOrderDoc>): Record<string, unknown> {
-  const values: Record<string, unknown> = {
-    [MONDAY_COLUMN_IDS.status]: { label: STATUS_TO_MONDAY_LABEL[po.status as keyof typeof STATUS_TO_MONDAY_LABEL] },
-  };
+  const values: Record<string, unknown> = {};
+  // Only write the Status column when the app's stage is actually the
+  // truth. A PO whose board label has no pipeline mapping (Received,
+  // Canceled, Stuck, On Hold…) carries a stale default stage here — pushing
+  // it would overwrite e.g. "Received" on the board with "Send to vendor".
+  if (po.mondayStatusMapped !== false) {
+    values[MONDAY_COLUMN_IDS.status] = {
+      label: STATUS_TO_MONDAY_LABEL[po.status as keyof typeof STATUS_TO_MONDAY_LABEL],
+    };
+  }
 
   if (po.poTotal != null) values[MONDAY_COLUMN_IDS.poTotal] = po.poTotal;
   if (po.orderDate) values[MONDAY_COLUMN_IDS.orderDate] = { date: toDateString(po.orderDate) };
@@ -32,6 +40,19 @@ function buildColumnValues(po: HydratedDocument<PurchaseOrderDoc>): Record<strin
   }
 
   return values;
+}
+
+// Records that the board now matches this PO. Saved with timestamps off:
+// otherwise the save stamps updatedAt a few ms AFTER lastPushedToMondayAt,
+// so the PO would look "changed since last push" forever and get re-pushed
+// on every bulk sync.
+function markPushed(po: HydratedDocument<PurchaseOrderDoc>, columnValues: Record<string, unknown>) {
+  po.lastPushedToMondayAt = new Date();
+  const pushed = columnValues[MONDAY_COLUMN_IDS.status] as { label?: string } | undefined;
+  if (pushed?.label) {
+    po.mondayStatusText = pushed.label;
+    po.mondayStatusMapped = true;
+  }
 }
 
 function toDateString(d: Date): string {
@@ -66,8 +87,8 @@ export async function syncPurchaseOrderToMonday(
     if (!id) throw new Error("Monday create_item did not return an id");
 
     po.mondayItemId = id;
-    po.lastPushedToMondayAt = new Date();
-    await po.save();
+    markPushed(po, columnValues);
+    await po.save({ timestamps: false });
     return { mondayItemId: id, created: true };
   }
 
@@ -84,8 +105,8 @@ export async function syncPurchaseOrderToMonday(
     columnValues: JSON.stringify(columnValues),
   });
 
-  po.lastPushedToMondayAt = new Date();
-  await po.save();
+  markPushed(po, columnValues);
+  await po.save({ timestamps: false });
 
   return { mondayItemId: po.mondayItemId, created: false };
 }
@@ -125,6 +146,8 @@ export async function syncAllPurchaseOrders(): Promise<{
       { lastPushedToMondayAt: null },
       { $expr: { $gt: ["$updatedAt", "$lastPushedToMondayAt"] } },
     ],
+    // Finished on the board (Received / Canceled) — nothing to push.
+    mondayStatusText: { $nin: MONDAY_CLOSED_LABELS },
   });
 
   let changed = 0;

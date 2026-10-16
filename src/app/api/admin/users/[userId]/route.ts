@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { UserPatchSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
+import { isObjectId } from "@/lib/ids";
 
 // GET: single user detail.
 export async function GET(
@@ -13,6 +14,7 @@ export async function GET(
   if (isAuthFail(gate)) return gate.response;
 
   const { userId } = await params;
+  if (!isObjectId(userId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   await connectDB();
   const user = await User.findById(userId).select("name email role active createdAt updatedAt").lean();
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -33,6 +35,7 @@ export async function PATCH(
   const { session } = gate;
 
   const { userId } = await params;
+  if (!isObjectId(userId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const parsed = UserPatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
   const body = parsed.data;
@@ -50,7 +53,15 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   if (body.name !== undefined) user.name = body.name;
-  if (body.role !== undefined) user.role = body.role;
+  if (body.role !== undefined && body.role !== user.role) {
+    user.role = body.role;
+    // The role is stamped into the user's login cookie when they sign in,
+    // so a change only takes effect on their next sign-in. Bumping the
+    // session version signs them out everywhere right away (see the jwt
+    // callback in lib/auth.ts) instead of leaving the old role's access
+    // live until the cookie expires.
+    user.sessionVersion = (user.sessionVersion ?? 0) + 1;
+  }
   if (body.active !== undefined) user.active = body.active;
 
   await user.save();

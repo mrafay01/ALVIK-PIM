@@ -5,6 +5,7 @@ import { getSessionRole, roleCan, ROLE_SETS } from "@/lib/authz";
 import Item from "@/models/Item";
 import { ItemEditForm } from "./ItemEditForm";
 import type { ItemMeasurements } from "@/lib/measurements/types";
+import { isObjectId } from "@/lib/ids";
 
 export default async function ItemEditPage({
   params,
@@ -12,6 +13,7 @@ export default async function ItemEditPage({
   params: Promise<{ itemId: string }>;
 }) {
   const { itemId } = await params;
+  if (!isObjectId(itemId)) notFound();
   const role = await getSessionRole();
   if (!roleCan(role, ROLE_SETS.items)) redirect("/unauthorized");
 
@@ -24,7 +26,7 @@ export default async function ItemEditPage({
 
   return (
     <AppShell
-      activeHref={item.inCatalog ? "/catalog" : "/dashboard"}
+      activeHref={item.inCatalog ? "/catalog" : "/items"}
       backHref={`/items/${itemId}`}
       backLabel="Item detail"
       eyebrow="Edit item"

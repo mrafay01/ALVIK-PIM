@@ -6,6 +6,9 @@ import QuotationRow from "@/models/QuotationRow";
 import Vendor from "@/models/Vendor";
 import { PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { QuoteReviewTable } from "./QuoteReviewTable";
+import { QuoteHeaderActions } from "./QuoteHeaderActions";
+import PurchaseOrder from "@/models/PurchaseOrder";
+import { Types } from "mongoose";
 
 type Filter = "all" | "flagged" | "needs_review";
 
@@ -28,18 +31,23 @@ export default async function QuoteReviewPage({
     filterParam === "all" || filterParam === "needs_review" ? filterParam : "flagged";
   const page = parsePage(pageParam);
 
+  if (!Types.ObjectId.isValid(quotationId)) notFound();
   await connectDB();
   void Vendor;
   const quotation = await Quotation.findById(quotationId).populate("vendorId", "name").lean();
   if (!quotation) notFound();
 
   const query = filterToQuery(quotationId, filter);
-  const [rows, filteredTotal, approvedPending, unflaggedPending, grandTotal] = await Promise.all([
+  const [rows, filteredTotal, approvedPending, unflaggedPending, grandTotal, committedCount, linkedPo] = await Promise.all([
     QuotationRow.find(query).sort({ rowNumber: 1 }).skip((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).lean(),
     QuotationRow.countDocuments(query),
     QuotationRow.countDocuments({ quotationId, reviewStatus: "approved", committedItemId: null }),
     QuotationRow.countDocuments({ quotationId, reviewStatus: "needs_review", "flags.0": { $exists: false } }),
     QuotationRow.countDocuments({ quotationId }),
+    QuotationRow.countDocuments({ quotationId, committedItemId: { $ne: null } }),
+    quotation.purchaseOrderId
+      ? PurchaseOrder.findById(quotation.purchaseOrderId).select("poNumber").lean()
+      : Promise.resolve(null),
   ]);
 
   const vendorName = (quotation.vendorId as unknown as { name?: string } | null)?.name ?? "—";
@@ -58,9 +66,18 @@ export default async function QuoteReviewPage({
         {quotation.approvedRows} approved · status:{" "}
         <span className="capitalize">{quotation.status.replace(/_/g, " ")}</span>
       </p>
+      <QuoteHeaderActions
+        quotationId={quotationId}
+        purchaseOrderId={linkedPo ? String(linkedPo._id) : null}
+        poNumber={linkedPo?.poNumber ?? null}
+        canDelete={committedCount === 0}
+        fileUrl={quotation.sourceFile?.webUrl ?? null}
+        fileName={quotation.sourceFile?.name ?? null}
+      />
       <QuoteReviewTable
         quotationId={quotationId}
         rows={JSON.parse(JSON.stringify(rows))}
+        customColumns={(quotation.customColumns ?? []) as string[]}
         filter={filter}
         page={page}
         filteredTotal={filteredTotal}

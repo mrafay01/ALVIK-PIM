@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { RefreshCw, FileSpreadsheet, TriangleAlert, CheckCircle2, ArrowRight, ExternalLink, UserPlus } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { RefreshCw, FileSpreadsheet, TriangleAlert, CheckCircle2, ArrowRight, UserPlus, CloudUpload } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { Button } from "@/components/ui/Button";
@@ -44,6 +44,109 @@ interface PullCommitResult {
   errors: { mondayItemId: string; message: string }[];
 }
 
+interface ArchiveBatch {
+  copied: number;
+  failed: number;
+  skipped: number;
+  remaining: { pos: number; files: number };
+}
+
+// Copies the vendor files attached to POs on Monday into each PO's
+// SharePoint folder. Runs automatically after an import is applied (and
+// can be started by hand); each call copies for ~40s and reports what's
+// left, so it keeps calling until done.
+function SharePointArchive({ autoStartKey }: { autoStartKey: number }) {
+  const [remaining, setRemaining] = useState<{ pos: number; files: number } | null>(null);
+  const [running, setRunning] = useState(false);
+  const [totals, setTotals] = useState({ copied: 0, failed: 0, skipped: 0 });
+  const [error, setError] = useState<string | null>(null);
+  const stopRef = useRef(false);
+
+  const refresh = useCallback(async () => {
+    const res = await fetch("/api/admin/po-files");
+    if (res.ok) setRemaining((await res.json()).remaining);
+  }, []);
+
+  const start = useCallback(async () => {
+    setRunning(true);
+    setError(null);
+    stopRef.current = false;
+    const sum = { copied: 0, failed: 0, skipped: 0 };
+    setTotals(sum);
+    try {
+      while (!stopRef.current) {
+        const res = await fetch("/api/admin/po-files", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? `Copy failed (${res.status})`);
+        const batch = data as ArchiveBatch;
+        sum.copied += batch.copied;
+        sum.failed += batch.failed;
+        sum.skipped += batch.skipped;
+        setTotals({ ...sum });
+        setRemaining(batch.remaining);
+        // Done, or nothing could be copied this round (everything left is
+        // failing for now; it's retried on the next run).
+        if (batch.remaining.files === 0 || batch.copied + batch.skipped === 0) break;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRunning(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (autoStartKey > 0) void start();
+    else void refresh();
+  }, [autoStartKey, start, refresh]);
+
+  const done = totals.copied + totals.skipped + totals.failed > 0;
+  return (
+    <Card>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <h2 className="text-base mb-1 flex items-center gap-1.5">
+            <CloudUpload size={16} /> PO files in SharePoint
+          </h2>
+          <p className="text-[0.85rem] text-ink-soft m-0 max-w-[620px]">
+            Vendor files attached to POs on Monday are copied into SharePoint, one folder per PO
+            (Purchase Orders/&lt;PO number&gt;), newest POs first. This starts by itself after every import.
+          </p>
+          <p className="text-[0.85rem] mt-2 mb-0">
+            {remaining == null
+              ? "Checking…"
+              : remaining.files === 0
+                ? "All PO files are in SharePoint."
+                : `${remaining.files} file${remaining.files === 1 ? "" : "s"} on ${remaining.pos} PO${remaining.pos === 1 ? "" : "s"} still to copy.`}
+            {done && (
+              <span className="text-ink-faint">
+                {" "}
+                This run: {totals.copied} copied
+                {totals.skipped > 0 && `, ${totals.skipped} no longer on Monday`}
+                {totals.failed > 0 && `, ${totals.failed} failed (retried next run, up to 3 times)`}.
+              </span>
+            )}
+          </p>
+          {error && <p className="text-[0.82rem] text-critical mt-1.5 mb-0">{error}</p>}
+        </div>
+        {running ? (
+          <Button variant="secondary" onClick={() => (stopRef.current = true)}>
+            <span className="flex items-center gap-1.5">
+              <RefreshCw size={15} className="spin" /> Copying… (stop)
+            </span>
+          </Button>
+        ) : (
+          <Button variant="primary" disabled={!remaining || remaining.files === 0} onClick={() => void start()}>
+            <span className="flex items-center gap-1.5">
+              <CloudUpload size={15} /> Copy now
+            </span>
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function actionTone(action: PullPlanRow["action"]) {
   if (action === "update") return "brass" as const;
   if (action === "create") return "good" as const;
@@ -56,6 +159,7 @@ export function MondayPullPanel() {
   const [committing, setCommitting] = useState(false);
   const [result, setResult] = useState<PullCommitResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [archiveRun, setArchiveRun] = useState(0);
 
   async function runPreview() {
     setLoading(true);
@@ -91,6 +195,8 @@ export function MondayPullPanel() {
       }
       setResult(await res.json());
       setPlan(null);
+      // New or changed files on the board: copy them into SharePoint now.
+      setArchiveRun((n) => n + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -122,6 +228,8 @@ export function MondayPullPanel() {
           </Button>
         </div>
       </Card>
+
+      <SharePointArchive autoStartKey={archiveRun} />
 
       {error && (
         <Card className="!border-critical-bg">
@@ -266,10 +374,6 @@ export function MondayPullPanel() {
         </>
       )}
 
-      <p className="text-[0.78rem] text-ink-faint flex items-center gap-1.5">
-        <ExternalLink size={12} /> Vendor PI files stay on Monday; imported POs link to them and fetch a fresh
-        download link on click rather than copying the file into PIM.
-      </p>
     </div>
   );
 }

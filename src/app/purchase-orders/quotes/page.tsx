@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import Quotation from "@/models/Quotation";
 import Vendor from "@/models/Vendor";
+import PurchaseOrder from "@/models/PurchaseOrder";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { FilePlus2, Upload } from "lucide-react";
@@ -21,10 +22,12 @@ const TD_CLASS = "px-4 py-3 text-[0.85rem]";
 export default async function QuotesListPage() {
   await connectDB();
   void Vendor; // ensure the model is registered for populate
+  void PurchaseOrder;
 
   const quotations = await Quotation.find({})
-    .select("source sourceFileName poNumber vendorId status totalRows flaggedRows approvedRows createdAt")
+    .select("source sourceFileName poNumber vendorId status totalRows flaggedRows approvedRows createdAt purchaseOrderId")
     .populate("vendorId", "name")
+    .populate("purchaseOrderId", "poNumber")
     .sort({ createdAt: -1 })
     .limit(200)
     .lean();
@@ -67,7 +70,7 @@ export default async function QuotesListPage() {
             <table className="w-full border-collapse min-w-[760px]">
               <thead>
                 <tr>
-                  {["Quote", "Vendor", "Source", "Status", "Items", "Flagged", "Created"].map((h) => (
+                  {["Quote", "Vendor", "Source", "Status", "Items", "Flagged", "Purchase order", "Created"].map((h) => (
                     <th key={h} className={TH_CLASS}>
                       {h}
                     </th>
@@ -97,6 +100,18 @@ export default async function QuotesListPage() {
                     <td className={`${TD_CLASS} font-mono`}>{q.totalRows}</td>
                     <td className={`${TD_CLASS} font-mono ${q.flaggedRows > 0 ? "text-warn" : "text-ink-soft"}`}>
                       {q.flaggedRows}
+                    </td>
+                    <td className={TD_CLASS}>
+                      {(() => {
+                        const po = q.purchaseOrderId as unknown as { _id?: unknown; poNumber?: string } | null;
+                        return po?._id ? (
+                          <Link href={`/purchase-orders/${String(po._id)}`} className="font-mono text-[0.82rem] text-navy-deep no-underline">
+                            {po.poNumber}
+                          </Link>
+                        ) : (
+                          <span className="text-ink-faint">—</span>
+                        );
+                      })()}
                     </td>
                     <td className={`${TD_CLASS} text-[0.8rem] text-ink-faint`}>
                       {q.createdAt ? new Date(q.createdAt).toLocaleString() : "—"}

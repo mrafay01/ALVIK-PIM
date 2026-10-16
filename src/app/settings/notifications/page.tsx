@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSession } from "@/lib/authz";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
@@ -10,12 +9,11 @@ import { NotificationPrefsForm, type NotificationPrefs } from "../NotificationPr
 const DEFAULT_PREFS: NotificationPrefs = {
   poStatusChanges: true,
   mondaySyncErrors: true,
-  paymentDue: true,
   weeklyDigest: false,
 };
 
 export default async function NotificationsSettingsPage() {
-  const session = await getServerSession(authOptions);
+  const session = await getSession();
 
   await connectDB();
   const user = await User.findById(session?.user?.id).select("notificationPrefs").lean();

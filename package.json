@@ -12,7 +12,9 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "seed:admin": "tsx --env-file=.env.local src/scripts/seed-admin.ts",
-    "seed": "tsx --env-file=.env.local src/scripts/seed.ts"
+    "seed": "tsx --env-file=.env.local src/scripts/seed.ts",
+    "migrate": "tsx --env-file=.env.local src/scripts/migrate.ts",
+    "sharepoint:check": "tsx --env-file=.env.local src/scripts/sharepoint-check.ts"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.74.0",

@@ -7,7 +7,6 @@ export { default as QuotationRow } from "./QuotationRow";
 export { default as PurchaseOrder } from "./PurchaseOrder";
 export { default as Shipment } from "./Shipment";
 export { default as ReceivingLog } from "./ReceivingLog";
-export { default as Payment } from "./Payment";
 export { default as SyncLog } from "./SyncLog";
 export { default as PlatformTemplate } from "./PlatformTemplate";
 export { default as ImportBatch } from "./ImportBatch";

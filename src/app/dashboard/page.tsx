@@ -3,14 +3,13 @@ import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import Item from "@/models/Item";
 import PurchaseOrder from "@/models/PurchaseOrder";
-import Payment from "@/models/Payment";
 import Quotation from "@/models/Quotation";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { HBarChart, type HBarDatum } from "@/components/ui/charts/HBarChart";
 import { DonutChart } from "@/components/ui/charts/DonutChart";
 import { TrendBars } from "@/components/ui/charts/TrendBars";
-import { TriangleAlert, Clock, Wallet, ArrowRight, Camera, CloudUpload, ImageOff, ImageDown } from "lucide-react";
+import { TriangleAlert, Clock, ArrowRight, Camera, CloudUpload, ImageOff, ImageDown } from "lucide-react";
 import { PO_STATUSES } from "@/lib/enums";
 import { PO_STATUS_LABEL, PO_STATUS_TONE, ITEM_STATUS_LABEL, ITEM_STATUS_TONE } from "@/lib/statusDisplay";
 
@@ -74,12 +73,23 @@ export default async function DashboardPage() {
 
   const now = new Date();
   const twelveWeeksAgo = new Date(now.getTime() - 12 * 7 * 24 * 60 * 60 * 1000);
-  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   // Batch all Item and PurchaseOrder counts into aggregation pipelines using $facet
-  // to reduce from ~15 separate queries to 3 batch calls (Item, PurchaseOrder, Payment).
-  const [itemMetrics, poMetrics, recentItems, quotationsNeedingReview, payablesDueSoon] = await Promise.all([
+  // to reduce from ~15 separate queries to 3 batch calls.
+  const [itemMetrics, poMetrics, recentItems, quotationsNeedingReview] = await Promise.all([
     Item.aggregate([
+      // Every item flows through each facet below, so carry only the
+      // fields they read rather than whole item documents.
+      {
+        $project: {
+          inCatalog: 1,
+          masterRecordComplete: 1,
+          "catalogApproval.status": 1,
+          imageCompleteness: 1,
+          createdAt: 1,
+          mediaCount: { $size: { $ifNull: ["$media", []] } },
+        },
+      },
       {
         $facet: {
           incompleteCatalog: [
@@ -105,7 +115,7 @@ export default async function DashboardPage() {
             { $count: "count" },
           ],
           itemsNoImages: [
-            { $match: { $or: [{ media: { $exists: false } }, { media: { $size: 0 } }] } },
+            { $match: { mediaCount: 0 } },
             { $count: "count" },
           ],
           itemsFullImages: [
@@ -121,7 +131,7 @@ export default async function DashboardPage() {
           itemsPartialImages: [
             {
               $match: {
-                media: { $exists: true, $not: { $size: 0 } },
+                mediaCount: { $gt: 0 },
                 $or: [
                   { "imageCompleteness.main": { $ne: true } },
                   { "imageCompleteness.sides": { $ne: true } },
@@ -145,6 +155,7 @@ export default async function DashboardPage() {
       },
     ]),
     PurchaseOrder.aggregate([
+      { $project: { status: 1, imageStatus: 1 } },
       {
         $facet: {
           statusCounts: [{ $group: { _id: "$status", count: { $sum: 1 } } }],
@@ -167,10 +178,6 @@ export default async function DashboardPage() {
       .limit(8)
       .lean(),
     Quotation.countDocuments({ status: "needs_review" }),
-    Payment.countDocuments({
-      status: { $in: ["open", "deposit_submitted"] },
-      dueDate: { $lte: sevenDaysFromNow },
-    }),
   ]);
 
   // Extract counts from facet results
@@ -238,14 +245,6 @@ export default async function DashboardPage() {
       tone: "warn",
     });
   }
-  if (payablesDueSoon > 0) {
-    alerts.push({
-      icon: Wallet,
-      text: `${payablesDueSoon} payment${payablesDueSoon === 1 ? "" : "s"} due within 7 days`,
-      href: "/payables",
-      tone: "critical",
-    });
-  }
   if (incompleteCatalogItems > 0) {
     alerts.push({
       icon: TriangleAlert,
@@ -258,7 +257,7 @@ export default async function DashboardPage() {
   return (
     <AppShell activeHref="/dashboard" eyebrow="Overview" title="Dashboard">
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        A snapshot of the whole pipeline (items, purchase orders, catalog, and payables) as of
+        A snapshot of the whole pipeline (items, purchase orders, and catalog) as of
         right now.
       </p>
 

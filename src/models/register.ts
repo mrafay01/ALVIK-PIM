@@ -17,12 +17,16 @@ import QuotationRow from "./QuotationRow";
 import PurchaseOrder from "./PurchaseOrder";
 import Shipment from "./Shipment";
 import ReceivingLog from "./ReceivingLog";
-import Payment from "./Payment";
 import SyncLog from "./SyncLog";
 import PlatformTemplate from "./PlatformTemplate";
 import ImportBatch from "./ImportBatch";
 import ImportBatchRow from "./ImportBatchRow";
 import MarketplaceListing from "./MarketplaceListing";
+import RateLimit from "./RateLimit";
+import Job from "./Job";
+import Migration from "./Migration";
+import CatalogConflict from "./CatalogConflict";
+import CatalogChange from "./CatalogChange";
 
 // Reference each import so nothing is tree-shaken away as an unused binding.
 export const MODELS = {
@@ -35,10 +39,14 @@ export const MODELS = {
   PurchaseOrder,
   Shipment,
   ReceivingLog,
-  Payment,
   SyncLog,
   PlatformTemplate,
   ImportBatch,
   ImportBatchRow,
   MarketplaceListing,
+  RateLimit,
+  Job,
+  Migration,
+  CatalogConflict,
+  CatalogChange,
 } as const;

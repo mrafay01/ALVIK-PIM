@@ -20,6 +20,33 @@ const MondayFileSchema = new Schema(
   { _id: false }
 );
 
+// A PO document stored in SharePoint under "Purchase Orders/{poNumber}/".
+// Either copied from the Monday board's files column (mondayAssetId set)
+// or uploaded in the app with a vendor quote (quotationId set).
+const SharePointFileSchema = new Schema(
+  {
+    source: { type: String, enum: ["monday", "upload"], required: true },
+    name: { type: String, required: true },
+    driveItemId: { type: String, required: true },
+    webUrl: { type: String, required: true },
+    size: Number,
+    mondayAssetId: { type: String, default: null },
+    quotationId: { type: Schema.Types.ObjectId, ref: "Quotation", default: null },
+    addedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
+const ArchiveErrorSchema = new Schema(
+  {
+    assetId: { type: String, required: true },
+    message: String,
+    attempts: { type: Number, default: 0 },
+    at: Date,
+  },
+  { _id: false }
+);
+
 const LineItemSchema = new Schema(
   {
     itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
@@ -86,8 +113,28 @@ const PurchaseOrderSchema = new Schema(
 
     statusHistory: [StatusHistoryEntrySchema],
 
+    // Where this PO record was first created. "monday" = the inbound board
+    // pull; "quotation" = committing a vendor quote (file upload or manual
+    // entry). Null on POs created before this field existed — the list
+    // page treats a PO with a mondayItemId as Monday-sourced in that case.
+    // "manual" = created from an item's detail page (sample PO flow).
+    source: { type: String, enum: ["monday", "quotation", "manual"], default: null },
+    // Quotes whose committed rows were attached to this PO. A PO number can
+    // be shared by a Monday board item and an uploaded PI file; both land
+    // on the same PO rather than creating a duplicate.
+    quotationIds: [{ type: Schema.Types.ObjectId, ref: "Quotation" }],
+
     mondayItemId: { type: String, default: null },
     mondayFiles: [MondayFileSchema],
+    // Copies of this PO's documents in SharePoint (see SharePointFileSchema)
+    // and a link to its folder there.
+    sharePointFiles: { type: [SharePointFileSchema], default: [] },
+    sharePointFolderUrl: { type: String, default: null },
+    // Monday files that couldn't be copied: the latest error per asset, and
+    // the assets given up on after repeated failures (or that no longer
+    // exist on Monday), so the archiver stops retrying them.
+    archiveErrors: { type: [ArchiveErrorSchema], default: [] },
+    archiveGaveUp: { type: [String], default: [] },
     // The board's Status-column label verbatim, stored on every pull
     // regardless of whether it maps to a PoStatus — the app's pipeline
     // `status` field above is a strict linear enum (PoActions.tsx /
@@ -116,6 +163,16 @@ PurchaseOrderSchema.index({ vendorId: 1 });
 PurchaseOrderSchema.index({ "lineItems.itemId": 1 });
 // Monday pull matches board items to POs by mondayItemId.
 PurchaseOrderSchema.index({ mondayItemId: 1 }, { sparse: true });
+// POs list page sorts by updatedAt with no status filter; the (status, updatedAt)
+// compound above can't serve that query path.
+PurchaseOrderSchema.index({ updatedAt: -1 });
+// syncAllPurchaseOrders() filter: {mondayItemId:null} OR {lastPushedToMondayAt:null}
+// OR updatedAt > lastPushedToMondayAt — the first two paths get a sparse index each
+// so the whole bulk-sync picker scans only the small "needs push" tail of the
+// collection instead of the full table.
+PurchaseOrderSchema.index({ lastPushedToMondayAt: 1 }, { sparse: true });
+// High-priority stat tile count on the list page.
+PurchaseOrderSchema.index({ priority: 1 });
 
 export type PurchaseOrderDoc = InferSchemaType<typeof PurchaseOrderSchema>;
 export default (models.PurchaseOrder as Model<PurchaseOrderDoc>) ||

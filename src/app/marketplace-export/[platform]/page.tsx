@@ -28,7 +28,13 @@ export default async function MarketplaceExportPlatformPage({
   const exportableStatuses = ITEM_STATUSES.filter((s) =>
     ["sku_permanent", "po_sent", "receiving", "live"].includes(s)
   );
-  const items = await Item.find({ status: { $in: exportableStatuses }, itemNumber: { $ne: null } })
+  // Same eligibility as GET /api/marketplace-export/[platform]/listings —
+  // inactive items are never exportable, so they're not offered here either.
+  const items = await Item.find({
+    status: { $in: exportableStatuses },
+    itemNumber: { $ne: null },
+    active: { $ne: false },
+  })
     .select("itemNumber category status specs pricingHistory")
     .sort({ updatedAt: -1 })
     .limit(500)

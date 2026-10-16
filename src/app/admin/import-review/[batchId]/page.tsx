@@ -5,6 +5,7 @@ import ImportBatch from "@/models/ImportBatch";
 import ImportBatchRow from "@/models/ImportBatchRow";
 import { ReviewTable } from "./ReviewTable";
 import { PAGE_SIZE, parsePage } from "@/components/app/Pagination";
+import { isObjectId } from "@/lib/ids";
 
 type Filter = "all" | "flagged" | "needs_review";
 
@@ -22,6 +23,7 @@ export default async function BatchReviewPage({
   searchParams: Promise<{ filter?: string; page?: string }>;
 }) {
   const { batchId } = await params;
+  if (!isObjectId(batchId)) notFound();
   const { filter: filterParam, page: pageParam } = await searchParams;
   const filter: Filter =
     filterParam === "all" || filterParam === "needs_review" ? filterParam : "flagged";

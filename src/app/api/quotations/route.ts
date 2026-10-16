@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
+import { z } from "zod";
 import { connectDB } from "@/lib/db";
-import { requireRole, isAuthFail } from "@/lib/authz";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { QuotationManualSchema, badRequest } from "@/lib/schemas";
 import Quotation from "@/models/Quotation";
 import QuotationRow from "@/models/QuotationRow";
@@ -10,18 +11,37 @@ import {
   parseQuoteFileBuffer,
   stageManualRow,
   QuoteParseError,
+  SheetChoiceNeededError,
   type StagedQuoteRow,
+  type SheetCandidate,
 } from "@/lib/quote-import/parseQuoteFile";
+import { getSharePointContext, getDriveItem, downloadDriveItem, deleteDriveItem, relativeFolderPath } from "@/lib/sharepoint/client";
+import {
+  verifyUploadTicket,
+  itemMatchesTicket,
+  fileQuotationIntoPoFolder,
+  MAX_QUOTE_FILE_BYTES,
+} from "@/lib/purchase-orders/files";
+import { normalizePoNumber } from "@/lib/purchase-orders/fromQuotation";
+import logger from "@/lib/logger";
 
 // Who may intake a quote — buyers/purchasing own the PO area this lives
 // under; marketplace_listing already has item-create rights elsewhere.
-const QUOTE_ROLES = ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"] as const;
+const QUOTE_ROLES = ROLE_SETS.quotes;
 
-// The whole file is buffered and parsed in one request. A real vendor quote
-// is small (tens to low-hundreds of rows); cap it so one large upload can't
-// exhaust the instance.
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_ROWS = 5_000;
+
+// A file-upload import: the browser has already uploaded the workbook to
+// SharePoint (see ./upload-session) and sends its ticket + drive item id.
+const FileImportSchema = z.object({
+  file: z.object({ ticket: z.string().max(2000), driveItemId: z.string().min(1).max(200) }),
+  vendorId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
+  vendorName: z.string().trim().max(200).optional(),
+  poNumber: z.string().trim().max(200).optional(),
+  season: z.string().trim().max(120).optional(),
+  // Set on the resubmit after the "which sheet?" picker.
+  sheetName: z.string().trim().max(100).optional(),
+});
 
 // GET: list quotations, newest first, for the quotes index page.
 export async function GET() {
@@ -39,9 +59,10 @@ export async function GET() {
   return NextResponse.json({ quotations });
 }
 
-// POST: intake a quote. Two content types:
-//   multipart/form-data  -> a vendor quote file (.xlsx/.csv); parse it
-//   application/json      -> a hand-entered quote from the "new quote" page
+// POST: intake a quote, as JSON either way:
+//   { file: { ticket, driveItemId }, vendor..., sheetName? } -> a vendor
+//       quote file already uploaded to SharePoint; download and parse it
+//   { items: [...], vendor... } -> a hand-entered quote from "new quote"
 // Both stage rows into QuotationRow (never straight into `items`) so the
 // review page is the one place rows become items.
 export async function POST(req: NextRequest) {
@@ -50,63 +71,88 @@ export async function POST(req: NextRequest) {
   const { session } = gate;
   const userId = session.user?.id ? new Types.ObjectId(session.user.id) : undefined;
 
-  const contentType = req.headers.get("content-type") ?? "";
+  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   await connectDB();
 
   let vendorId: string | undefined;
   let vendorName: string | undefined;
   let source: "file_upload" | "manual";
   let sourceFileName: string | null = null;
+  let sourceFile: { driveItemId: string; name: string; size?: number; webUrl: string; folder: string } | null = null;
   let poNumber: string | null = null;
   let receivedDate: Date | undefined;
   let season: string | undefined;
   let staged: StagedQuoteRow[];
 
-  if (contentType.includes("multipart/form-data")) {
-    const contentLength = Number(req.headers.get("content-length") ?? 0);
-    if (contentLength > MAX_UPLOAD_BYTES) {
-      return NextResponse.json(
-        { error: `File too large. The limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
-        { status: 413 }
-      );
+  if (body && typeof body === "object" && "file" in body) {
+    const parsed = FileImportSchema.safeParse(body);
+    if (!parsed.success) return badRequest(parsed.error);
+    const d = parsed.data;
+    if (d.vendorId) vendorId = d.vendorId;
+    else if (d.vendorName) vendorName = d.vendorName;
+    else return NextResponse.json({ error: "Choose a vendor for this quote" }, { status: 400 });
+    poNumber = d.poNumber || null;
+    season = d.season || undefined;
+
+    const ticket = verifyUploadTicket(d.file.ticket, session.user?.id ?? "");
+    if (!ticket) {
+      return NextResponse.json({ error: "The upload has expired. Choose the file again." }, { status: 400 });
     }
 
-    const form = await req.formData();
-    const file = form.get("file");
-    const vendorField = form.get("vendorId");
-    const vendorNameField = form.get("vendorName");
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json(
-        { error: `File too large. The limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB` },
-        { status: 413 }
-      );
-    }
-    // Same either/or as the manual (JSON) path — an existing vendor picked
-    // from the dropdown, or a brand-new name typed into its "+ Add new
-    // vendor" option, resolved/created below alongside the manual path's
-    // identical logic.
-    if (typeof vendorField === "string" && /^[0-9a-fA-F]{24}$/.test(vendorField)) {
-      vendorId = vendorField;
-    } else if (typeof vendorNameField === "string" && vendorNameField.trim()) {
-      vendorName = vendorNameField.trim().slice(0, 200);
-    } else {
-      return NextResponse.json({ error: "Choose a vendor for this quote" }, { status: 400 });
-    }
-    source = "file_upload";
-    sourceFileName = file.name;
-    const poField = form.get("poNumber");
-    if (typeof poField === "string" && poField.trim()) poNumber = poField.trim().slice(0, 200);
-    const seasonField = form.get("season");
-    if (typeof seasonField === "string" && seasonField.trim()) season = seasonField.trim().slice(0, 120);
-
+    let ctx;
+    let buffer: ArrayBuffer;
     try {
-      staged = await parseQuoteFileBuffer(await file.arrayBuffer(), file.name);
+      ctx = await getSharePointContext();
+      const item = await getDriveItem(ctx, d.file.driveItemId);
+      if (!itemMatchesTicket(item, ticket)) {
+        return NextResponse.json({ error: "Uploaded file not found. Choose the file again." }, { status: 400 });
+      }
+      buffer = await downloadDriveItem(ctx, item.id, MAX_QUOTE_FILE_BYTES);
+      sourceFile = {
+        driveItemId: item.id,
+        name: item.name,
+        size: item.size,
+        webUrl: item.webUrl,
+        folder: relativeFolderPath(item),
+      };
+      sourceFileName = item.name;
     } catch (err) {
-      // QuoteParseError carries a message written for the user (e.g. the
-      // legacy-.xls guidance); anything else is an unexpected parse failure.
+      logger.error("quote import: reading the uploaded file from SharePoint failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return NextResponse.json(
+        { error: "Couldn't read the uploaded file from SharePoint. Try again in a moment." },
+        { status: 502 }
+      );
+    }
+
+    source = "file_upload";
+    try {
+      const parsedFile = await parseQuoteFileBuffer(buffer, sourceFile.name, { sheetName: d.sheetName });
+      staged = parsedFile.rows;
+      // Fallback: if the user didn't type a PO number into the form,
+      // use what the parser pulled from the file's preamble (e.g.
+      // "CZ's PO: 20711 2025FFCZ052" -> "20711"). Explicit form input
+      // still wins — the preamble value is a convenience, not an
+      // override.
+      if (!poNumber && parsedFile.preamblePoNumber) poNumber = parsedFile.preamblePoNumber;
+    } catch (err) {
+      if (err instanceof SheetChoiceNeededError) {
+        // The workbook has more than one plausible item sheet (23146.xls
+        // -> CZ / PI-HT / SHI / PL). Return a structured 409 so the UI
+        // can show a picker and resubmit with sheetName. The file stays
+        // in SharePoint for that resubmit.
+        return NextResponse.json(
+          {
+            error: "This workbook has more than one sheet that looks like an item table. Pick which one.",
+            needsSheetChoice: true,
+            candidates: err.candidates satisfies SheetCandidate[],
+          },
+          { status: 409 }
+        );
+      }
+      // Not a readable quote: don't leave the unusable upload behind.
+      await deleteDriveItem(ctx, sourceFile.driveItemId).catch(() => undefined);
       const message =
         err instanceof QuoteParseError
           ? (err as Error).message
@@ -114,7 +160,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: message }, { status: 400 });
     }
   } else {
-    const parsed = QuotationManualSchema.safeParse(await req.json().catch(() => null));
+    const parsed = QuotationManualSchema.safeParse(body);
     if (!parsed.success) return badRequest(parsed.error);
     vendorId = parsed.data.vendorId;
     vendorName = parsed.data.vendorName;
@@ -173,6 +219,7 @@ export async function POST(req: NextRequest) {
     vendorId,
     source,
     sourceFileName,
+    sourceFile,
     poNumber,
     receivedDate,
     season,
@@ -193,6 +240,21 @@ export async function POST(req: NextRequest) {
       reviewStatus: "needs_review" as const,
     }))
   );
+
+  // Now that the PO number is known (typed, or read from the file), move
+  // the upload out of _Unassigned into that PO's folder. Otherwise it moves
+  // when the quote is committed and its PO number is assigned.
+  const knownPo = normalizePoNumber(poNumber);
+  if (sourceFile && knownPo) {
+    try {
+      await fileQuotationIntoPoFolder(quotation._id, knownPo);
+    } catch (err) {
+      logger.warn("quote import: moving the file into its PO folder failed", {
+        quotationId: String(quotation._id),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   return NextResponse.json(
     { quotationId: quotation._id, totalRows: staged.length, flaggedRows: flaggedCount },

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { connectDB } from "@/lib/db";
-import { requireRole, isAuthFail } from "@/lib/authz";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { QuotationRowPatchSchema, badRequest } from "@/lib/schemas";
 import Quotation from "@/models/Quotation";
 import QuotationRow from "@/models/QuotationRow";
+import { isObjectId } from "@/lib/ids";
 
-const QUOTE_ROLES = ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"] as const;
+const QUOTE_ROLES = ROLE_SETS.quotes;
 
 // PATCH: record a reviewer's decision on one staged quote row — approve
 // (optionally with corrected values), reject, or just edit coerced values.
@@ -20,6 +21,7 @@ export async function PATCH(
   const { session } = gate;
 
   const { quotationId, rowId } = await params;
+  if (!isObjectId(quotationId) || !isObjectId(rowId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const parsed = QuotationRowPatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
   const { reviewStatus, coercedOverrides, reviewNote } = parsed.data;
@@ -30,6 +32,14 @@ export async function PATCH(
 
   const row = await QuotationRow.findOne({ _id: rowId, quotationId });
   if (!row) return NextResponse.json({ error: "Row not found" }, { status: 404 });
+  // Once committed, the row's data lives on the item; editing or re-deciding
+  // the staged copy would silently change nothing.
+  if (row.committedItemId) {
+    return NextResponse.json(
+      { error: "This row is already committed. Edit the item itself instead." },
+      { status: 409 }
+    );
+  }
 
   if (coercedOverrides) {
     const base = { ...(row.coerced ?? {}) } as Record<string, unknown>;

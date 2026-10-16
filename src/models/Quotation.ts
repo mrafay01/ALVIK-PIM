@@ -47,6 +47,43 @@ const QuotationSchema = new Schema(
 
     // Items created when the quote's approved rows were committed.
     itemIds: [{ type: Schema.Types.ObjectId, ref: "Item" }],
+
+    // Quote-level custom column labels. The review table renders a column
+    // for every entry here on EVERY row, so a reviewer can add a field
+    // the vendor forgot to include (e.g. "Finish") once and fill it in
+    // per row. Separate from the per-row __custom map that holds the
+    // values themselves — these are just the labels the reviewer wants
+    // visible on every row of this quote. Deduplicated by lowercase at
+    // write time; the display preserves the original casing.
+    customColumns: { type: [String], default: [] },
+
+    // The purchase order this quote's committed rows were attached to (set
+    // on commit — see src/lib/purchase-orders/fromQuotation.ts). Lets the
+    // quote screens link straight to the PO.
+    purchaseOrderId: { type: Schema.Types.ObjectId, ref: "PurchaseOrder", default: null },
+
+    // Set while a commit is running so a second commit of the same quote
+    // (double click, two reviewers) waits instead of creating duplicate
+    // items. A lock older than COMMIT_LOCK_TTL_MS in the commit route is
+    // treated as abandoned (crashed request) and can be taken over.
+    commitLockedAt: { type: Date, default: null },
+
+    // The uploaded PO/PI file as stored in SharePoint (file uploads only).
+    // `folder` is the path inside the drive, e.g. "Purchase Orders/22906",
+    // or ".../_Unassigned" until the quote's PO number is known.
+    sourceFile: {
+      type: new Schema(
+        {
+          driveItemId: { type: String, required: true },
+          name: { type: String, required: true },
+          size: Number,
+          webUrl: { type: String, required: true },
+          folder: String,
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
   },
   { timestamps: true }
 );

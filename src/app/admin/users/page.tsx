@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSession } from "@/lib/authz";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
@@ -13,7 +12,7 @@ const TH_CLASS =
   "text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap";
 
 export default async function UsersPage() {
-  const session = await getServerSession(authOptions);
+  const session = await getSession();
   const selfId = session?.user?.id;
 
   await connectDB();

@@ -4,9 +4,10 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { rateLimit } from "@/lib/rateLimit";
-import { issueOtp, redeemSessionTicket } from "@/lib/otp";
+import { issueOtp, redeemSessionTicket, OtpDeliveryError, otpDeliveryFailed } from "@/lib/otp";
 import { AdminResetPasswordRequestSchema, AdminResetPasswordConfirmSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
+import { isObjectId } from "@/lib/ids";
 
 // POST: step 1 of an admin resetting a DIFFERENT user's password. The
 // admin proves THEIR OWN identity — their own current password — and a
@@ -21,6 +22,7 @@ export async function POST(
   const { session } = gate;
 
   const { userId: targetUserId } = await params;
+  if (!isObjectId(targetUserId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const parsed = AdminResetPasswordRequestSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
   const { adminPassword, newPassword } = parsed.data;
@@ -28,7 +30,7 @@ export async function POST(
   const adminId = session.user?.id;
   if (!adminId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const perAdmin = rateLimit(`admin-reset-request:${adminId}`, { limit: 5, windowMs: 60_000 });
+  const perAdmin = await rateLimit(`admin-reset-request:${adminId}`, { limit: 5, windowMs: 60_000 });
   if (!perAdmin.allowed) {
     return NextResponse.json({ error: "Too many attempts. Wait a minute and try again." }, { status: 429 });
   }
@@ -44,7 +46,12 @@ export async function POST(
   if (!valid) return NextResponse.json({ error: "Your password is incorrect" }, { status: 400 });
 
   void newPassword; // validated shape only at this step; re-sent and applied in PATCH below
-  await issueOtp(admin._id, admin.email, "admin_reset");
+  try {
+    await issueOtp(admin._id, admin.email, "admin_reset");
+  } catch (err) {
+    if (err instanceof OtpDeliveryError) return otpDeliveryFailed();
+    throw err;
+  }
   return NextResponse.json({ sent: true });
 }
 
@@ -62,6 +69,7 @@ export async function PATCH(
   const { session } = gate;
 
   const { userId: targetUserId } = await params;
+  if (!isObjectId(targetUserId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const parsed = AdminResetPasswordConfirmSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
   const { sessionTicket, newPassword } = parsed.data;

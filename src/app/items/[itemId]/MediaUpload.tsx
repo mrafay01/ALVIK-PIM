@@ -24,6 +24,15 @@ const SUBFOLDER_LABEL: Record<Completeness extends never ? never : keyof Complet
   models: "Models",
 };
 
+function fileNameFromUrl(url: string): string {
+  const last = url.split("?")[0].split("/").pop() ?? "";
+  try {
+    return decodeURIComponent(last);
+  } catch {
+    return last;
+  }
+}
+
 export function MediaUpload({
   itemId,
   folderKey,
@@ -44,36 +53,41 @@ export function MediaUpload({
   const [error, setError] = useState<string | null>(null);
   const [failed, setFailed] = useState<{ filename: string; error: string }[]>([]);
 
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // One file per request: each request then stays under the hosting
+  // platform's request-body cap (4.5 MB on Vercel) and a slow or failed
+  // file doesn't take the rest of the batch down with it. Sequential, so
+  // two writes to the same item never race each other.
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
+    const list = Array.from(files);
     setUploading(true);
     setError(null);
     setFailed([]);
+    setProgress({ done: 0, total: list.length });
 
-    const formData = new FormData();
-    for (const file of Array.from(files)) formData.append("files", file);
-
+    const failures: { filename: string; error: string }[] = [];
     try {
-      const res = await fetch(`/api/items/${itemId}/media`, { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Upload failed (${res.status})`);
-
-      if (data.uploaded.length > 0) {
-        setMedia((prev) => [
-          ...prev,
-          ...data.uploaded.map((u: { filename: string; subfolder: string; url: string }) => ({
-            sharePointItemId: u.url,
-            url: u.url,
-            subfolder: u.subfolder,
-          })),
-        ]);
+      for (const [i, file] of list.entries()) {
+        const formData = new FormData();
+        formData.append("files", file);
+        try {
+          const res = await fetch(`/api/items/${itemId}/media`, { method: "POST", body: formData });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error ?? `Upload failed (${res.status})`);
+          if (Array.isArray(data.media)) setMedia(data.media);
+          if (data.imageCompleteness) setCompleteness(data.imageCompleteness);
+          if (Array.isArray(data.failed)) failures.push(...data.failed);
+        } catch (err) {
+          failures.push({ filename: file.name, error: err instanceof Error ? err.message : String(err) });
+        }
+        setProgress({ done: i + 1, total: list.length });
       }
-      setCompleteness(data.imageCompleteness);
-      if (data.failed.length > 0) setFailed(data.failed);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setFailed(failures);
     } finally {
       setUploading(false);
+      setProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
@@ -101,7 +115,12 @@ export function MediaUpload({
           <>
             <Button size="sm" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
               <span className="flex items-center gap-1.5">
-                <Upload size={13} /> {uploading ? "Uploading…" : "Upload"}
+                <Upload size={13} />{" "}
+                {uploading
+                  ? progress && progress.total > 1
+                    ? `Uploading ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…`
+                    : "Uploading…"
+                  : "Upload"}
               </span>
             </Button>
             <input
@@ -148,9 +167,9 @@ export function MediaUpload({
         <p className="text-[0.85rem] text-ink-faint m-0">No images uploaded yet.</p>
       ) : (
         <div className="flex flex-col gap-1">
-          {media.map((m, i) => (
+          {media.map((m) => (
             <a
-              key={i}
+              key={m.sharePointItemId}
               href={m.url}
               target="_blank"
               rel="noopener noreferrer"
@@ -158,6 +177,7 @@ export function MediaUpload({
             >
               <ExternalLink size={12} />
               <span className="capitalize">{m.subfolder}</span>
+              <span className="font-mono text-ink-soft">{fileNameFromUrl(m.url)}</span>
               <span className="text-ink-faint">(view on SharePoint)</span>
             </a>
           ))}

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const userId = gate.session.user?.id;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const perUser = rateLimit(`otp-verify-generic:${userId}:${purpose}`, { limit: 10, windowMs: 60_000 });
+  const perUser = await rateLimit(`otp-verify-generic:${userId}:${purpose}`, { limit: 10, windowMs: 60_000 });
   if (!perUser.allowed) {
     return NextResponse.json({ error: "Too many attempts. Wait a minute and try again." }, { status: 429 });
   }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Montserrat, Quicksand, JetBrains_Mono } from "next/font/google";
 import { Providers } from "./providers";
-import { THEME_STORAGE_KEY } from "@/lib/theme";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 // next/font self-hosts these at build time (no runtime request to Google
@@ -9,23 +9,38 @@ import "./globals.css";
 // that globals.css's --font-display/--font-body/--font-mono tokens read from.
 // Montserrat (headings) is capped at 700 — the app never requests or uses a
 // heavier weight (800/900) than that for display text, by design.
+//
+// `adjustFontFallback: false` opts out of Next.js's size-matching trick that
+// generates a per-font fallback metric table at build. That generator is the
+// code path that crashes with "Cannot read properties of null (reading '1')"
+// when the Google Fonts response doesn't parse — a transient fetch failure
+// shouldn't take the whole build down. The explicit `fallback: [...]` list
+// is what the browser uses while the real font loads (and if the download
+// fails entirely). Every value here is an inline literal because Next.js's
+// SWC font-loader plugin refuses symbol references.
 const montserrat = Montserrat({
   subsets: ["latin"],
   weight: ["500", "600", "700"],
   variable: "--font-montserrat",
   display: "swap",
+  fallback: ["system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+  adjustFontFallback: false,
 });
 const quicksand = Quicksand({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-quicksand",
   display: "swap",
+  fallback: ["system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+  adjustFontFallback: false,
 });
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   variable: "--font-jetbrains-mono",
   display: "swap",
+  fallback: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
+  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
@@ -42,16 +57,9 @@ export const metadata: Metadata = {
 // choice at all) means: don't set data-theme, and let globals.css's
 // existing `@media (prefers-color-scheme: light) :root:not([data-theme="dark"])`
 // rule pick it up from the OS setting.
-const themeInitScript = `
-(function () {
-  try {
-    var t = localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
-    if (t === "dark" || t === "light") {
-      document.documentElement.setAttribute("data-theme", t);
-    }
-  } catch (e) {}
-})();
-`;
+//
+// The script body is defined in @/lib/theme. It runs under the CSP's
+// script-src 'unsafe-inline' (see next.config.ts for why that's needed).
 
 export default function RootLayout({
   children,
@@ -71,9 +79,9 @@ export default function RootLayout({
     >
       <head>
         {/* Deliberately synchronous and inline (not next/script) — must
-            block first paint to avoid a theme flash; see themeInitScript's
-            own comment above. */}
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+            block first paint to avoid a theme flash; see the comment
+            above. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
         <Providers>{children}</Providers>

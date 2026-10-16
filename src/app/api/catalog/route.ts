@@ -135,7 +135,9 @@ export async function POST(req: NextRequest) {
   const rows: Row[] = [
     baseRow,
     ...(d.variations ?? []).map((v) => ({
-      itemNumber: v.independentSku ? splitSku(v.independentSku).baseSku : `${base.baseSku}-${v.suffix}`,
+      // An independent SKU is used exactly as typed (the form previews it
+      // that way); splitting it would drop everything after the first hyphen.
+      itemNumber: v.independentSku?.trim() ? v.independentSku.trim() : `${base.baseSku}-${v.suffix}`,
       title: v.title ?? d.title,
       description: v.description ?? d.description,
       plating: v.plating ?? d.plating,
@@ -263,6 +265,21 @@ export async function POST(req: NextRequest) {
     return doc;
   });
 
-  const inserted = await Item.insertMany(docs);
+  let inserted;
+  try {
+    inserted = await Item.insertMany(docs);
+  } catch (err) {
+    // Someone created one of these SKUs between the clash check above and
+    // this insert. Remove whatever part of the family did get in, so the
+    // user can fix the SKU and resubmit cleanly.
+    if ((err as { code?: number }).code === 11000) {
+      await Item.deleteMany({ variationGroupId });
+      return NextResponse.json(
+        { error: "One of these SKUs was just created by someone else. Check the SKUs and try again" },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
   return NextResponse.json({ baseItemId: inserted[0]._id, created: inserted.length }, { status: 201 });
 }

@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import { requireSession, isAuthFail } from "@/lib/authz";
 import { rateLimit } from "@/lib/rateLimit";
-import { issueOtp, redeemSessionTicket } from "@/lib/otp";
+import { issueOtp, redeemSessionTicket, OtpDeliveryError, otpDeliveryFailed } from "@/lib/otp";
 import { ChangePasswordRequestSchema, ChangePasswordConfirmSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
 
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const userId = gate.session.user?.id;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const perUser = rateLimit(`change-password-request:${userId}`, { limit: 5, windowMs: 60_000 });
+  const perUser = await rateLimit(`change-password-request:${userId}`, { limit: 5, windowMs: 60_000 });
   if (!perUser.allowed) {
     return NextResponse.json({ error: "Too many attempts. Wait a minute and try again." }, { status: 429 });
   }
@@ -36,7 +36,12 @@ export async function POST(req: NextRequest) {
   if (!valid) return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
 
   void newPassword; // validated shape only at this step; re-sent and applied in PATCH below
-  await issueOtp(user._id, user.email, "change_password");
+  try {
+    await issueOtp(user._id, user.email, "change_password");
+  } catch (err) {
+    if (err instanceof OtpDeliveryError) return otpDeliveryFailed();
+    throw err;
+  }
   return NextResponse.json({ sent: true });
 }
 

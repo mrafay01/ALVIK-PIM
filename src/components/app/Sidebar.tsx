@@ -6,7 +6,7 @@ import Image from "next/image";
 import {
   LayoutDashboard,
   ClipboardList,
-  Wallet,
+  PackageSearch,
   BookOpenCheck,
   FileSpreadsheet,
   Store,
@@ -30,7 +30,7 @@ const COLLAPSE_KEY = "czc-pim-sidebar-collapsed";
 const ICONS = {
   LayoutDashboard,
   ClipboardList,
-  Wallet,
+  PackageSearch,
   BookOpenCheck,
   FileSpreadsheet,
   Store,

@@ -9,6 +9,13 @@ const PRICING_KEYS: Record<string, string> = {
   confirmationDate: "effectiveDate",
 };
 
+// Keys that would mutate the prototype chain of every object in the
+// process if used as a target key. All paths handed to deepSet come from
+// static code (QUOTE_FIELD_BY_KEY), so none of these can appear in
+// practice — this guard is defence-in-depth against a future accidental
+// path and a documented stop sign for anyone adding dynamic paths later.
+const UNSAFE_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
 // Sets `value` at a dot-path on `target`, creating intermediate objects but
 // never replacing an existing one — so writing `specs.ringSize` onto an
 // item that already has `specs.weight` keeps the weight. (setDotPath in
@@ -17,11 +24,12 @@ const PRICING_KEYS: Record<string, string> = {
 // partial — this is the merge-safe version for that case.)
 function deepSet(target: Record<string, unknown>, path: string, value: unknown): void {
   const parts = path.split(".");
+  for (const p of parts) if (UNSAFE_KEYS.has(p)) return;
   let cursor = target;
   for (let i = 0; i < parts.length - 1; i++) {
     const key = parts[i];
     const next = cursor[key];
-    if (typeof next !== "object" || next === null) cursor[key] = {};
+    if (typeof next !== "object" || next === null) cursor[key] = Object.create(null);
     cursor = cursor[key] as Record<string, unknown>;
   }
   cursor[parts[parts.length - 1]] = value;
@@ -54,6 +62,11 @@ export function applyRowToItem(
           : {};
       const merged: Record<string, string> = { ...(existing as Record<string, string>) };
       for (const [label, v] of Object.entries(incoming)) {
+        // Vendor-supplied column headers reach us here as free-form text,
+        // so refuse keys that would corrupt an object's prototype chain
+        // before the merge is handed back to Mongoose (which also strips
+        // these, but a layered defence costs nothing).
+        if (UNSAFE_KEYS.has(label)) continue;
         const text = v === null || v === undefined ? "" : String(v).trim();
         if (text !== "") merged[label] = text;
       }

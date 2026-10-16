@@ -31,38 +31,49 @@ export function isXlsBuffer(data: ArrayBuffer, fileName: string): boolean {
 // strings, Dates, booleans, nulls) per sheet, then writes a fresh workbook
 // with exceljs from that plain data — so the bytes exceljs ends up parsing
 // are exceljs's own output, not anything SheetJS wrote to disk or a format
-// exceljs has to trust structurally. Only the first worksheet is carried
-// over, matching every other importer in this codebase (parseMasterFile,
-// parseQuoteFile.parseXlsx), which only ever look at workbook.worksheets[0].
+// exceljs has to trust structurally.
+//
+// Every worksheet is carried over, not just the first. Real vendor .xls
+// files commonly have multiple sheets (item table + PI + packing list +
+// shipping manifest, each on its own tab, e.g. 23146.xls); the item
+// table isn't always the first one. The sheet-picker in parseQuoteFile
+// decides which worksheet to parse — this bridge just preserves them all
+// faithfully so that decision has something to work with.
 export async function convertXlsToXlsxBuffer(data: ArrayBuffer): Promise<ArrayBuffer> {
   const wb = XLSX.read(new Uint8Array(data), { type: "array", cellDates: true });
-  const firstSheetName = wb.SheetNames[0];
-  if (!firstSheetName) {
+  if (wb.SheetNames.length === 0) {
     throw new Error("The .xls file has no worksheets.");
   }
-  const sheet = wb.Sheets[firstSheetName];
-  const matrix: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    raw: true,
-    defval: null,
-  });
 
   const outWb = new ExcelJS.Workbook();
-  const outSheet = outWb.addWorksheet(firstSheetName.slice(0, 31) || "Sheet1");
-  for (const row of matrix) {
-    // Only primitives cross into the exceljs workbook — numbers and Dates
-    // stay typed (parseMasterFile/parseQuoteFile's coercers special-case
-    // both), booleans and strings pass through as-is, everything else
-    // (there shouldn't be anything else once sheet_to_json has run) is
-    // stringified rather than dropped.
-    outSheet.addRow(
-      row.map((cell) => {
-        if (cell === null || cell === undefined) return null;
-        if (typeof cell === "number" || typeof cell === "boolean" || cell instanceof Date) return cell;
-        if (typeof cell === "string") return cell;
-        return String(cell);
-      })
-    );
+  for (const sheetName of wb.SheetNames) {
+    const sheet = wb.Sheets[sheetName];
+    const matrix: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: true,
+      defval: null,
+    });
+    // Excel caps worksheet names at 31 chars and forbids a few chars
+    // (`:\/?*[]`); collapse those to underscore so a legacy sheet name
+    // can never make the written file invalid. Collision on truncation
+    // is handled by exceljs itself (addWorksheet errors on a dup name),
+    // which only matters for pathological inputs — ignored for now.
+    const safeName = (sheetName || "Sheet").replace(/[:\\/?*[\]]/g, "_").slice(0, 31) || "Sheet";
+    const outSheet = outWb.addWorksheet(safeName);
+    for (const row of matrix) {
+      // Only primitives cross into the exceljs workbook — numbers and Dates
+      // stay typed (parseMasterFile/parseQuoteFile's coercers special-case
+      // both), booleans and strings pass through as-is, everything else is
+      // stringified rather than dropped.
+      outSheet.addRow(
+        row.map((cell) => {
+          if (cell === null || cell === undefined) return null;
+          if (typeof cell === "number" || typeof cell === "boolean" || cell instanceof Date) return cell;
+          if (typeof cell === "string") return cell;
+          return String(cell);
+        })
+      );
+    }
   }
 
   const buffer = await outWb.xlsx.writeBuffer();

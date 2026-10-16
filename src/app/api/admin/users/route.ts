@@ -40,7 +40,17 @@ export async function POST(req: NextRequest) {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await User.create({ name, email, passwordHash, role, active: true });
+  let user;
+  try {
+    user = await User.create({ name, email, passwordHash, role, active: true });
+  } catch (err) {
+    // Two admins adding the same email at once: the unique index catches
+    // what the findOne above couldn't.
+    if ((err as { code?: number }).code === 11000) {
+      return NextResponse.json({ error: "A user with that email already exists" }, { status: 409 });
+    }
+    throw err;
+  }
 
   return NextResponse.json(
     {

@@ -9,7 +9,6 @@ const NotificationPrefsSchema = new Schema(
   {
     poStatusChanges: { type: Boolean, default: true },
     mondaySyncErrors: { type: Boolean, default: true },
-    paymentDue: { type: Boolean, default: true },
     weeklyDigest: { type: Boolean, default: false },
   },
   { _id: false }

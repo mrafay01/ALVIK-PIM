@@ -5,10 +5,11 @@ import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { PoCreateSchema, badRequest } from "@/lib/schemas";
 import PurchaseOrder from "@/models/PurchaseOrder";
 import Item from "@/models/Item";
+import { normalizePoNumber } from "@/lib/purchase-orders/fromQuotation";
 
 // GET: list purchase orders, most recently updated first. Supports ?limit=50, ?skip=0.
 export async function GET(req: NextRequest) {
-  const gate = await requireRole(ROLE_SETS.purchaseOrders);
+  const gate = await requireRole(ROLE_SETS.quotes);
   if (isAuthFail(gate)) return gate.response;
 
   await connectDB();
@@ -44,7 +45,11 @@ export async function POST(req: NextRequest) {
 
   const parsed = PoCreateSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
-  const { poNumber, vendorId, orderPurposeCategory, priority, itemId, qty, unitCost } = parsed.data;
+  const { vendorId, orderPurposeCategory, priority, itemId, qty, unitCost } = parsed.data;
+  // Same normalization as quote-created POs ("#22906" -> "22906"), so the
+  // same PO typed two ways can't become two records.
+  const poNumber = normalizePoNumber(parsed.data.poNumber);
+  if (!poNumber) return NextResponse.json({ error: "Enter a PO number" }, { status: 400 });
 
   await connectDB();
 
@@ -65,6 +70,7 @@ export async function POST(req: NextRequest) {
           {
             poNumber,
             vendorId,
+            source: "manual",
             orderPurpose: { category: orderPurposeCategory },
             priority: priority || "medium",
             lineItems: [

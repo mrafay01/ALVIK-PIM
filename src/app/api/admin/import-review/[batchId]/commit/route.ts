@@ -8,6 +8,7 @@ import Item from "@/models/Item";
 import { setDotPath } from "@/lib/import/setDotPath";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { splitSku } from "@/lib/catalog/sku";
+import { isObjectId } from "@/lib/ids";
 
 const PRICING_FIELD_MAP: Record<string, string> = {
   "pricing.msrp": "msrp",
@@ -16,8 +17,13 @@ const PRICING_FIELD_MAP: Record<string, string> = {
   "pricing.effectiveDate": "effectiveDate",
 };
 
+// `update` is nested (for building a new document); `flat` keeps the
+// dotted paths so an existing item is updated field by field — merging a
+// nested { specs: {...} } would replace the item's whole specs object and
+// drop every spec this row left blank.
 function buildUpdate(coerced: Record<string, unknown>) {
   const update: Record<string, unknown> = {};
+  const flat: Record<string, unknown> = {};
   const pricingEntry: Record<string, unknown> = {};
 
   for (const [path, value] of Object.entries(coerced)) {
@@ -27,6 +33,7 @@ function buildUpdate(coerced: Record<string, unknown>) {
       continue;
     }
     setDotPath(update, path, value);
+    flat[path] = value;
   }
 
   const hasPricingData = Object.keys(pricingEntry).length > 0;
@@ -35,7 +42,7 @@ function buildUpdate(coerced: Record<string, unknown>) {
     if (!pricingEntry.effectiveDate) pricingEntry.effectiveDate = new Date();
   }
 
-  return { update, pricingEntry, hasPricingData };
+  return { update, flat, pricingEntry, hasPricingData };
 }
 
 // POST: write every approved, not-yet-committed row into `items`. Rejected
@@ -57,6 +64,7 @@ export async function POST(
   if (isAuthFail(gate)) return gate.response;
 
   const { batchId } = await params;
+  if (!isObjectId(batchId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   await connectDB();
   const batch = await ImportBatch.findById(batchId);
   if (!batch) return NextResponse.json({ error: "Batch not found" }, { status: 404 });
@@ -106,6 +114,7 @@ export async function POST(
   // Track which itemNumber maps to which op (and thus which row group), so
   // committedItemId can be resolved after bulkWrite returns.
   const opItemNumbers: string[] = [];
+  const opTargets: Types.ObjectId[] = [];
   const rowCommitTarget = new Map<string, Types.ObjectId>(); // rowId -> itemId
 
   let merged = 0;
@@ -115,38 +124,51 @@ export async function POST(
     const existing = existingByItemNumber.get(itemNumber);
 
     if (existing) {
-      // Merge every row targeting this itemNumber into the same in-memory
-      // doc, in row order, so later rows' fields win and pricingHistory
-      // gets one entry per row — matches the row-by-row behavior this
-      // replaces.
+      // Apply every row targeting this itemNumber in row order, so later
+      // rows' fields win and pricingHistory gets one entry per row. The
+      // in-memory copy is only used to recompute the completeness gate;
+      // the write itself touches just the imported paths.
+      const set: Record<string, unknown> = {};
+      const newPricing: Record<string, unknown>[] = [];
       for (const row of groupRows) {
-        const { update, pricingEntry, hasPricingData } = buildUpdate((row.coerced ?? {}) as Record<string, unknown>);
-        Object.assign(existing, update);
-        if (hasPricingData) existing.pricingHistory.push(pricingEntry);
+        const { flat, pricingEntry, hasPricingData } = buildUpdate((row.coerced ?? {}) as Record<string, unknown>);
+        for (const [path, value] of Object.entries(flat)) {
+          existing.set(path, value);
+          set[path] = value;
+        }
+        if (hasPricingData) {
+          existing.pricingHistory.push(pricingEntry);
+          newPricing.push(pricingEntry);
+        }
       }
       // Backfill the SKU family fields on older docs that predate them.
       if (existing.itemNumber && !existing.baseSku) {
         const s = splitSku(existing.itemNumber);
-        existing.baseSku = s.baseSku;
-        existing.variantSuffix = s.variantSuffix;
+        set.baseSku = s.baseSku;
+        set.variantSuffix = s.variantSuffix;
       }
-      existing.masterRecordComplete = isMasterRecordComplete(existing);
-      for (const row of groupRows) rowCommitTarget.set(row._id.toString(), existing._id);
+      set.masterRecordComplete = isMasterRecordComplete(existing);
       merged += 1;
 
       itemOps.push({
         updateOne: {
           filter: { _id: existing._id },
-          update: { $set: { ...existing.toObject({ depopulate: true }) } },
+          update: {
+            $set: set,
+            ...(newPricing.length > 0 ? { $push: { pricingHistory: { $each: newPricing } } } : {}),
+          },
         },
       });
       opItemNumbers.push(itemNumber);
+      opTargets.push(existing._id);
     } else {
       // Brand-new item: fold every row in this group into one document
       // before inserting, same merge order as above.
       const { baseSku, variantSuffix } = splitSku(itemNumber);
       const now = new Date();
+      const newId = new Types.ObjectId();
       const doc: Record<string, unknown> = {
+        _id: newId,
         itemNumber,
         baseSku,
         variantSuffix,
@@ -168,24 +190,41 @@ export async function POST(
       );
       itemOps.push({ insertOne: { document: doc } });
       opItemNumbers.push(itemNumber);
+      opTargets.push(newId);
       created += 1;
     }
   }
 
-  let bulkResult;
+  // ordered:false so one failed write (say, an item number another
+  // import created a moment ago) doesn't stop the rest; only the ops that
+  // succeeded get their rows marked committed, so a re-run retries the rest.
+  const failedOps = new Set<number>();
   if (itemOps.length > 0) {
-    bulkResult = await Item.bulkWrite(itemOps as never, { ordered: false });
-  }
-
-  // Resolve the _ids MongoDB generated for newly inserted items back onto
-  // every row in that itemNumber's group.
-  if (bulkResult?.insertedIds) {
-    for (const [opIndex, itemId] of Object.entries(bulkResult.insertedIds)) {
-      const itemNumber = opItemNumbers[Number(opIndex)];
-      const groupRows = itemNumber ? rowsByItemNumber.get(itemNumber) : undefined;
-      groupRows?.forEach((row) => rowCommitTarget.set(row._id.toString(), itemId as Types.ObjectId));
+    try {
+      await Item.bulkWrite(itemOps as never, { ordered: false });
+    } catch (err) {
+      const writeErrors = (err as { writeErrors?: { index?: number; errmsg?: string }[] }).writeErrors ?? [];
+      if (writeErrors.length === 0) throw err;
+      for (const we of writeErrors) {
+        if (typeof we.index !== "number") continue;
+        failedOps.add(we.index);
+        const message = /E11000/.test(we.errmsg ?? "")
+          ? "This item number was created by another import at the same time. Commit again to merge it"
+          : we.errmsg ?? "write failed";
+        for (const row of rowsByItemNumber.get(opItemNumbers[we.index]) ?? []) {
+          errors.push({ rowId: row._id.toString(), message });
+        }
+      }
     }
   }
+  itemOps.forEach((op, i) => {
+    if (failedOps.has(i)) {
+      if ("insertOne" in op) created -= 1;
+      else merged -= 1;
+      return;
+    }
+    rowsByItemNumber.get(opItemNumbers[i])?.forEach((row) => rowCommitTarget.set(row._id.toString(), opTargets[i]));
+  });
 
   // One bulkWrite for every row's committedItemId, instead of N sequential
   // row.save() calls.
@@ -217,6 +256,6 @@ export async function POST(
     created,
     merged,
     errors,
-    remaining: toCommit.length - committed - errors.length,
+    remaining: toCommit.length - committed,
   });
 }

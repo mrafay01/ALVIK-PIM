@@ -1,19 +1,25 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { TriangleAlert, CheckCircle2 } from "lucide-react";
+import { TriangleAlert, CheckCircle2, Shield } from "lucide-react";
 
 export function CatalogRowFlags({
   itemId,
   missing,
   pending,
   canApprove,
+  conflictCount = 0,
 }: {
   itemId: string;
   missing: string[];
   pending: boolean;
   canApprove: boolean;
+  /** Number of unresolved CatalogConflict docs on this item. Rendered as a
+   *  warn pill linking to the item-filtered conflicts page so a reviewer
+   *  jumps straight to the resolver without scanning /catalog/conflicts. */
+  conflictCount?: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -48,6 +54,15 @@ export function CatalogRowFlags({
 
   return (
     <div ref={wrapRef} className="relative flex items-center justify-end gap-2">
+      {conflictCount > 0 && (
+        <Link
+          href={`/catalog/conflicts?itemId=${itemId}`}
+          className="inline-flex items-center gap-1 font-mono text-[0.68rem] font-semibold tracking-wide px-2 py-1 rounded-full bg-warn-bg text-warn whitespace-nowrap no-underline hover:brightness-110"
+          title={`${conflictCount} unresolved PI conflict${conflictCount === 1 ? "" : "s"} — click to review`}
+        >
+          <Shield size={10} /> {conflictCount}
+        </Link>
+      )}
       {pending && (
         <span className="inline-flex items-center gap-1.5 font-mono text-[0.68rem] font-semibold tracking-wide px-2 py-1 rounded-full bg-warn-bg text-warn whitespace-nowrap">
           Pending

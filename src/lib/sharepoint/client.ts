@@ -1,13 +1,22 @@
 // Microsoft Graph client for the SharePoint image store — OAuth2 client
 // credentials flow (Sites.Selected, write), verified end-to-end against
-// the real "CZCPIM" site on 2026-09-01. One token per call is simplest and
-// correct for this app's request volume; add caching only if profiling
-// ever shows the extra round trip matters.
+// the real "CZCPIM" site on 2026-09-01. The access token is cached per
+// server instance until shortly before it expires, so an upload doesn't
+// pay an extra Microsoft login round trip every time.
 
 let cachedSiteId: string | null = null;
 let cachedDriveId: string | null = null;
+let cachedToken: { value: string; expiresAt: number } | null = null;
+
+// Encodes each segment of a drive path, so names with spaces, "#", "%"
+// or "?" reach Graph intact instead of breaking the request URL.
+function drivePath(...segments: string[]): string {
+  return segments.map((s) => encodeURIComponent(s)).join("/");
+}
 
 async function getAccessToken(): Promise<string> {
+  if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value;
+
   const tenantId = process.env.SHAREPOINT_TENANT_ID;
   const clientId = process.env.SHAREPOINT_CLIENT_ID;
   const clientSecret = process.env.SHAREPOINT_CLIENT_SECRET;
@@ -29,7 +38,10 @@ async function getAccessToken(): Promise<string> {
   });
   if (!res.ok) throw new Error(`SharePoint auth failed: ${res.status} ${await res.text()}`);
 
-  const json = (await res.json()) as { access_token: string };
+  const json = (await res.json()) as { access_token: string; expires_in?: number };
+  // Refresh five minutes early so a token never expires mid-request.
+  const lifetimeMs = Math.max(0, ((json.expires_in ?? 3600) - 300) * 1000);
+  cachedToken = { value: json.access_token, expiresAt: Date.now() + lifetimeMs };
   return json.access_token;
 }
 
@@ -90,29 +102,36 @@ async function graphFetch(ctx: SharePointContext, path: string, init?: RequestIn
   return res;
 }
 
-// Ensures /Images/{itemNumber}/Main, /Sides, /Models exist — idempotent via
-// conflictBehavior: "replace" on the folder itself (Graph treats an
-// existing folder of the same name as a no-op rename, not a duplicate).
-export async function ensureItemFolders(ctx: SharePointContext, itemNumber: string): Promise<void> {
-  const base = await graphFetch(ctx, `/root:/Images:/children`, {
+// Creates one folder under `parent` if it isn't there yet. conflictBehavior
+// "fail" plus treating 409 as "already exists" is the safe idempotent form:
+// "replace" on a folder that already holds files can swap it for an empty one.
+async function ensureChildFolder(ctx: SharePointContext, parent: string[], name: string): Promise<void> {
+  const where = parent.length ? `/root:/${drivePath(...parent)}:/children` : `/root/children`;
+  const res = await graphFetch(ctx, where, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: itemNumber, folder: {}, "@microsoft.graph.conflictBehavior": "replace" }),
+    body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
   });
-  if (!base.ok && base.status !== 409) {
-    throw new Error(`Creating item folder failed: ${base.status} ${await base.text()}`);
+  if (!res.ok && res.status !== 409) {
+    throw new Error(`Creating folder "${[...parent, name].join("/")}" failed: ${res.status} ${await res.text()}`);
   }
+}
 
-  for (const subfolder of ["Main", "Sides", "Models"]) {
-    const res = await graphFetch(ctx, `/root:/Images/${itemNumber}:/children`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: subfolder, folder: {}, "@microsoft.graph.conflictBehavior": "replace" }),
-    });
-    if (!res.ok && res.status !== 409) {
-      throw new Error(`Creating ${subfolder} subfolder failed: ${res.status} ${await res.text()}`);
-    }
+// Ensures every folder along `segments` exists (e.g. ["Purchase Orders",
+// "22906"]) and returns the last one.
+export async function ensureFolderPath(ctx: SharePointContext, segments: string[]): Promise<DriveItem> {
+  for (let i = 0; i < segments.length; i++) {
+    await ensureChildFolder(ctx, segments.slice(0, i), segments[i]);
   }
+  return getDriveItemByPath(ctx, segments);
+}
+
+// Ensures /Images/{itemNumber}/Main, /Sides, /Models exist.
+export async function ensureItemFolders(ctx: SharePointContext, itemNumber: string): Promise<void> {
+  await ensureFolderPath(ctx, ["Images", itemNumber]);
+  await Promise.all(
+    ["Main", "Sides", "Models"].map((subfolder) => ensureChildFolder(ctx, ["Images", itemNumber], subfolder))
+  );
 }
 
 export type ImageSubfolder = "Main" | "Sides" | "Models";
@@ -122,6 +141,11 @@ export type ImageSubfolder = "Main" | "Sides" | "Models";
 // "-M{n}" -> Models. Anything else is rejected rather than silently misfiled.
 export function inferSubfolder(itemNumber: string, filename: string): ImageSubfolder {
   const base = filename.replace(/\.[^.]+$/, "");
+  // The name must start with this item's number; otherwise another item's
+  // file (or one named "IMG_0042.jpg") would be filed under this item.
+  if (base.slice(0, itemNumber.length).toLowerCase() !== itemNumber.toLowerCase()) {
+    throw new Error(`Filename "${filename}" must start with the item number "${itemNumber}"`);
+  }
   const suffix = base.slice(itemNumber.length);
 
   if (suffix === "") return "Main";
@@ -149,7 +173,7 @@ export async function uploadItemImage(
   bytes: Buffer
 ): Promise<UploadedImage> {
   const subfolder = inferSubfolder(itemNumber, filename);
-  const path = `/root:/Images/${itemNumber}/${subfolder}/${filename}:/content`;
+  const path = `/root:/${drivePath("Images", itemNumber, subfolder, filename)}:/content`;
 
   const res = await graphFetch(ctx, path, {
     method: "PUT",
@@ -173,7 +197,7 @@ export async function renameItemFolder(
   fromSku: string,
   toItemNumber: string
 ): Promise<void> {
-  const lookup = await graphFetch(ctx, `/root:/Images/${fromSku}`);
+  const lookup = await graphFetch(ctx, `/root:/${drivePath("Images", fromSku)}`);
   if (!lookup.ok) throw new Error(`Looking up folder "${fromSku}" failed: ${lookup.status} ${await lookup.text()}`);
   const folder = (await lookup.json()) as { id: string };
 
@@ -183,4 +207,142 @@ export async function renameItemFolder(
     body: JSON.stringify({ name: toItemNumber }),
   });
   if (!res.ok) throw new Error(`Renaming folder failed: ${res.status} ${await res.text()}`);
+}
+
+// ---------------------------------------------------------------------------
+// General drive-item helpers (used by the Purchase Orders file store).
+
+export interface DriveItem {
+  id: string;
+  name: string;
+  size?: number;
+  webUrl: string;
+  parentReference?: { path?: string; id?: string };
+  file?: { mimeType?: string };
+  folder?: { childCount: number };
+}
+
+const ITEM_FIELDS = "id,name,size,webUrl,parentReference,file,folder";
+
+async function readItem(res: Response, what: string): Promise<DriveItem> {
+  if (!res.ok) throw new Error(`${what} failed: ${res.status} ${await res.text()}`);
+  return (await res.json()) as DriveItem;
+}
+
+export async function getDriveItem(ctx: SharePointContext, id: string): Promise<DriveItem> {
+  return readItem(await graphFetch(ctx, `/items/${encodeURIComponent(id)}?$select=${ITEM_FIELDS}`), "Reading file");
+}
+
+export async function getDriveItemByPath(ctx: SharePointContext, segments: string[]): Promise<DriveItem> {
+  return readItem(
+    await graphFetch(ctx, `/root:/${drivePath(...segments)}?$select=${ITEM_FIELDS}`),
+    `Reading "${segments.join("/")}"`
+  );
+}
+
+// The folder an item sits in, relative to the drive root, e.g.
+// "Purchase Orders/22906". Graph reports it as "/drive/root:/Purchase Orders/22906"
+// (or "/drives/{id}/root:/..."), percent-encoded in some responses.
+export function relativeFolderPath(item: DriveItem): string {
+  const raw = item.parentReference?.path ?? "";
+  const idx = raw.indexOf("root:");
+  const rest = idx === -1 ? "" : raw.slice(idx + "root:".length).replace(/^\/+/, "");
+  try {
+    return decodeURIComponent(rest);
+  } catch {
+    return rest;
+  }
+}
+
+// Downloads a file's bytes. Graph answers /content with a redirect to a
+// short-lived pre-authenticated URL, which fetch follows.
+export async function downloadDriveItem(ctx: SharePointContext, id: string, maxBytes: number): Promise<ArrayBuffer> {
+  const res = await graphFetch(ctx, `/items/${encodeURIComponent(id)}/content`);
+  if (!res.ok) throw new Error(`Downloading file failed: ${res.status} ${await res.text()}`);
+  const tooBig = `File is larger than ${Math.round(maxBytes / 1024 / 1024)} MB`;
+  if (Number(res.headers.get("content-length") ?? 0) > maxBytes) throw new Error(tooBig);
+  const buf = await res.arrayBuffer();
+  if (buf.byteLength > maxBytes) throw new Error(tooBig);
+  return buf;
+}
+
+// Starts a resumable upload of `fileName` into `folder`. The returned
+// uploadUrl is pre-authenticated (no token needed) and accepts PUTs straight
+// from the browser, so large files never pass through this app's server.
+// "rename" keeps an existing file with the same name (the new one becomes
+// "name 1.xlsx") instead of overwriting it.
+export async function createUploadSession(
+  ctx: SharePointContext,
+  folder: string[],
+  fileName: string
+): Promise<{ uploadUrl: string; expirationDateTime: string }> {
+  const res = await graphFetch(ctx, `/root:/${drivePath(...folder, fileName)}:/createUploadSession`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "rename" } }),
+  });
+  if (!res.ok) throw new Error(`Starting upload failed: ${res.status} ${await res.text()}`);
+  return (await res.json()) as { uploadUrl: string; expirationDateTime: string };
+}
+
+// Server-side upload of a whole file (used when copying from Monday).
+// Small files go in one PUT; larger ones through an upload session in
+// chunks, since a single PUT is capped at 4 MB.
+export async function uploadFile(
+  ctx: SharePointContext,
+  folder: string[],
+  fileName: string,
+  bytes: Uint8Array<ArrayBuffer>
+): Promise<DriveItem> {
+  const SIMPLE_LIMIT = 4 * 1024 * 1024;
+  if (bytes.byteLength <= SIMPLE_LIMIT) {
+    await ensureFolderPath(ctx, folder);
+    const res = await graphFetch(
+      ctx,
+      `/root:/${drivePath(...folder, fileName)}:/content?@microsoft.graph.conflictBehavior=rename`,
+      { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: bytes }
+    );
+    return readItem(res, `Uploading ${fileName}`);
+  }
+
+  await ensureFolderPath(ctx, folder);
+  const { uploadUrl } = await createUploadSession(ctx, folder, fileName);
+  const CHUNK = 320 * 1024 * 16; // must be a multiple of 320 KiB
+  let last: Response | null = null;
+  for (let start = 0; start < bytes.byteLength; start += CHUNK) {
+    const end = Math.min(start + CHUNK, bytes.byteLength);
+    last = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Range": `bytes ${start}-${end - 1}/${bytes.byteLength}` },
+      body: bytes.subarray(start, end),
+    });
+    if (!last.ok) {
+      const detail = await last.text();
+      await fetch(uploadUrl, { method: "DELETE" }).catch(() => undefined);
+      throw new Error(`Uploading ${fileName} failed: ${last.status} ${detail}`);
+    }
+  }
+  return readItem(last!, `Uploading ${fileName}`);
+}
+
+// Moves an item into `folder` (created if missing). "rename" avoids
+// clobbering a same-named file already there.
+export async function moveDriveItem(ctx: SharePointContext, id: string, folder: string[]): Promise<DriveItem> {
+  const target = await ensureFolderPath(ctx, folder);
+  const res = await graphFetch(
+    ctx,
+    `/items/${encodeURIComponent(id)}?@microsoft.graph.conflictBehavior=rename&$select=${ITEM_FIELDS}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parentReference: { id: target.id } }),
+    }
+  );
+  return readItem(res, "Moving file");
+}
+
+// Deletes an item (SharePoint keeps it in the site's recycle bin).
+export async function deleteDriveItem(ctx: SharePointContext, id: string): Promise<void> {
+  const res = await graphFetch(ctx, `/items/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) throw new Error(`Deleting file failed: ${res.status} ${await res.text()}`);
 }
