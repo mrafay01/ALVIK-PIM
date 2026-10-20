@@ -124,7 +124,7 @@ function coerceBool(raw: unknown): boolean {
   return !isPlaceholder(raw);
 }
 
-type ColumnKind = "text" | "number" | "weight" | "date" | "bool" | "metal";
+export type ColumnKind = "text" | "number" | "weight" | "date" | "bool" | "metal";
 
 // One entry per real Master File column, in spreadsheet order (A, B, C, …).
 // `path` is the dot-path the value lands at on the staged row's `coerced`
@@ -314,11 +314,38 @@ export async function parseMasterFileBuffer(
     }
 
     if (!coerced.itemNumber) {
-      flags.push({ field: "itemNumber", message: "Missing SKU; row cannot be imported without one", rawValue: null });
+      flags.push({ field: "itemNumber", message: MISSING_SKU_MESSAGE, rawValue: null });
     }
 
     staged.push({ rowNumber, raw: rawRow, coerced, flags });
   });
 
   return staged;
+}
+
+const MISSING_SKU_MESSAGE = "Missing SKU; row cannot be imported without one";
+
+// Re-checks one corrected value (typed on the review or Flagged Items
+// screen) with exactly the rules the import used, so a fix clears the
+// row's flag only when the new value is actually valid.
+export function coerceMasterFileValue(path: string, raw: unknown): { value: unknown; flags: FieldFlag[] } {
+  const flags: FieldFlag[] = [];
+  const col = COLUMNS.find((c) => c.path === path);
+  const value = col ? coerceByKind(col.kind, raw, path, flags) : coerceText(raw);
+  if (path === "itemNumber" && !value) flags.push({ field: "itemNumber", message: MISSING_SKU_MESSAGE, rawValue: null });
+  return { value: value === "" ? null : value, flags };
+}
+
+// Human label for a staged field path ("pricing.msrp" -> "MSRP"), for the
+// Flagged Items screen's issue filter. The two "Date" columns get context.
+export function masterFileFieldLabel(path: string): string {
+  if (path === "itemNumber") return "SKU";
+  if (path === "pricing.effectiveDate") return "Date (MSRP)";
+  if (path === "specs.newMsrpDate") return "Date (new MSRP)";
+  return COLUMNS.find((c) => c.path === path)?.header ?? path;
+}
+
+// The kind of value a field holds, so the UI can hint what to type.
+export function masterFileFieldKind(path: string): ColumnKind {
+  return COLUMNS.find((c) => c.path === path)?.kind ?? "text";
 }

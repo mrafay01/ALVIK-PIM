@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
+import { PageJump } from "@/components/app/PageJump";
 
 export interface PullPlanRow {
   mondayItemId: string;
@@ -406,6 +407,8 @@ export function PullPlanReview({
             <span className="text-ink-faint">
               Page {currentPage} of {pageCount}
             </span>
+            <div className="flex flex-wrap items-center gap-3">
+              {pageCount > 2 && <PageJump page={currentPage} pageCount={pageCount} onJump={setPage} />}
             <div className="flex gap-2">
               <Button size="sm" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>
                 Previous
@@ -413,6 +416,7 @@ export function PullPlanReview({
               <Button size="sm" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>
                 Next
               </Button>
+            </div>
             </div>
           </div>
         )}

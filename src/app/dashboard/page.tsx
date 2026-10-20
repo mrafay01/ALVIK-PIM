@@ -7,6 +7,8 @@ import Item from "@/models/Item";
 import PurchaseOrder from "@/models/PurchaseOrder";
 import Quotation from "@/models/Quotation";
 import CatalogConflict from "@/models/CatalogConflict";
+import ImportBatchRow from "@/models/ImportBatchRow";
+import { ON_FLAGGED_PAGE } from "@/lib/import/reviewQuery";
 import "@/models/Vendor";
 import { TrendBars } from "@/components/ui/charts/TrendBars";
 import { Pill } from "@/components/ui/Pill";
@@ -25,6 +27,7 @@ import {
   Link2Off,
   Camera,
   CalendarClock,
+  Flag,
 } from "lucide-react";
 import { PO_STATUSES } from "@/lib/enums";
 import { PO_STATUS_LABEL, PO_STATUS_TONE, ITEM_STATUS_LABEL, ITEM_STATUS_TONE } from "@/lib/statusDisplay";
@@ -56,7 +59,7 @@ export default async function DashboardPage() {
   const open = { $and: OPEN_PO_CONDITIONS };
   const unverifiedMatch = { inCatalog: { $ne: true }, intakeSource: { $in: ["manual_quote", "monday_pull"] } };
 
-  const [poFacets, itemFacets, quotesToReview, pendingConflicts, recentPos, recentItems] = await Promise.all([
+  const [poFacets, itemFacets, quotesToReview, pendingConflicts, recentPos, recentItems, flaggedRows] = await Promise.all([
     PurchaseOrder.aggregate([
       { $project: { status: 1, mondayStatusText: 1, mondayStatusMapped: 1, requestDate: 1, imageStatus: 1 } },
       { $match: open },
@@ -121,6 +124,7 @@ export default async function DashboardPage() {
       .sort({ updatedAt: -1 })
       .limit(6)
       .lean(),
+    role === "administrator" ? ImportBatchRow.countDocuments(ON_FLAGGED_PAGE) : Promise.resolve(0),
   ]);
 
   const po = poFacets[0] ?? {};
@@ -183,6 +187,14 @@ export default async function DashboardPage() {
       tone: "warn" as const,
     },
     {
+      label: "Flagged Master File rows",
+      detail: "Import rows waiting to be fixed before they reach the catalog",
+      count: flaggedRows,
+      href: "/catalog/flagged",
+      icon: Flag,
+      tone: "warn" as const,
+    },
+    {
       label: "Catalog approvals",
       detail: "Items submitted to the catalog, waiting for an admin",
       count: pendingApproval,
@@ -215,7 +227,7 @@ export default async function DashboardPage() {
       tone: "neutral" as const,
     },
   ];
-  const attentionTotal = quotesToReview + pendingConflicts + pendingApproval + overdue + broken;
+  const attentionTotal = quotesToReview + pendingConflicts + flaggedRows + pendingApproval + overdue + broken;
 
   const actions = [
     roleCan(role, ROLE_SETS.quotes) && {

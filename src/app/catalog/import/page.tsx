@@ -6,14 +6,16 @@ import { getSessionRole } from "@/lib/authz";
 import ImportBatch from "@/models/ImportBatch";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
-import { ArrowRight, ListChecks, ShieldCheck, Upload } from "lucide-react";
+import { ArrowRight, CheckCircle2, ListChecks, ShieldCheck, Upload } from "lucide-react";
 import { UploadForm } from "./UploadForm";
 
-const BATCH_STATUS_TONE: Record<string, "good" | "warn" | "brass" | "neutral"> = {
-  parsing: "neutral",
-  needs_review: "warn",
-  reviewed: "brass",
-  committed: "good",
+// needs_review: rows still waiting on the review page (the only state that
+// links back) · reviewed: the rest are in Flagged Items · committed: done.
+const BATCH_STATUS: Record<string, { label: string; tone: "good" | "warn" | "brass" | "neutral" }> = {
+  parsing: { label: "reading", tone: "neutral" },
+  needs_review: { label: "needs review", tone: "warn" },
+  reviewed: { label: "rest in Flagged Items", tone: "brass" },
+  committed: { label: "done", tone: "good" },
 };
 
 const TH_CLASS =
@@ -22,14 +24,19 @@ const TD_CLASS = "px-4 py-3 text-[0.85rem]";
 
 const STEPS = [
   { icon: Upload, title: "Upload", text: "Drop the Master File export. Every row is read and checked." },
-  { icon: ListChecks, title: "Review", text: "Filter, sort and untick any rows you don't want. Fix flagged values inline." },
-  { icon: ShieldCheck, title: "Commit", text: "Approved rows are written to the catalog. Nothing changes before that." },
+  { icon: ListChecks, title: "Review", text: "Commit clean rows to the catalog; send flagged rows to Flagged Items." },
+  { icon: ShieldCheck, title: "Fix", text: "On Flagged Items, filter by issue, fix rows (one by one or all at once), then commit." },
 ];
 
 // Master File import, reached from the Catalog page (admin only). Same
 // staged flow as before: upload -> review every row -> commit approved rows.
-export default async function CatalogImportPage() {
+export default async function CatalogImportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ done?: string }>;
+}) {
   if ((await getSessionRole()) !== "administrator") redirect("/unauthorized");
+  const justFinished = (await searchParams).done === "1";
   await connectDB();
 
   const batches = await ImportBatch.find({})
@@ -61,6 +68,19 @@ export default async function CatalogImportPage() {
         ))}
       </div>
 
+      {justFinished && (
+        <Card className="mb-5 !border-good flex items-center gap-3">
+          <CheckCircle2 size={18} className="text-good shrink-0" />
+          <span className="text-[0.88rem]">
+            That file has been fully reviewed. Anything sent to Flagged Items is waiting{" "}
+            <Link href="/catalog/flagged" className="text-brass no-underline font-semibold">
+              there
+            </Link>
+            .
+          </span>
+        </Card>
+      )}
+
       <Card className="mb-8">
         <UploadForm />
       </Card>
@@ -76,7 +96,7 @@ export default async function CatalogImportPage() {
             <table className="w-full border-collapse min-w-[760px]">
               <thead>
                 <tr>
-                  {["File", "Uploaded", "Status", "Rows", "Flagged", "Approved", "Rejected", ""].map((h, i) => (
+                  {["File", "Uploaded", "Status", "Rows", "Flagged", "Committed", "Excluded", ""].map((h, i) => (
                     <th key={i} className={TH_CLASS}>
                       {h}
                     </th>
@@ -85,20 +105,15 @@ export default async function CatalogImportPage() {
               </thead>
               <tbody>
                 {batches.map((b) => (
-                  <tr key={String(b._id)} className="czc-row border-b border-border">
-                    <td className={TD_CLASS}>
-                      <Link
-                        href={`/catalog/import/${b._id}`}
-                        className="font-semibold text-[0.85rem] text-navy-deep no-underline"
-                      >
-                        {b.sourceFileName}
-                      </Link>
-                    </td>
+                  <tr key={String(b._id)} className="border-b border-border">
+                    <td className={`${TD_CLASS} font-semibold`}>{b.sourceFileName}</td>
                     <td className={`${TD_CLASS} text-[0.8rem] text-ink-faint`}>
                       {b.uploadedAt ? new Date(b.uploadedAt).toLocaleString() : "—"}
                     </td>
                     <td className={TD_CLASS}>
-                      <Pill tone={BATCH_STATUS_TONE[b.status] ?? "neutral"}>{b.status.replace(/_/g, " ")}</Pill>
+                      <Pill tone={BATCH_STATUS[b.status]?.tone ?? "neutral"}>
+                        {BATCH_STATUS[b.status]?.label ?? b.status.replace(/_/g, " ")}
+                      </Pill>
                     </td>
                     <td className={`${TD_CLASS} font-mono`}>{b.totalRows}</td>
                     <td className={`${TD_CLASS} font-mono ${b.flaggedRows > 0 ? "text-warn" : "text-ink-soft"}`}>
@@ -107,7 +122,7 @@ export default async function CatalogImportPage() {
                     <td className={`${TD_CLASS} font-mono text-good`}>{b.approvedRows}</td>
                     <td className={`${TD_CLASS} font-mono text-critical`}>{b.rejectedRows}</td>
                     <td className={`${TD_CLASS} text-right`}>
-                      {b.status !== "committed" && (
+                      {b.status === "needs_review" && (
                         <Link
                           href={`/catalog/import/${b._id}`}
                           className="inline-flex items-center gap-1 text-[0.8rem] font-semibold text-brass no-underline"

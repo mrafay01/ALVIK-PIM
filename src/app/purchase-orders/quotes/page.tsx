@@ -7,6 +7,7 @@ import PurchaseOrder from "@/models/PurchaseOrder";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { FilePlus2, Upload } from "lucide-react";
+import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 
 const STATUS_TONE: Record<string, "good" | "warn" | "brass" | "neutral"> = {
   parsing: "neutral",
@@ -19,18 +20,27 @@ const TH_CLASS =
   "text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap";
 const TD_CLASS = "px-4 py-3 text-[0.85rem]";
 
-export default async function QuotesListPage() {
+export default async function QuotesListPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const page = parsePage((await searchParams).page);
   await connectDB();
   void Vendor; // ensure the model is registered for populate
   void PurchaseOrder;
 
-  const quotations = await Quotation.find({})
-    .select("source sourceFileName poNumber vendorId status totalRows flaggedRows approvedRows createdAt purchaseOrderId")
-    .populate("vendorId", "name")
-    .populate("purchaseOrderId", "poNumber")
-    .sort({ createdAt: -1 })
-    .limit(200)
-    .lean();
+  const [quotations, total] = await Promise.all([
+    Quotation.find({})
+      .select("source sourceFileName poNumber vendorId status totalRows flaggedRows approvedRows createdAt purchaseOrderId")
+      .populate("vendorId", "name")
+      .populate("purchaseOrderId", "poNumber")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * PAGE_SIZE)
+      .limit(PAGE_SIZE)
+      .lean(),
+    Quotation.countDocuments({}),
+  ]);
 
   return (
     <AppShell
@@ -120,6 +130,9 @@ export default async function QuotesListPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="px-4 pb-3">
+            <Pagination page={page} total={total} basePath="/purchase-orders/quotes" />
           </div>
         </Card>
       )}

@@ -35,6 +35,10 @@ const ImportBatchRowSchema = new Schema(
     reviewedAt: Date,
     reviewNote: String,
     committedItemId: { type: Schema.Types.ObjectId, ref: "Item", default: null },
+    // Set when the row is sent to the Flagged Items page to be fixed later.
+    // Such rows leave the batch's review page and are worked on (fixed,
+    // committed or excluded) from Flagged Items instead.
+    parkedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
@@ -42,6 +46,8 @@ const ImportBatchRowSchema = new Schema(
 // The commit + bulk-approve routes query by (batchId, reviewStatus) and the
 // commit route also filters committedItemId — compound covers all three.
 ImportBatchRowSchema.index({ batchId: 1, reviewStatus: 1, committedItemId: 1 });
+// Flagged Items page: every parked, uncommitted row across batches.
+ImportBatchRowSchema.index({ parkedAt: 1, committedItemId: 1 });
 
 export type ImportBatchRowDoc = InferSchemaType<typeof ImportBatchRowSchema>;
 export default (models.ImportBatchRow as Model<ImportBatchRowDoc>) ||

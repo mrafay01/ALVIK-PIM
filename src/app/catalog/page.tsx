@@ -6,11 +6,13 @@ import type { PipelineStage } from "mongoose";
 import Item from "@/models/Item";
 import CatalogConflict from "@/models/CatalogConflict";
 import ImportBatch from "@/models/ImportBatch";
+import ImportBatchRow from "@/models/ImportBatchRow";
+import { ON_FLAGGED_PAGE } from "@/lib/import/reviewQuery";
 import { checkMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
-import { ShieldCheck, Plus, TriangleAlert, FileUp, ListChecks } from "lucide-react";
+import { ShieldCheck, Plus, TriangleAlert, FileUp, ListChecks, Flag } from "lucide-react";
 import { CatalogRowFlags } from "./CatalogRowFlags";
 import { CatalogFilters } from "./CatalogFilters";
 
@@ -190,7 +192,7 @@ export default async function CatalogPage({
     },
   });
 
-  const [facetResult, categories, brands, platings, pendingConflictCount, familySkus, role, openImports] = await Promise.all([
+  const [facetResult, categories, brands, platings, pendingConflictCount, familySkus, role, openImports, flaggedCount] = await Promise.all([
     Item.aggregate(pipeline).collation({ locale: "en", numericOrdering: true }),
     Item.distinct("category", { inCatalog: true }),
     Item.distinct("brand", { inCatalog: true }),
@@ -198,11 +200,12 @@ export default async function CatalogPage({
     CatalogConflict.countDocuments({ status: "pending" }),
     familySkusEarly ?? familySkusQuery,
     getSessionRole(),
-    ImportBatch.find({ status: { $ne: "committed" } })
+    ImportBatch.find({ status: "needs_review" })
       .select("sourceFileName totalRows")
       .sort({ uploadedAt: -1 })
       .limit(1)
       .lean(),
+    ImportBatchRow.countDocuments(ON_FLAGGED_PAGE),
   ]);
   const isAdmin = role === "administrator";
   const openImport = isAdmin ? openImports[0] : undefined;
@@ -274,6 +277,19 @@ export default async function CatalogPage({
           </div>
         </Card>
         <div className="flex items-center gap-2.5 flex-wrap">
+          {isAdmin && (
+            <Link
+              href="/catalog/flagged"
+              className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-surface text-ink border border-border-strong no-underline hover:border-brass hover:text-brass"
+            >
+              <Flag size={15} /> Flagged Items
+              {flaggedCount > 0 && (
+                <span className="ml-0.5 rounded-full bg-warn-bg px-2 py-0.5 font-mono text-[0.72rem] text-warn">
+                  {flaggedCount.toLocaleString()}
+                </span>
+              )}
+            </Link>
+          )}
           {isAdmin && (
             <Link
               href="/catalog/import"

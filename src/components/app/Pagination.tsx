@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { PageJump } from "./PageJump";
 
 // Server-rendered pager for the list screens. Given the current page, the
 // page size, and the total row count, it renders Prev/Next links that carry
@@ -46,29 +47,52 @@ export function Pagination({
   const disabledClass = "opacity-40 pointer-events-none";
 
   return (
-    <div className="flex items-center justify-between mt-4 text-[0.82rem] text-ink-faint">
+    <div className="flex flex-wrap items-center justify-between gap-3 mt-4 text-[0.82rem] text-ink-faint">
       <span>
         {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
       </span>
-      <div className="flex gap-1.5">
-        <Link
-          href={href(clampedPage - 1)}
-          className={`${linkClass} ${clampedPage <= 1 ? disabledClass : ""}`}
-          aria-disabled={clampedPage <= 1}
-        >
-          <ChevronLeft size={14} /> Prev
-        </Link>
-        <span className="flex items-center px-2 font-mono">
-          {clampedPage} / {pageCount}
-        </span>
-        <Link
-          href={href(clampedPage + 1)}
-          className={`${linkClass} ${clampedPage >= pageCount ? disabledClass : ""}`}
-          aria-disabled={clampedPage >= pageCount}
-        >
-          Next <ChevronRight size={14} />
-        </Link>
-      </div>
+      {pageCount > 1 && (
+        <div className="flex flex-wrap items-center gap-3">
+          {pageCount > 2 && <PageJump page={clampedPage} pageCount={pageCount} basePath={basePath} query={query} />}
+          <div className="flex gap-1.5">
+            <Link
+              href={href(1)}
+              className={`${linkClass} ${clampedPage <= 1 ? disabledClass : ""}`}
+              aria-disabled={clampedPage <= 1}
+              aria-label="First page"
+              title="First page"
+            >
+              <ChevronsLeft size={14} />
+            </Link>
+            <Link
+              href={href(clampedPage - 1)}
+              className={`${linkClass} ${clampedPage <= 1 ? disabledClass : ""}`}
+              aria-disabled={clampedPage <= 1}
+            >
+              <ChevronLeft size={14} /> Prev
+            </Link>
+            <span className="flex items-center px-2 font-mono">
+              {clampedPage} / {pageCount}
+            </span>
+            <Link
+              href={href(clampedPage + 1)}
+              className={`${linkClass} ${clampedPage >= pageCount ? disabledClass : ""}`}
+              aria-disabled={clampedPage >= pageCount}
+            >
+              Next <ChevronRight size={14} />
+            </Link>
+            <Link
+              href={href(pageCount)}
+              className={`${linkClass} ${clampedPage >= pageCount ? disabledClass : ""}`}
+              aria-disabled={clampedPage >= pageCount}
+              aria-label="Last page"
+              title="Last page"
+            >
+              <ChevronsRight size={14} />
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

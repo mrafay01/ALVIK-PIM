@@ -7,8 +7,12 @@ import ImportBatchRow from "@/models/ImportBatchRow";
 import { ReviewTable } from "./ReviewTable";
 import { PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { isObjectId } from "@/lib/ids";
-import { parseReviewParams, reviewQuery, REVIEW_SORTS } from "@/lib/import/reviewQuery";
+import { onReviewPage, searchFilter } from "@/lib/import/reviewQuery";
+import { masterFileFieldLabel } from "@/lib/import/parseMasterFile";
 
+// Review step of a Master File import. Rows waiting here are either
+// committed to the catalog or sent to Flagged Items to be fixed later;
+// fixing happens on Flagged Items, so this page stays a quick triage.
 export default async function BatchReviewPage({
   params,
   searchParams,
@@ -20,36 +24,35 @@ export default async function BatchReviewPage({
   if (!isObjectId(batchId)) notFound();
   if ((await getSessionRole()) !== "administrator") redirect("/unauthorized");
   const sp = await searchParams;
-  const reviewParams = parseReviewParams(sp);
+  const q = (sp.q ?? "").trim().slice(0, 100);
   const page = parsePage(sp.page);
 
   await connectDB();
   const batch = await ImportBatch.findById(batchId).lean().exec();
   if (!batch) notFound();
 
-  // Only the current page of rows is fetched and sent to the client — a
-  // large batch (thousands of rows) is never hydrated all at once.
-  const query = reviewQuery(batchId, reviewParams);
-  const [rows, filteredTotal, approvedPending, unflaggedPending, categories, brands] = await Promise.all([
-    ImportBatchRow.find(query)
-      .select("rowNumber coerced flags reviewStatus committedItemId")
-      .sort(REVIEW_SORTS[reviewParams.sort].sort)
+  const waiting = { ...onReviewPage(batchId), ...searchFilter(q) };
+  const [rows, total, flagged, parked] = await Promise.all([
+    ImportBatchRow.find(waiting)
+      .select("rowNumber coerced flags")
+      .sort({ rowNumber: 1 })
       .skip((page - 1) * PAGE_SIZE)
       .limit(PAGE_SIZE)
       .lean(),
-    ImportBatchRow.countDocuments(query),
-    ImportBatchRow.countDocuments({ batchId, reviewStatus: "approved", committedItemId: null }),
-    ImportBatchRow.countDocuments({
-      batchId,
-      reviewStatus: "needs_review",
-      "flags.0": { $exists: false },
-    }),
-    ImportBatchRow.distinct("coerced.category", { batchId }),
-    ImportBatchRow.distinct("coerced.brand", { batchId }),
+    ImportBatchRow.countDocuments(waiting),
+    ImportBatchRow.countDocuments({ ...waiting, "flags.0": { $exists: true } }),
+    ImportBatchRow.countDocuments({ batchId, parkedAt: { $ne: null }, committedItemId: null, reviewStatus: { $ne: "rejected" } }),
   ]);
+  // A file with nothing left to review has no page of its own any more;
+  // Recent imports keeps just its name and counts.
+  if (total === 0 && !q) redirect("/catalog/import?done=1");
 
-  const clean = (vals: unknown[]) =>
-    (vals.filter((v) => typeof v === "string" && v.trim()) as string[]).sort((a, b) => a.localeCompare(b));
+  const shaped = rows.map((r) => ({
+    _id: String(r._id),
+    rowNumber: r.rowNumber,
+    coerced: r.coerced as Record<string, unknown>,
+    issues: (r.flags ?? []).map((f) => ({ label: masterFileFieldLabel(f.field), message: f.message })),
+  }));
 
   return (
     <AppShell
@@ -59,20 +62,12 @@ export default async function BatchReviewPage({
       eyebrow="Master File import"
       title={batch.sourceFileName}
     >
-      <p className="text-ink-soft mb-6 text-[0.92rem]">
-        {batch.totalRows} rows · {batch.flaggedRows} flagged for attention · {batch.approvedRows} approved ·{" "}
-        {batch.rejectedRows} excluded · status: <span className="capitalize">{batch.status.replace(/_/g, " ")}</span>
-      </p>
       <ReviewTable
         batchId={String(batch._id)}
-        rows={JSON.parse(JSON.stringify(rows))}
-        params={reviewParams}
+        rows={shaped}
+        q={q}
         page={page}
-        filteredTotal={filteredTotal}
-        approvedPendingCount={approvedPending}
-        unflaggedPendingCount={unflaggedPending}
-        categories={clean(categories)}
-        brands={clean(brands)}
+        counts={{ total, flagged, unflagged: total - flagged, parked, committed: batch.approvedRows, fileRows: batch.totalRows }}
       />
     </AppShell>
   );

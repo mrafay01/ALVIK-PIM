@@ -6,6 +6,7 @@ import { ImportRowPatchSchema, badRequest } from "@/lib/schemas";
 import ImportBatch from "@/models/ImportBatch";
 import ImportBatchRow from "@/models/ImportBatchRow";
 import { isObjectId } from "@/lib/ids";
+import { fixRowField } from "@/lib/import/commitRows";
 
 // PATCH: record a reviewer's decision on one staged row — approve it
 // (optionally with corrected field values), reject it, or edit its coerced
@@ -26,14 +27,26 @@ export async function PATCH(
   const { reviewStatus, coercedOverrides, reviewNote } = parsed.data;
 
   await connectDB();
-  const batch = await ImportBatch.findById(batchId);
-  if (!batch) return NextResponse.json({ error: "Batch not found" }, { status: 404 });
+  if (!(await ImportBatch.exists({ _id: batchId }))) {
+    return NextResponse.json({ error: "Batch not found" }, { status: 404 });
+  }
 
   const row = await ImportBatchRow.findOne({ _id: rowId, batchId });
   if (!row) return NextResponse.json({ error: "Row not found" }, { status: 404 });
 
   if (coercedOverrides) {
-    row.coerced = { ...(row.coerced ?? {}), ...coercedOverrides };
+    // Each corrected value is re-checked with the import's own rules; its
+    // flag clears only if the new value is valid.
+    let current: ReturnType<typeof fixRowField> = {
+      coerced: (row.coerced ?? {}) as Record<string, unknown>,
+      flags: row.flags.map((f) => ({ field: f.field, message: f.message, rawValue: f.rawValue })),
+    };
+    for (const [field, raw] of Object.entries(coercedOverrides)) {
+      current = fixRowField(current, field, raw);
+    }
+    row.coerced = current.coerced;
+    row.set("flags", current.flags);
+    row.markModified("coerced");
   }
   if (reviewStatus) {
     row.reviewStatus = reviewStatus;
@@ -45,21 +58,6 @@ export async function PATCH(
   }
 
   await row.save();
-
-  const [approvedRows, rejectedRows, pendingRows] = await Promise.all([
-    ImportBatchRow.countDocuments({ batchId, reviewStatus: "approved" }),
-    ImportBatchRow.countDocuments({ batchId, reviewStatus: "rejected" }),
-    ImportBatchRow.countDocuments({ batchId, reviewStatus: "needs_review" }),
-  ]);
-
-  batch.approvedRows = approvedRows;
-  batch.rejectedRows = rejectedRows;
-
-  if (pendingRows === 0 && batch.status === "needs_review") {
-    batch.status = "reviewed";
-  }
-
-  await batch.save();
 
   return NextResponse.json({ row });
 }
