@@ -128,6 +128,7 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
     }
 
     setSubmitting(true);
+    let navigating = false;
     try {
       const res = await fetch("/api/quotations", {
         method: "POST",
@@ -147,9 +148,11 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
         setError(data.error ?? "Could not save the quote");
         return;
       }
+      // Keep the button busy while the next page loads.
+      navigating = true;
       router.push(`/purchase-orders/quotes/${data.quotationId}`);
     } finally {
-      setSubmitting(false);
+      if (!navigating) setSubmitting(false);
     }
   }
 
@@ -307,7 +310,7 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
             <Plus size={14} /> Add item
           </span>
         </Button>
-        <Button type="submit" variant="primary" disabled={submitting}>
+        <Button type="submit" variant="primary" loading={submitting}>
           {submitting ? "Saving…" : `Save quote (${rows.length} item${rows.length === 1 ? "" : "s"})`}
         </Button>
         {error && <ErrorText>{error}</ErrorText>}

@@ -18,19 +18,22 @@ const NAV: (NavItem & { roles: Role[] | null })[] = [
   },
   { href: "/items", label: "Un-Verified Items", icon: "PackageSearch", roles: null },
   { href: "/catalog", label: "Catalog", icon: "BookOpenCheck", roles: null },
+  { href: "/images", label: "Images", icon: "Images", roles: null },
   {
     href: "/marketplace-export",
     label: "Marketplace Export",
     icon: "Store",
     roles: ["administrator", "marketplace_listing"] as Role[],
   },
-  { href: "/admin/import-review", label: "Legacy Import", icon: "FileSpreadsheet", roles: ["administrator"] as Role[] },
+  // Master File import lives on the Catalog page ("Import Master File",
+  // admin only) rather than its own nav entry.
   // Monday Import ("/admin/monday-pull") is deliberately not in this list
   // any more — it's reached from a button on the Purchase Orders page
   // instead (still admin-only, still /admin-prefix gated in middleware.ts).
   // Settings is the last item in the main nav list (not a separate footer
   // block) and expands as a dropdown in place — see Sidebar.tsx. Visible to
   // everyone; "Users & Roles" inside it is filtered to admins there.
+  { href: "/help", label: "Help & Support", icon: "LifeBuoy", roles: null },
   { href: "/settings", label: "Settings", icon: "Settings", roles: null },
 ];
 

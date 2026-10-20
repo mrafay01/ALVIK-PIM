@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Check, Mail, ArrowLeft, MailCheck } from "lucide-react";
 import { Field, Input, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 type Step = "form" | "otp";
 
 export function ChangeEmailForm({ currentEmail }: { currentEmail: string }) {
-  const router = useRouter();
+  const { refresh, refreshing } = useRefreshAfterSave();
   const [step, setStep] = useState<Step>("form");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -78,7 +78,7 @@ export function ChangeEmailForm({ currentEmail }: { currentEmail: string }) {
 
       setSuccess(true);
       reset();
-      router.refresh();
+      refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't change your email.");
     } finally {
@@ -108,9 +108,9 @@ export function ChangeEmailForm({ currentEmail }: { currentEmail: string }) {
           />
         </Field>
         <div className="flex items-center gap-2">
-          <Button type="submit" variant="primary" disabled={submitting || code.length !== 6}>
+          <Button type="submit" variant="primary" disabled={code.length !== 6} loading={submitting || refreshing}>
             <span className="flex items-center gap-1.5">
-              <Mail size={14} /> {submitting ? "Verifying…" : "Confirm change"}
+              {!(submitting || refreshing) && <Mail size={14} />} {submitting || refreshing ? "Verifying…" : "Confirm change"}
             </span>
           </Button>
           <Button type="button" variant="ghost" disabled={submitting} onClick={reset}>
@@ -147,9 +147,9 @@ export function ChangeEmailForm({ currentEmail }: { currentEmail: string }) {
         />
       </Field>
 
-      <Button type="submit" variant="primary" disabled={submitting} className="self-start">
+      <Button type="submit" variant="primary" loading={submitting} className="self-start">
         <span className="flex items-center gap-1.5">
-          <Mail size={14} /> {submitting ? "Sending code…" : "Send verification code"}
+          {!submitting && <Mail size={14} />} {submitting ? "Sending code…" : "Send verification code"}
         </span>
       </Button>
 

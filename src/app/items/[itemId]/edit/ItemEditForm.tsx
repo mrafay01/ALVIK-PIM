@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Save, Check, Package, Gem } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Field, Input, Select, ErrorText } from "@/components/ui/Field";
@@ -11,6 +10,7 @@ import { CATEGORY_OPTIONS, GENDER_OPTIONS, BRAND_OPTIONS, METAL_OPTIONS, PLATING
 import { MeasurementFieldsEditor } from "@/components/ui/MeasurementFieldsEditor";
 import type { ItemMeasurements } from "@/lib/measurements/types";
 import { validateItemMeasurements, formatValidationIssues, cleanMeasurementsForSave } from "@/lib/measurements/validate";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 export type ItemEditValues = {
   vendorName: string;
@@ -104,7 +104,7 @@ export function ItemEditForm({
   initialBulletFeatures: string[];
   initialMeasurements: ItemMeasurements;
 }) {
-  const router = useRouter();
+  const { refresh, refreshing } = useRefreshAfterSave();
   const [values, setValues] = useState<ItemEditValues>(initial);
   const [bulletFeatures, setBulletFeatures] = useState<string[]>(initialBulletFeatures);
   const [bulletFeaturesBoxCount, setBulletFeaturesBoxCount] = useState(
@@ -192,7 +192,7 @@ export function ItemEditForm({
       }
 
       setSaved(true);
-      router.refresh();
+      refresh();
     } finally {
       setSaving(false);
     }
@@ -388,12 +388,12 @@ export function ItemEditForm({
 
       <div className="flex items-center gap-3 sticky bottom-4 z-10">
         <Card padding={0} className="flex items-center gap-3 px-4 py-3 shadow-lg">
-          <Button type="submit" variant="primary" disabled={saving}>
+          <Button type="submit" variant="primary" loading={saving || refreshing}>
             <span className="flex items-center gap-1.5">
-              <Save size={14} /> {saving ? "Saving…" : "Save changes"}
+              {!(saving || refreshing) && <Save size={14} />} {saving || refreshing ? "Saving…" : "Save changes"}
             </span>
           </Button>
-          {saved && !saving && (
+          {saved && !saving && !refreshing && (
             <span className="flex items-center gap-1 text-[0.83rem] text-good">
               <Check size={14} /> Saved
             </span>

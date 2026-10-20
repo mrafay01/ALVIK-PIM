@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { CircleAlert, UserPlus } from "lucide-react";
 import { Field, Input, Select, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import type { Role } from "@/lib/enums";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 export function CreateUserForm({ roles, roleLabel }: { roles: readonly Role[]; roleLabel: Record<Role, string> }) {
-  const router = useRouter();
+  const { refresh, refreshing } = useRefreshAfterSave();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,7 +34,7 @@ export function CreateUserForm({ roles, roleLabel }: { roles: readonly Role[]; r
       setEmail("");
       setPassword("");
       setRole(roles[0]);
-      router.refresh();
+      refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't create the user.");
     } finally {
@@ -80,9 +80,9 @@ export function CreateUserForm({ roles, roleLabel }: { roles: readonly Role[]; r
       )}
 
       <div>
-        <Button type="submit" variant="primary" disabled={submitting}>
+        <Button type="submit" variant="primary" loading={submitting || refreshing}>
           <span className="inline-flex items-center gap-1.5">
-            <UserPlus size={15} /> {submitting ? "Creating…" : "Create user"}
+            {!(submitting || refreshing) && <UserPlus size={15} />} {submitting || refreshing ? "Creating…" : "Create user"}
           </span>
         </Button>
       </div>

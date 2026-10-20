@@ -162,8 +162,8 @@ export interface PullPlan {
 // a pull would do, without writing to the DB. Matching is by PO number
 // (Monday item name == PurchaseOrder.poNumber) since no mondayItemId has
 // ever been recorded on the inbound direction for pre-existing board items.
-export async function buildPullPlan(): Promise<PullPlan> {
-  const items = await fetchAllBoardItems();
+export async function buildPullPlan(prefetched?: MondayItem[]): Promise<PullPlan> {
+  const items = prefetched ?? (await fetchAllBoardItems());
   const poNumbers = items.map((i) => i.name);
   const existingPOs = await PurchaseOrder.find({ poNumber: { $in: poNumbers } }).lean();
   const poByNumber = new Map(existingPOs.map((po) => [po.poNumber, po]));
@@ -320,8 +320,8 @@ const CHECKLIST_LABEL_TO_VALUE: Record<string, Record<string, string>> = {
 // The board is re-read once here (so a stale plan can't apply data that
 // changed since the preview), then every DB write is batched into two
 // bulkWrite calls instead of one round-trip per row.
-export async function commitPullPlan(rows: PullPlanRow[]): Promise<PullCommitResult> {
-  const items = await fetchAllBoardItems();
+export async function commitPullPlan(rows: PullPlanRow[], prefetched?: MondayItem[]): Promise<PullCommitResult> {
+  const items = prefetched ?? (await fetchAllBoardItems());
   const itemById = new Map(items.map((i) => [i.id, i]));
 
   // Pre-resolve every vendor a "create" row needs in one query rather than
@@ -629,4 +629,16 @@ async function materializeItemsFromPull(
     if (!writeErrors) throw err;
     return 0;
   }
+}
+
+// Applies the preview rows for just the board items the reviewer kept
+// selected. The plan is rebuilt here from one fresh read of the board
+// rather than trusted from the browser, and that same read feeds the
+// commit, so the board is fetched once.
+export async function commitSelectedPullRows(mondayItemIds: string[]): Promise<PullCommitResult> {
+  const items = await fetchAllBoardItems();
+  const plan = await buildPullPlan(items);
+  const wanted = new Set(mondayItemIds);
+  const rows = plan.rows.filter((r) => wanted.has(r.mondayItemId));
+  return commitPullPlan(rows, items);
 }

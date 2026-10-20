@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { CheckCircle2, Shield, TriangleAlert } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 type Conflict = {
   _id: string;
@@ -25,8 +25,9 @@ type Group = {
 };
 
 export function ConflictsList({ groups }: { groups: Group[] }) {
-  const router = useRouter();
+  const { refresh, refreshing } = useRefreshAfterSave();
   const [busy, setBusy] = useState<string | null>(null);
+  const [lastBusy, setLastBusy] = useState<{ id: string; decision: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Any conflict currently showing the "custom value" input. Null means
   // nothing's being customised.
@@ -38,6 +39,7 @@ export function ConflictsList({ groups }: { groups: Group[] }) {
     body: { decision: "keep" | "accept" } | { decision: "custom"; customValue: string }
   ) {
     setBusy(conflictId);
+    setLastBusy({ id: conflictId, decision: body.decision });
     setError(null);
     try {
       const res = await fetch(`/api/catalog/conflicts/${conflictId}/resolve`, {
@@ -52,7 +54,7 @@ export function ConflictsList({ groups }: { groups: Group[] }) {
       }
       setCustoming(null);
       setCustomDraft("");
-      router.refresh();
+      refresh();
     } finally {
       setBusy(null);
     }
@@ -100,7 +102,8 @@ export function ConflictsList({ groups }: { groups: Group[] }) {
             <tbody>
               {group.conflicts.map((c) => {
                 const isCustoming = customing === c._id;
-                const isBusy = busy === c._id;
+                const isBusy = busy === c._id || (refreshing && lastBusy?.id === c._id);
+                const spinning = (d: string) => isBusy && lastBusy?.id === c._id && lastBusy.decision === d;
                 return (
                   <tr key={c._id} className="border-b border-border last:border-b-0 align-top">
                     <td className="px-4 py-3 text-[0.86rem] font-semibold">{c.fieldLabel}</td>
@@ -138,6 +141,7 @@ export function ConflictsList({ groups }: { groups: Group[] }) {
                             size="sm"
                             variant="primary"
                             disabled={!customDraft.trim() || isBusy}
+                            loading={spinning("custom")}
                             onClick={() =>
                               resolve(c._id, {
                                 decision: "custom",
@@ -163,6 +167,7 @@ export function ConflictsList({ groups }: { groups: Group[] }) {
                           <Button
                             size="sm"
                             disabled={isBusy}
+                            loading={spinning("keep")}
                             onClick={() => resolve(c._id, { decision: "keep" })}
                           >
                             <span className="flex items-center gap-1">
@@ -173,6 +178,7 @@ export function ConflictsList({ groups }: { groups: Group[] }) {
                             size="sm"
                             variant="primary"
                             disabled={isBusy}
+                            loading={spinning("accept")}
                             onClick={() => resolve(c._id, { decision: "accept" })}
                           >
                             <span className="flex items-center gap-1">

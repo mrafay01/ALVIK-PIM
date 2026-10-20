@@ -1,5 +1,7 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
+
 type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
@@ -22,6 +24,7 @@ export function Button({
   variant = "secondary",
   size = "md",
   disabled,
+  loading = false,
   type = "button",
   onClick,
   className,
@@ -31,22 +34,33 @@ export function Button({
   variant?: ButtonVariant;
   size?: "sm" | "md";
   disabled?: boolean;
+  /** Shows a spinner and blocks clicks while an action is in flight. */
+  loading?: boolean;
   type?: "button" | "submit";
   onClick?: () => void;
   className?: string;
   style?: React.CSSProperties;
 }) {
+  const blocked = disabled || loading;
   return (
     <button
       type={type}
-      disabled={disabled}
+      disabled={blocked}
+      aria-busy={loading || undefined}
       onClick={onClick}
       className={`font-body font-semibold rounded-sm transition-[background-color,color,border-color,box-shadow,transform] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass ${
-        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer opacity-100"
+        loading ? "cursor-wait opacity-80" : disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer opacity-100"
       } ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className ?? ""}`}
       style={style}
     >
-      {children}
+      {loading ? (
+        <span className="inline-flex items-center gap-1.5">
+          <Loader2 size={size === "sm" ? 12 : 14} className="animate-spin shrink-0" />
+          {children}
+        </span>
+      ) : (
+        children
+      )}
     </button>
   );
 }

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { TriangleAlert, CheckCircle2, Shield } from "lucide-react";
+import { TriangleAlert, CheckCircle2, Shield, Loader2 } from "lucide-react";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 export function CatalogRowFlags({
   itemId,
@@ -21,7 +21,7 @@ export function CatalogRowFlags({
    *  jumps straight to the resolver without scanning /catalog/conflicts. */
   conflictCount?: number;
 }) {
-  const router = useRouter();
+  const { refresh, refreshing } = useRefreshAfterSave();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -46,7 +46,7 @@ export function CatalogRowFlags({
     setBusy(true);
     try {
       const res = await fetch(`/api/catalog/${itemId}/approve`, { method: "POST" });
-      if (res.ok) router.refresh();
+      if (res.ok) refresh();
     } finally {
       setBusy(false);
     }
@@ -72,10 +72,16 @@ export function CatalogRowFlags({
         <button
           type="button"
           onClick={approve}
-          disabled={busy}
-          className="text-[0.75rem] font-semibold px-2.5 py-1 rounded-sm border border-good-bg bg-good-bg text-good hover:brightness-110 disabled:opacity-50"
+          disabled={busy || refreshing}
+          className="inline-flex items-center gap-1 text-[0.75rem] font-semibold px-2.5 py-1 rounded-sm border border-good-bg bg-good-bg text-good hover:brightness-110 disabled:opacity-70 disabled:cursor-wait"
         >
-          {busy ? "…" : "Approve"}
+          {busy || refreshing ? (
+            <>
+              <Loader2 size={11} className="animate-spin" /> Approving…
+            </>
+          ) : (
+            "Approve"
+          )}
         </button>
       )}
 

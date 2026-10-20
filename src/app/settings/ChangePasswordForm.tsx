@@ -113,7 +113,7 @@ export function ChangePasswordForm() {
           />
         </Field>
         <div className="flex items-center gap-2">
-          <Button type="submit" variant="primary" disabled={submitting || code.length !== 6}>
+          <Button type="submit" variant="primary" disabled={code.length !== 6} loading={submitting}>
             <span className="flex items-center gap-1.5">
               <KeyRound size={14} /> {submitting ? "Verifying…" : "Confirm change"}
             </span>
@@ -164,7 +164,7 @@ export function ChangePasswordForm() {
         />
       </Field>
 
-      <Button type="submit" variant="primary" disabled={submitting} className="self-start">
+      <Button type="submit" variant="primary" loading={submitting} className="self-start">
         <span className="flex items-center gap-1.5">
           <KeyRound size={14} /> {submitting ? "Sending code…" : "Send verification code"}
         </span>

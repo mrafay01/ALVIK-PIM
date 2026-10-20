@@ -26,6 +26,7 @@ const PAGE_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
   // /catalog itself is read-only for any signed-in user; only the
   // hand-entry form is gated.
   ["/catalog/new", ["marketplace_listing"]],
+  ["/catalog/import", []], // Master File import: administrator only
   // /settings deliberately has no entry here — firstMatch() returning
   // undefined means "any signed-in role passes" (see the call site below).
   // It's every user's own account page; the admin-only bits it links to
@@ -245,6 +246,8 @@ export const config = {
     "/admin/:path*",
     "/marketplace-export/:path*",
     "/settings/:path*",
+    "/help/:path*",
+    "/images/:path*",
     "/api/items/:path*",
     "/api/catalog/:path*",
     "/api/purchase-orders/:path*",
@@ -253,5 +256,7 @@ export const config = {
     "/api/admin/:path*",
     "/api/marketplace-export/:path*",
     "/api/users/:path*",
+    "/api/support/:path*",
+    "/api/images/:path*",
   ],
 };

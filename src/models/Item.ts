@@ -102,6 +102,12 @@ const MediaItemSchema = new Schema(
     sequence: { type: Number, default: 0 },
     uploadedBy: { type: Schema.Types.ObjectId, ref: "User" },
     uploadedAt: { type: Date, default: Date.now },
+    // File name in SharePoint (also the last segment of `url`).
+    name: String,
+    // Result of the last "is this file still in SharePoint?" check (Images
+    // page). A broken image doesn't count towards imageCompleteness.
+    linkStatus: { type: String, enum: ["ok", "broken"], default: undefined },
+    linkCheckedAt: Date,
   },
   { _id: false }
 );
@@ -345,6 +351,8 @@ ItemSchema.index({ inCatalog: 1, baseSku: 1 });
 ItemSchema.index({ "catalogApproval.status": 1 }, { sparse: true });
 // Marketplace export filters by masterRecordComplete and active together.
 ItemSchema.index({ active: 1, masterRecordComplete: 1 });
+// Images page: "broken links" filter.
+ItemSchema.index({ "media.linkStatus": 1 }, { sparse: true });
 // Un-Verified Items page: filter by intake source, newest first.
 ItemSchema.index({ intakeSource: 1, createdAt: -1 });
 

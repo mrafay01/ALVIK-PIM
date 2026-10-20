@@ -5,11 +5,12 @@ import { getSessionRole } from "@/lib/authz";
 import type { PipelineStage } from "mongoose";
 import Item from "@/models/Item";
 import CatalogConflict from "@/models/CatalogConflict";
+import ImportBatch from "@/models/ImportBatch";
 import { checkMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
-import { ShieldCheck, Plus, TriangleAlert } from "lucide-react";
+import { ShieldCheck, Plus, TriangleAlert, FileUp, ListChecks } from "lucide-react";
 import { CatalogRowFlags } from "./CatalogRowFlags";
 import { CatalogFilters } from "./CatalogFilters";
 
@@ -51,6 +52,7 @@ const SORT_STAGES: Record<string, Record<string, 1 | -1>> = {
   sku: { itemNumber: 1 },
   sku_desc: { itemNumber: -1 },
   title: { title: 1, itemNumber: 1 },
+  brand: { brand: 1, itemNumber: 1 },
   msrp_asc: { latestMsrp: 1, itemNumber: 1 },
   msrp_desc: { latestMsrp: -1, itemNumber: 1 },
   newest: { updatedAt: -1 },
@@ -61,6 +63,7 @@ type SearchParams = {
   page?: string;
   q?: string;
   category?: string;
+  brand?: string;
   plating?: string;
   minPrice?: string;
   maxPrice?: string;
@@ -83,6 +86,7 @@ export default async function CatalogPage({
   const page = parsePage(sp.page);
   const q = (sp.q ?? "").trim();
   const category = (sp.category ?? "").trim();
+  const brand = (sp.brand ?? "").trim();
   const plating = (sp.plating ?? "").trim();
   const minPrice = num(sp.minPrice);
   const maxPrice = num(sp.maxPrice);
@@ -112,6 +116,7 @@ export default async function CatalogPage({
   if (tab === "variations") match.baseSku = { $in: familySkusEarly };
   if (tab === "inactive") match.active = false;
   if (category) match.category = category;
+  if (brand) match.brand = brand;
   if (plating) match["specs.plating"] = plating;
   if (q) {
     const rx = new RegExp(escapeRegex(q), "i");
@@ -185,15 +190,23 @@ export default async function CatalogPage({
     },
   });
 
-  const [facetResult, categories, platings, pendingConflictCount, familySkus, role] = await Promise.all([
+  const [facetResult, categories, brands, platings, pendingConflictCount, familySkus, role, openImports] = await Promise.all([
     Item.aggregate(pipeline).collation({ locale: "en", numericOrdering: true }),
     Item.distinct("category", { inCatalog: true }),
+    Item.distinct("brand", { inCatalog: true }),
     Item.distinct("specs.plating", { inCatalog: true }),
     CatalogConflict.countDocuments({ status: "pending" }),
     familySkusEarly ?? familySkusQuery,
     getSessionRole(),
+    ImportBatch.find({ status: { $ne: "committed" } })
+      .select("sourceFileName totalRows")
+      .sort({ uploadedAt: -1 })
+      .limit(1)
+      .lean(),
   ]);
-  const canApprove = role === "administrator";
+  const isAdmin = role === "administrator";
+  const openImport = isAdmin ? openImports[0] : undefined;
+  const canApprove = isAdmin;
   const familySkuSet = new Set(familySkus);
 
   const items = (facetResult[0]?.rows ?? []) as Array<{
@@ -221,6 +234,7 @@ export default async function CatalogPage({
   const filterState = {
     q,
     category,
+    brand,
     plating,
     minPrice: sp.minPrice ?? "",
     maxPrice: sp.maxPrice ?? "",
@@ -231,6 +245,7 @@ export default async function CatalogPage({
     filter: tab === "all" ? undefined : tab,
     q: q || undefined,
     category: category || undefined,
+    brand: brand || undefined,
     plating: plating || undefined,
     minPrice: sp.minPrice || undefined,
     maxPrice: sp.maxPrice || undefined,
@@ -258,13 +273,41 @@ export default async function CatalogPage({
             </div>
           </div>
         </Card>
-        <Link
-          href="/catalog/new"
-          className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-brass text-on-brass border border-brass shadow-[0_2px_10px_var(--brass-glow)] no-underline hover:bg-brass-hover"
-        >
-          <Plus size={15} /> New catalog item
-        </Link>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {isAdmin && (
+            <Link
+              href="/catalog/import"
+              className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-surface text-ink border border-border-strong no-underline hover:border-brass hover:text-brass"
+            >
+              <FileUp size={15} /> Import Master File
+            </Link>
+          )}
+          <Link
+            href="/catalog/new"
+            className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-brass text-on-brass border border-brass shadow-[0_2px_10px_var(--brass-glow)] no-underline hover:bg-brass-hover"
+          >
+            <Plus size={15} /> New catalog item
+          </Link>
+        </div>
       </div>
+
+      {openImport && (
+        <Card className="mb-5 flex items-center gap-3.5">
+          <ListChecks size={18} className="text-brass shrink-0" />
+          <div className="flex-1 text-[0.86rem]">
+            <span className="font-semibold">Master File import waiting for review:</span>{" "}
+            <span className="text-ink-soft">
+              {openImport.sourceFileName} ({openImport.totalRows} rows). Nothing is in the catalog until it&apos;s committed.
+            </span>
+          </div>
+          <Link
+            href={`/catalog/import/${openImport._id}`}
+            className="font-body font-semibold text-[0.85rem] px-3.5 py-2 rounded-sm bg-brass-bg text-brass no-underline hover:brightness-110"
+          >
+            Continue review
+          </Link>
+        </Card>
+      )}
 
       {pendingConflictCount > 0 && (
         <Card className="mb-5 border-warn flex items-center gap-3.5">
@@ -294,6 +337,7 @@ export default async function CatalogPage({
           if (t.value !== "all") params.set("filter", t.value);
           if (q) params.set("q", q);
           if (category) params.set("category", category);
+          if (brand) params.set("brand", brand);
           if (plating) params.set("plating", plating);
           if (sp.minPrice) params.set("minPrice", sp.minPrice);
           if (sp.maxPrice) params.set("maxPrice", sp.maxPrice);
@@ -320,6 +364,7 @@ export default async function CatalogPage({
       <CatalogFilters
         state={filterState}
         categories={(categories as string[]).filter(Boolean).sort()}
+        brands={(brands as string[]).filter(Boolean).sort((a, b) => a.localeCompare(b))}
         platings={(platings as string[]).filter(Boolean).sort()}
       />
 

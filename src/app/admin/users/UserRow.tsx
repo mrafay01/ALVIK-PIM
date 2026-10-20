@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { KeyRound } from "lucide-react";
 import { Select } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
 import type { Role } from "@/lib/enums";
 import { ResetPasswordPanel } from "./ResetPasswordPanel";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 const TD_CLASS = "px-4 py-3 text-[0.85rem] align-top";
 
@@ -31,14 +31,18 @@ export function UserRow({
   roleLabel: Record<Role, string>;
   isSelf: boolean;
 }) {
-  const router = useRouter();
+  const { refresh, refreshing } = useRefreshAfterSave();
   const [role, setRole] = useState<Role>(user.role);
   const [saving, setSaving] = useState(false);
+  // Which control started the save, so only that one shows a spinner.
+  const [savingWhat, setSavingWhat] = useState<"role" | "active" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
+  const working = saving || refreshing;
 
   async function patch(body: Record<string, unknown>) {
     setSaving(true);
+    setSavingWhat("role" in body ? "role" : "active");
     setError(null);
     try {
       const res = await fetch(`/api/admin/users/${user._id}`, {
@@ -48,7 +52,7 @@ export function UserRow({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Update failed.");
-      router.refresh();
+      refresh();
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Update failed.");
@@ -73,7 +77,7 @@ export function UserRow({
       <td className={TD_CLASS}>
         <Select
           value={role}
-          disabled={isSelf || saving}
+          disabled={isSelf || working}
           onChange={(e) => handleRoleChange(e.target.value as Role)}
           className="min-w-[190px]"
         >
@@ -105,7 +109,7 @@ export function UserRow({
         <div className="flex flex-col gap-2 items-end">
           <div className="flex items-center gap-2">
             {!resetOpen && (
-              <Button size="sm" variant="ghost" onClick={() => setResetOpen(true)} disabled={saving}>
+              <Button size="sm" variant="ghost" onClick={() => setResetOpen(true)} disabled={working}>
                 <span className="inline-flex items-center gap-1">
                   <KeyRound size={13} /> Reset password
                 </span>
@@ -113,12 +117,24 @@ export function UserRow({
             )}
             {!isSelf &&
               (user.active ? (
-                <Button size="sm" variant="danger" onClick={() => patch({ active: false })} disabled={saving}>
-                  Deactivate
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() => patch({ active: false })}
+                  disabled={working}
+                  loading={working && savingWhat === "active"}
+                >
+                  {working && savingWhat === "active" ? "Deactivating…" : "Deactivate"}
                 </Button>
               ) : (
-                <Button size="sm" variant="secondary" onClick={() => patch({ active: true })} disabled={saving}>
-                  Reactivate
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => patch({ active: true })}
+                  disabled={working}
+                  loading={working && savingWhat === "active"}
+                >
+                  {working && savingWhat === "active" ? "Reactivating…" : "Reactivate"}
                 </Button>
               ))}
           </div>

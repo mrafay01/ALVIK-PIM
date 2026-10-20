@@ -17,6 +17,8 @@ import {
   BellRing,
   LogOut,
   ChevronUp,
+  LifeBuoy,
+  Images,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -36,6 +38,8 @@ const ICONS = {
   Store,
   Users,
   Settings,
+  LifeBuoy,
+  Images,
 };
 
 export type NavIconName = keyof typeof ICONS;

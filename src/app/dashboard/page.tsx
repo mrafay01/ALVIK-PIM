@@ -1,408 +1,444 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
+import { getSession, roleCan, ROLE_SETS } from "@/lib/authz";
+import type { Role } from "@/lib/enums";
 import Item from "@/models/Item";
 import PurchaseOrder from "@/models/PurchaseOrder";
 import Quotation from "@/models/Quotation";
-import { Card } from "@/components/ui/Card";
-import { Pill } from "@/components/ui/Pill";
-import { HBarChart, type HBarDatum } from "@/components/ui/charts/HBarChart";
-import { DonutChart } from "@/components/ui/charts/DonutChart";
+import CatalogConflict from "@/models/CatalogConflict";
+import "@/models/Vendor";
 import { TrendBars } from "@/components/ui/charts/TrendBars";
-import { TriangleAlert, Clock, ArrowRight, Camera, CloudUpload, ImageOff, ImageDown } from "lucide-react";
+import { Pill } from "@/components/ui/Pill";
+import {
+  ClipboardList,
+  BookOpenCheck,
+  PackageSearch,
+  BellRing,
+  FileUp,
+  Plus,
+  RefreshCw,
+  ImagePlus,
+  Clock,
+  ShieldAlert,
+  FileSpreadsheet,
+  Link2Off,
+  Camera,
+  CalendarClock,
+} from "lucide-react";
 import { PO_STATUSES } from "@/lib/enums";
 import { PO_STATUS_LABEL, PO_STATUS_TONE, ITEM_STATUS_LABEL, ITEM_STATUS_TONE } from "@/lib/statusDisplay";
+import { OPEN_PO_CONDITIONS } from "@/lib/purchase-orders/listQuery";
+import { KpiTile, Panel, PipelineFlow, AttentionList, Ring, LegendRow, CoverageBar, ago } from "./parts";
 
 export const dynamic = "force-dynamic";
 
-const TH_CLASS =
-  "text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap";
-const TD_CLASS = "px-4 py-3 text-[0.85rem]";
+const WEEK = 7 * 24 * 60 * 60 * 1000;
 
-function weekLabel(d: Date) {
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function count(facet: { n: number }[] | undefined): number {
+  return facet?.[0]?.n ?? 0;
 }
 
-// A card whose header links out to the page that owns the data it shows —
-// every chart/table on this dashboard is a summary of somewhere else in the
-// app, so the click target is never a dead end. `href` is optional: a card
-// summarizing something with no page of its own (e.g. in-progress items,
-// which have no standalone list) renders its header as plain text instead
-// of faking a link.
-function LinkedCard({
-  href,
-  title,
-  subtitle,
-  children,
-}: {
-  href?: string;
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
-  const header = (
-    <div className="min-w-0">
-      <h2 className={`text-[0.95rem] ${href ? "group-hover:text-brass transition-colors duration-150" : ""}`}>
-        {title}
-      </h2>
-      {subtitle && <p className="text-ink-faint text-[0.78rem] mt-1 mb-0">{subtitle}</p>}
-    </div>
-  );
-
-  return (
-    <Card className={href ? "czc-card-link" : ""} padding={0}>
-      {href ? (
-        <Link href={href} className="flex items-center justify-between gap-3 px-[22px] pt-[22px] pb-1 no-underline group">
-          {header}
-          <ArrowRight
-            size={16}
-            strokeWidth={2}
-            className="shrink-0 text-ink-faint group-hover:text-brass group-hover:translate-x-0.5 transition-[color,transform] duration-150"
-          />
-        </Link>
-      ) : (
-        <div className="px-[22px] pt-[22px] pb-1">{header}</div>
-      )}
-      <div className="px-[22px] pb-[22px] pt-4">{children}</div>
-    </Card>
-  );
-}
-
+// The overview: a few headline numbers, the open PO pipeline, what's
+// waiting on someone, catalog and image health, and recent activity. Every
+// number links to the page that owns it. "Open" POs use the same
+// definition as the Purchase Orders list, so the thousands of finished
+// Monday orders don't inflate the pipeline.
 export default async function DashboardPage() {
   await connectDB();
+  const session = await getSession();
+  const role = session?.user?.role as Role | undefined;
+  const firstName = (session?.user?.name ?? "").split(" ")[0];
 
   const now = new Date();
-  const twelveWeeksAgo = new Date(now.getTime() - 12 * 7 * 24 * 60 * 60 * 1000);
+  const weekAgo = new Date(now.getTime() - WEEK);
+  const twelveWeeksAgo = new Date(now.getTime() - 12 * WEEK);
+  const open = { $and: OPEN_PO_CONDITIONS };
+  const unverifiedMatch = { inCatalog: { $ne: true }, intakeSource: { $in: ["manual_quote", "monday_pull"] } };
 
-  // Batch all Item and PurchaseOrder counts into aggregation pipelines using $facet
-  // to reduce from ~15 separate queries to 3 batch calls.
-  const [itemMetrics, poMetrics, recentItems, quotationsNeedingReview] = await Promise.all([
+  const [poFacets, itemFacets, quotesToReview, pendingConflicts, recentPos, recentItems] = await Promise.all([
+    PurchaseOrder.aggregate([
+      { $project: { status: 1, mondayStatusText: 1, mondayStatusMapped: 1, requestDate: 1, imageStatus: 1 } },
+      { $match: open },
+      {
+        $facet: {
+          byStatus: [{ $group: { _id: "$status", n: { $sum: 1 } } }],
+          total: [{ $count: "n" }],
+          overdue: [{ $match: { requestDate: { $lt: now } } }, { $count: "n" }],
+          sideLane: [{ $match: { mondayStatusMapped: false } }, { $count: "n" }],
+          withPhotographer: [
+            { $match: { imageStatus: { $in: ["sent_to_photo_guy", "submitted_on_fiverr"] } } },
+            { $count: "n" },
+          ],
+        },
+      },
+    ]),
     Item.aggregate([
-      // Every item flows through each facet below, so carry only the
-      // fields they read rather than whole item documents.
+      // Only the fields the facets read, not whole item documents.
       {
         $project: {
           inCatalog: 1,
           masterRecordComplete: 1,
-          "catalogApproval.status": 1,
-          imageCompleteness: 1,
+          approval: "$catalogApproval.status",
+          intakeSource: 1,
           createdAt: 1,
+          main: "$imageCompleteness.main",
+          sides: "$imageCompleteness.sides",
+          models: "$imageCompleteness.models",
           mediaCount: { $size: { $ifNull: ["$media", []] } },
+          broken: { $in: ["broken", { $ifNull: ["$media.linkStatus", []] }] },
         },
       },
       {
         $facet: {
-          incompleteCatalog: [
-            { $match: { inCatalog: true, masterRecordComplete: false } },
-            { $count: "count" },
-          ],
-          catalogPending: [
-            { $match: { inCatalog: true, "catalogApproval.status": "pending" } },
-            { $count: "count" },
-          ],
-          catalogComplete: [
-            { $match: { inCatalog: true, masterRecordComplete: true } },
-            { $count: "count" },
-          ],
-          catalogIncomplete: [
-            {
-              $match: {
-                inCatalog: true,
-                masterRecordComplete: false,
-                $or: [{ "catalogApproval.status": { $ne: "pending" } }, { catalogApproval: { $exists: false } }],
-              },
-            },
-            { $count: "count" },
-          ],
-          itemsNoImages: [
-            { $match: { mediaCount: 0 } },
-            { $count: "count" },
-          ],
-          itemsFullImages: [
-            {
-              $match: {
-                "imageCompleteness.main": true,
-                "imageCompleteness.sides": true,
-                "imageCompleteness.models": true,
-              },
-            },
-            { $count: "count" },
-          ],
-          itemsPartialImages: [
-            {
-              $match: {
-                mediaCount: { $gt: 0 },
-                $or: [
-                  { "imageCompleteness.main": { $ne: true } },
-                  { "imageCompleteness.sides": { $ne: true } },
-                  { "imageCompleteness.models": { $ne: true } },
-                ],
-              },
-            },
-            { $count: "count" },
-          ],
-          itemsCreated: [
+          catalog: [{ $match: { inCatalog: true } }, { $count: "n" }],
+          complete: [{ $match: { inCatalog: true, masterRecordComplete: true } }, { $count: "n" }],
+          pendingApproval: [{ $match: { inCatalog: true, approval: "pending" } }, { $count: "n" }],
+          catMain: [{ $match: { inCatalog: true, main: true } }, { $count: "n" }],
+          catSides: [{ $match: { inCatalog: true, sides: true } }, { $count: "n" }],
+          catModels: [{ $match: { inCatalog: true, models: true } }, { $count: "n" }],
+          catNoImages: [{ $match: { inCatalog: true, mediaCount: 0 } }, { $count: "n" }],
+          broken: [{ $match: { broken: true } }, { $count: "n" }],
+          unverified: [{ $match: unverifiedMatch }, { $count: "n" }],
+          unverifiedThisWeek: [{ $match: { ...unverifiedMatch, createdAt: { $gte: weekAgo } } }, { $count: "n" }],
+          weekly: [
             { $match: { createdAt: { $gte: twelveWeeksAgo } } },
-            {
-              $group: {
-                _id: { $dateTrunc: { date: "$createdAt", unit: "week", timezone: "UTC" } },
-                count: { $sum: 1 },
-              },
-            },
-            { $sort: { _id: 1 } },
+            { $group: { _id: { $dateTrunc: { date: "$createdAt", unit: "week", timezone: "UTC" } }, n: { $sum: 1 } } },
           ],
         },
       },
     ]),
-    PurchaseOrder.aggregate([
-      { $project: { status: 1, imageStatus: 1 } },
-      {
-        $facet: {
-          statusCounts: [{ $group: { _id: "$status", count: { $sum: 1 } } }],
-          imageStatusPending: [{ $match: { imageStatus: "pending" } }, { $count: "count" }],
-          imageStatusWithPhotographer: [
-            { $match: { imageStatus: { $in: ["sent_to_photo_guy", "submitted_on_fiverr"] } } },
-            { $count: "count" },
-          ],
-          imageStatusReceived: [
-            { $match: { imageStatus: { $in: ["images_received", "received"] } } },
-            { $count: "count" },
-          ],
-        },
-      },
-    ]),
-    Item.find({ inCatalog: { $ne: true } })
-      .select("itemNumber sampleSku title status vendorId updatedAt")
+    Quotation.countDocuments({ status: "needs_review" }),
+    CatalogConflict.countDocuments({ status: "pending" }),
+    PurchaseOrder.find(open)
+      .select("poNumber status mondayStatusText vendorId updatedAt")
       .populate("vendorId", "name")
       .sort({ updatedAt: -1 })
-      .limit(8)
+      .limit(6)
       .lean(),
-    Quotation.countDocuments({ status: "needs_review" }),
+    Item.find({})
+      .select("itemNumber sampleSku title status inCatalog updatedAt")
+      .sort({ updatedAt: -1 })
+      .limit(6)
+      .lean(),
   ]);
 
-  // Extract counts from facet results
-  const incompleteCatalogItems = itemMetrics[0].incompleteCatalog[0]?.count ?? 0;
-  const pendingCatalogApproval = itemMetrics[0].catalogPending[0]?.count ?? 0;
-  const catalogCompleteCount = itemMetrics[0].catalogComplete[0]?.count ?? 0;
-  const catalogIncompleteCount = itemMetrics[0].catalogIncomplete[0]?.count ?? 0;
-  const itemsNoImages = itemMetrics[0].itemsNoImages[0]?.count ?? 0;
-  const itemsFullImages = itemMetrics[0].itemsFullImages[0]?.count ?? 0;
-  const itemsPartialImages = itemMetrics[0].itemsPartialImages[0]?.count ?? 0;
-  const recentItemsCreated = itemMetrics[0].itemsCreated;
-
-  const poStatusCounts = poMetrics[0].statusCounts;
-  const poImagePending = poMetrics[0].imageStatusPending[0]?.count ?? 0;
-  const poImageWithPhotographer = poMetrics[0].imageStatusWithPhotographer[0]?.count ?? 0;
-  const poImageReceived = poMetrics[0].imageStatusReceived[0]?.count ?? 0;
-
-  const poStatusMap = new Map(
-    (poStatusCounts as Array<{ _id: string; count: number }>).map((r) => [r._id, r.count])
+  const po = poFacets[0] ?? {};
+  const it = itemFacets[0] ?? {};
+  const statusCount = new Map(
+    ((po.byStatus as { _id: string; n: number }[] | undefined) ?? []).map((r) => [r._id, r.n])
   );
-  const poStatusData: HBarDatum[] = PO_STATUSES.filter((s) => (poStatusMap.get(s) ?? 0) > 0).map((s) => ({
-    label: PO_STATUS_LABEL[s],
-    value: poStatusMap.get(s) ?? 0,
-    tone: PO_STATUS_TONE[s],
-  }));
+  const openPos = count(po.total);
+  const overdue = count(po.overdue);
+  const sideLane = count(po.sideLane);
+  const withPhotographer = count(po.withPhotographer);
+  const catalog = count(it.catalog);
+  const complete = count(it.complete);
+  const pendingApproval = count(it.pendingApproval);
+  const incomplete = Math.max(0, catalog - complete - pendingApproval);
+  const unverified = count(it.unverified);
+  const unverifiedThisWeek = count(it.unverifiedThisWeek);
+  const broken = count(it.broken);
+  const catNoImages = count(it.catNoImages);
 
-  const catalogCompletenessData = [
-    { label: "Complete", value: catalogCompleteCount },
-    { label: "Pending approval", value: pendingCatalogApproval },
-    { label: "Incomplete", value: catalogIncompleteCount },
-  ];
-  const catalogTotal = catalogCompletenessData.reduce((s, d) => s + d.value, 0);
-
-  // Fill in the full 12-week range so weeks with zero items still show a bar.
   const weekBuckets = new Map(
-    (recentItemsCreated as Array<{ _id: Date; count: number }>).map((r) => [
+    ((it.weekly as { _id: Date; n: number }[] | undefined) ?? []).map((r) => [
       new Date(r._id).toISOString().slice(0, 10),
-      r.count,
+      r.n,
     ])
   );
-  const trendData = Array.from({ length: 12 }).map((_, i) => {
-    const weekStart = new Date(twelveWeeksAgo.getTime() + i * 7 * 24 * 60 * 60 * 1000);
-    weekStart.setUTCHours(0, 0, 0, 0);
-    // Align to the same week-truncation Mongo used (UTC week start, Sunday).
-    const day = weekStart.getUTCDay();
-    weekStart.setUTCDate(weekStart.getUTCDate() - day);
-    const key = weekStart.toISOString().slice(0, 10);
-    return { label: weekLabel(weekStart), value: weekBuckets.get(key) ?? 0 };
+  const trend = Array.from({ length: 12 }).map((_, i) => {
+    const d = new Date(twelveWeeksAgo.getTime() + (i + 1) * WEEK);
+    d.setUTCHours(0, 0, 0, 0);
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay()); // Mongo's UTC week starts on Sunday
+    return {
+      label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      value: weekBuckets.get(d.toISOString().slice(0, 10)) ?? 0,
+    };
   });
+  const addedThisPeriod = trend.reduce((s, t) => s + t.value, 0);
 
-  const alerts: { icon: typeof TriangleAlert; text: string; href: string; tone: "warn" | "critical" }[] = [];
-  if (quotationsNeedingReview > 0) {
-    alerts.push({
-      icon: TriangleAlert,
-      text: `${quotationsNeedingReview} vendor quote${quotationsNeedingReview === 1 ? "" : "s"} waiting for review`,
+  const stages = PO_STATUSES.filter((s) => s !== "shipment_received").map((s) => ({
+    key: s,
+    label: PO_STATUS_LABEL[s],
+    count: statusCount.get(s) ?? 0,
+    href: `/purchase-orders?lifecycle=open&status=${s}`,
+  }));
+
+  const attention = [
+    {
+      label: "Vendor quotes to review",
+      detail: "Staged rows waiting for approval before they become items",
+      count: quotesToReview,
       href: "/purchase-orders/quotes",
-      tone: "warn",
-    });
-  }
-  if (pendingCatalogApproval > 0) {
-    alerts.push({
-      icon: Clock,
-      text: `${pendingCatalogApproval} catalog item${pendingCatalogApproval === 1 ? "" : "s"} pending admin approval`,
+      icon: FileSpreadsheet,
+      tone: "warn" as const,
+    },
+    {
+      label: "PI conflicts",
+      detail: "A new PI disagrees with the catalog on weight, size or vendor SKU",
+      count: pendingConflicts,
+      href: "/catalog/conflicts",
+      icon: ShieldAlert,
+      tone: "warn" as const,
+    },
+    {
+      label: "Catalog approvals",
+      detail: "Items submitted to the catalog, waiting for an admin",
+      count: pendingApproval,
       href: "/catalog?filter=pending",
-      tone: "warn",
-    });
-  }
-  if (incompleteCatalogItems > 0) {
-    alerts.push({
-      icon: TriangleAlert,
-      text: `${incompleteCatalogItems} catalog item${incompleteCatalogItems === 1 ? "" : "s"} missing required fields`,
-      href: "/catalog?filter=incomplete",
-      tone: "warn",
-    });
-  }
+      icon: Clock,
+      tone: "brass" as const,
+    },
+    {
+      label: "Overdue purchase orders",
+      detail: "Open POs past their requested date",
+      count: overdue,
+      href: "/purchase-orders?view=overdue",
+      icon: CalendarClock,
+      tone: "critical" as const,
+    },
+    {
+      label: "Broken image links",
+      detail: "Images whose file is no longer in SharePoint",
+      count: broken,
+      href: "/images?status=broken",
+      icon: Link2Off,
+      tone: "critical" as const,
+    },
+    {
+      label: "POs with the photographer",
+      detail: "Sent for photos or submitted on Fiverr",
+      count: withPhotographer,
+      href: "/purchase-orders?lifecycle=open",
+      icon: Camera,
+      tone: "neutral" as const,
+    },
+  ];
+  const attentionTotal = quotesToReview + pendingConflicts + pendingApproval + overdue + broken;
+
+  const actions = [
+    roleCan(role, ROLE_SETS.quotes) && {
+      href: "/purchase-orders/quotes/import",
+      label: "Import vendor PO",
+      icon: FileUp,
+      primary: true,
+    },
+    roleCan(role, ["marketplace_listing"]) && { href: "/catalog/new", label: "New catalog item", icon: Plus },
+    roleCan(role, ROLE_SETS.media) && { href: "/images?status=missing", label: "Upload images", icon: ImagePlus },
+    role === "administrator" && { href: "/admin/monday-pull", label: "Import from Monday", icon: RefreshCw },
+  ].filter(Boolean) as { href: string; label: string; icon: typeof Plus; primary?: boolean }[];
 
   return (
     <AppShell activeHref="/dashboard" eyebrow="Overview" title="Dashboard">
-      <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        A snapshot of the whole pipeline (items, purchase orders, and catalog) as of
-        right now.
-      </p>
-
-      {alerts.length > 0 && (
-        <div className="flex flex-col gap-2 mb-7">
-          {alerts.map((a) => (
-            <Link
-              key={a.text}
-              href={a.href}
-              className={`czc-card-link flex items-center gap-3 px-4 py-3 rounded-md border text-[0.85rem] no-underline ${
-                a.tone === "critical"
-                  ? "bg-critical-bg border-[color:var(--critical)] text-critical"
-                  : "bg-warn-bg border-[color:var(--warn)] text-warn"
-              }`}
-            >
-              <a.icon size={16} strokeWidth={2} className="shrink-0" />
-              <span className="flex-1">{a.text}</span>
-              <span className="text-[0.78rem] opacity-80">View →</span>
-            </Link>
-          ))}
+      {/* Greeting + quick actions */}
+      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="font-display text-[1.5rem] font-semibold text-ink m-0">
+            Welcome back{firstName ? `, ${firstName}` : ""}
+          </h2>
+          <p className="mt-1 mb-0 text-[0.88rem] text-ink-soft">
+            {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })} ·{" "}
+            {attentionTotal > 0
+              ? `${attentionTotal} thing${attentionTotal === 1 ? "" : "s"} need${attentionTotal === 1 ? "s" : ""} attention`
+              : "everything is up to date"}
+          </p>
         </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-5 mb-5">
-        <LinkedCard
-          href="/purchase-orders"
-          title="Purchase orders by status"
-          subtitle="Vendor PO pipeline, sample through received."
-        >
-          {poStatusData.length === 0 ? (
-            <p className="text-ink-faint text-[0.85rem] m-0">No purchase orders yet.</p>
-          ) : (
-            <HBarChart data={poStatusData} />
-          )}
-        </LinkedCard>
-
-        <LinkedCard
-          href="/catalog"
-          title="Catalog completeness"
-          subtitle="Every catalog item, by publish-readiness."
-        >
-          {catalogTotal === 0 ? (
-            <p className="text-ink-faint text-[0.85rem] m-0">No catalog items yet.</p>
-          ) : (
-            <DonutChart data={catalogCompletenessData} />
-          )}
-        </LinkedCard>
-      </div>
-
-      <div className="grid grid-cols-[1.3fr_1fr] gap-5 mb-5">
-        <LinkedCard
-          title="Items created, last 12 weeks"
-          subtitle="New items entering the pipeline, by week."
-        >
-          <TrendBars data={trendData} />
-        </LinkedCard>
-
-        <LinkedCard title="Image pipeline" subtitle="From photographer through SharePoint upload.">
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <span className="flex items-center justify-center w-8 h-8 rounded-sm bg-good-bg shrink-0">
-                <CloudUpload size={16} strokeWidth={2} className="text-good" />
-              </span>
-              <span className="flex-1 text-[0.83rem] text-ink-soft">Fully uploaded to SharePoint</span>
-              <span className="font-mono text-[0.9rem] font-semibold text-ink">{itemsFullImages}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="flex items-center justify-center w-8 h-8 rounded-sm bg-brass-bg shrink-0">
-                <ImageDown size={16} strokeWidth={2} className="text-brass" />
-              </span>
-              <span className="flex-1 text-[0.83rem] text-ink-soft">Partially uploaded</span>
-              <span className="font-mono text-[0.9rem] font-semibold text-ink">{itemsPartialImages}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="flex items-center justify-center w-8 h-8 rounded-sm bg-critical-bg shrink-0">
-                <ImageOff size={16} strokeWidth={2} className="text-critical" />
-              </span>
-              <span className="flex-1 text-[0.83rem] text-ink-soft">No images uploaded yet</span>
-              <span className="font-mono text-[0.9rem] font-semibold text-ink">{itemsNoImages}</span>
-            </div>
-            <div className="h-px bg-border my-1" />
-            <div className="flex items-center gap-3">
-              <span className="flex items-center justify-center w-8 h-8 rounded-sm bg-warn-bg shrink-0">
-                <Camera size={16} strokeWidth={2} className="text-warn" />
-              </span>
-              <span className="flex-1 text-[0.83rem] text-ink-soft">POs waiting on photographer</span>
-              <span className="font-mono text-[0.9rem] font-semibold text-ink">{poImageWithPhotographer}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="flex items-center justify-center w-8 h-8 rounded-sm bg-neutral-pill shrink-0">
-                <Clock size={16} strokeWidth={2} className="text-ink-faint" />
-              </span>
-              <span className="flex-1 text-[0.83rem] text-ink-soft">POs not yet sent for photos</span>
-              <span className="font-mono text-[0.9rem] font-semibold text-ink">{poImagePending}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="flex items-center justify-center w-8 h-8 rounded-sm bg-good-bg shrink-0">
-                <Camera size={16} strokeWidth={2} className="text-good" />
-              </span>
-              <span className="flex-1 text-[0.83rem] text-ink-soft">POs with photos received</span>
-              <span className="font-mono text-[0.9rem] font-semibold text-ink">{poImageReceived}</span>
-            </div>
+        {actions.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {actions.map((a) => (
+              <Link
+                key={a.href}
+                href={a.href}
+                className={`inline-flex items-center gap-1.5 rounded-sm px-3.5 py-2 text-[0.84rem] font-semibold no-underline transition-colors duration-150 ${
+                  a.primary
+                    ? "bg-brass text-on-brass border border-brass hover:bg-brass-hover"
+                    : "bg-surface text-ink border border-border-strong hover:border-brass hover:text-brass"
+                }`}
+              >
+                <a.icon size={15} /> {a.label}
+              </Link>
+            ))}
           </div>
-        </LinkedCard>
+        )}
       </div>
 
-      <LinkedCard
-        title="Recently updated vendor items"
-        subtitle="The last in-progress items touched, across every status."
-      >
-        {recentItems.length === 0 ? (
-          <p className="text-ink-faint text-[0.85rem] m-0">No vendor items in progress.</p>
-        ) : (
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className={TH_CLASS}>SKU</th>
-                <th className={TH_CLASS}>Title</th>
-                <th className={TH_CLASS}>Vendor</th>
-                <th className={TH_CLASS}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentItems.map((it) => (
-                <tr key={String(it._id)} className="czc-row">
-                  <td className={TD_CLASS}>
-                    <Link href={`/items/${it._id}`} className="text-brass no-underline font-mono">
-                      {it.itemNumber ?? it.sampleSku ?? "—"}
-                    </Link>
-                  </td>
-                  <td className={`${TD_CLASS} text-ink-soft`}>{it.title ?? "—"}</td>
-                  <td className={`${TD_CLASS} text-ink-soft`}>
-                    {(it.vendorId as unknown as { name?: string } | undefined)?.name ?? "—"}
-                  </td>
-                  <td className={TD_CLASS}>
-                    <Pill tone={ITEM_STATUS_TONE[it.status as keyof typeof ITEM_STATUS_TONE]}>
-                      {ITEM_STATUS_LABEL[it.status as keyof typeof ITEM_STATUS_LABEL]}
-                    </Pill>
-                  </td>
-                </tr>
+      {/* Headline numbers */}
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiTile
+          href="/purchase-orders?lifecycle=open"
+          icon={ClipboardList}
+          label="Open purchase orders"
+          value={openPos}
+          sub={overdue > 0 ? `${overdue} past the requested date` : "None overdue"}
+          subTone={overdue > 0 ? "critical" : "good"}
+        />
+        <KpiTile
+          href="/catalog"
+          icon={BookOpenCheck}
+          label="Catalog items"
+          value={catalog}
+          sub={
+            catalog > 0
+              ? `${Math.round((complete / catalog) * 100)}% ready to publish`
+              : "Import the Master File to start"
+          }
+          subTone={catalog > 0 && complete === catalog ? "good" : "neutral"}
+          tone="good"
+        />
+        <KpiTile
+          href="/items"
+          icon={PackageSearch}
+          label="Un-verified items"
+          value={unverified}
+          sub={unverifiedThisWeek > 0 ? `+${unverifiedThisWeek} this week` : "None new this week"}
+          tone="neutral"
+        />
+        <KpiTile
+          href="#attention"
+          icon={BellRing}
+          label="Need attention"
+          value={attentionTotal}
+          sub={attentionTotal > 0 ? "Reviews, conflicts, approvals, overdue POs, broken images" : "All clear"}
+          subTone={attentionTotal > 0 ? "warn" : "good"}
+          tone={attentionTotal > 0 ? "warn" : "good"}
+        />
+      </div>
+
+      {/* Pipeline + attention */}
+      <div className="mb-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.85fr)_minmax(320px,1fr)]">
+        <Panel
+          title="Purchase order pipeline"
+          subtitle={`${openPos.toLocaleString()} open POs by stage${
+            sideLane > 0 ? ` · ${sideLane} in a Monday side-lane (Stuck, On hold, …)` : ""
+          }`}
+          href="/purchase-orders?lifecycle=open"
+        >
+          {openPos === 0 ? (
+            <p className="m-0 text-[0.85rem] text-ink-faint">No open purchase orders.</p>
+          ) : (
+            <PipelineFlow stages={stages} />
+          )}
+        </Panel>
+
+        <div id="attention" className="scroll-mt-24">
+          <Panel title="Needs attention" subtitle="Work waiting on someone" className="h-full">
+            <AttentionList items={attention} />
+          </Panel>
+        </div>
+      </div>
+
+      {/* Catalog health, images, intake */}
+      <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <Panel title="Catalog health" subtitle="Publish-readiness of every catalog item" href="/catalog">
+          {catalog === 0 ? (
+            <p className="m-0 text-[0.85rem] text-ink-faint">No catalog items yet.</p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-5">
+              <Ring value={complete} total={catalog} label="complete" />
+              <div className="flex min-w-[150px] flex-1 flex-col gap-0.5">
+                <LegendRow color="var(--good)" label="Complete" value={complete} href="/catalog" />
+                <LegendRow color="var(--brass)" label="Pending approval" value={pendingApproval} href="/catalog?filter=pending" />
+                <LegendRow color="var(--ink-faint)" label="Missing fields" value={incomplete} href="/catalog?filter=incomplete" />
+              </div>
+            </div>
+          )}
+        </Panel>
+
+        <Panel
+          title="Image coverage"
+          subtitle="Catalog items with each image type in SharePoint"
+          href="/images"
+          linkLabel="Images"
+        >
+          {catalog === 0 ? (
+            <p className="m-0 text-[0.85rem] text-ink-faint">No catalog items yet.</p>
+          ) : (
+            <div className="flex flex-col gap-3.5">
+              <CoverageBar label="Main image" value={count(it.catMain)} total={catalog} />
+              <CoverageBar label="Side images" value={count(it.catSides)} total={catalog} />
+              <CoverageBar label="Model images" value={count(it.catModels)} total={catalog} />
+              <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-[0.78rem]">
+                <Link href="/images?scope=catalog&status=none" className="text-ink-soft no-underline hover:text-brass">
+                  {catNoImages.toLocaleString()} with no images
+                </Link>
+                {broken > 0 && (
+                  <Link href="/images?status=broken" className="text-critical no-underline">
+                    {broken} with broken links
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="Items added" subtitle={`${addedThisPeriod.toLocaleString()} in the last 12 weeks`}>
+          <TrendBars data={trend} height={110} />
+        </Panel>
+      </div>
+
+      {/* Recent activity */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Panel title="Recently updated POs" href="/purchase-orders?lifecycle=open">
+          {recentPos.length === 0 ? (
+            <p className="m-0 text-[0.85rem] text-ink-faint">No open purchase orders.</p>
+          ) : (
+            <ul className="m-0 flex list-none flex-col divide-y divide-[color:var(--border)] p-0">
+              {recentPos.map((p) => (
+                <li key={String(p._id)}>
+                  <Link href={`/purchase-orders/${p._id}`} className="group flex items-center gap-3 py-2.5 no-underline">
+                    <span className="w-[72px] shrink-0 font-mono text-[0.84rem] font-semibold text-ink group-hover:text-brass">
+                      {p.poNumber}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[0.82rem] text-ink-soft">
+                      {(p.vendorId as unknown as { name?: string } | null)?.name ?? "—"}
+                    </span>
+                    {p.mondayStatusText && p.mondayStatusText !== PO_STATUS_LABEL[p.status as keyof typeof PO_STATUS_LABEL] ? (
+                      <Pill tone="neutral">{p.mondayStatusText}</Pill>
+                    ) : (
+                      <Pill tone={PO_STATUS_TONE[p.status as keyof typeof PO_STATUS_TONE]}>
+                        {PO_STATUS_LABEL[p.status as keyof typeof PO_STATUS_LABEL]}
+                      </Pill>
+                    )}
+                    <span className="w-[64px] shrink-0 text-right text-[0.74rem] text-ink-faint">
+                      {ago(p.updatedAt, now)}
+                    </span>
+                  </Link>
+                </li>
               ))}
-            </tbody>
-          </table>
-        )}
-      </LinkedCard>
+            </ul>
+          )}
+        </Panel>
+
+        <Panel title="Recently updated items" href="/catalog?sort=newest">
+          {recentItems.length === 0 ? (
+            <p className="m-0 text-[0.85rem] text-ink-faint">No items yet.</p>
+          ) : (
+            <ul className="m-0 flex list-none flex-col divide-y divide-[color:var(--border)] p-0">
+              {recentItems.map((i) => (
+                <li key={String(i._id)}>
+                  <Link href={`/items/${i._id}`} className="group flex items-center gap-3 py-2.5 no-underline">
+                    <span className="w-[96px] shrink-0 truncate font-mono text-[0.84rem] font-semibold text-ink group-hover:text-brass">
+                      {i.itemNumber ?? i.sampleSku ?? "—"}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[0.82rem] text-ink-soft">{i.title ?? "Untitled"}</span>
+                    {i.inCatalog ? (
+                      <Pill tone="good">catalog</Pill>
+                    ) : (
+                      <Pill tone={ITEM_STATUS_TONE[i.status as keyof typeof ITEM_STATUS_TONE]}>
+                        {ITEM_STATUS_LABEL[i.status as keyof typeof ITEM_STATUS_LABEL]}
+                      </Pill>
+                    )}
+                    <span className="w-[64px] shrink-0 text-right text-[0.74rem] text-ink-faint">
+                      {ago(i.updatedAt, now)}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
     </AppShell>
   );
 }

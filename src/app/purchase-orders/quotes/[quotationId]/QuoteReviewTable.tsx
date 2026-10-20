@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Plus,
   X,
+  Loader2,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
@@ -19,6 +20,7 @@ import { Select, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/app/Pagination";
 import { QUOTE_FIELD_BY_KEY, QUOTE_FIELDS } from "@/lib/quote-import/fields";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 // Ordered standard-field keys — used to display the row's actual fields
 // in the same left-to-right order they appear on the vendor's quote
@@ -60,9 +62,22 @@ export function QuoteReviewTable({
   unflaggedPendingCount: number;
 }) {
   const router = useRouter();
+  const { refresh, refreshing } = useRefreshAfterSave();
   const [committing, setCommitting] = useState(false);
   const [commitResult, setCommitResult] = useState<string | null>(null);
   const [bulkApproving, setBulkApproving] = useState(false);
+  // Row-level save in flight (approve / reject / an inline edit). Kept
+  // until the refreshed rows are on screen so the row never looks idle
+  // while its new state is still loading.
+  const [rowPending, setRowPending] = useState<{ id: string; kind: string } | null>(null);
+  const [lastAction, setLastAction] = useState<{ id: string; kind: string } | null>(null);
+  const startAction = (id: string, kind: string) => {
+    setRowPending({ id, kind });
+    setLastAction({ id, kind });
+  };
+  const rowBusy = rowPending ?? (refreshing ? lastAction : null);
+  const bulkBusy = bulkApproving || (refreshing && lastAction?.kind === "bulk");
+  const commitBusy = committing || (refreshing && lastAction?.kind === "commit");
   const [actionError, setActionError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Quote-level custom columns — managed client-side so an add/remove
@@ -89,36 +104,51 @@ export function QuoteReviewTable({
 
   async function decide(rowId: string, reviewStatus: "approved" | "rejected") {
     setActionError(null);
-    const res = await fetch(`/api/quotations/${quotationId}/rows/${rowId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reviewStatus }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setActionError(data.error ?? "Could not save that decision.");
-      return;
+    startAction(rowId, reviewStatus);
+    try {
+      const res = await fetch(`/api/quotations/${quotationId}/rows/${rowId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewStatus }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setActionError(data.error ?? "Could not save that decision.");
+        return;
+      }
+      refresh();
+    } catch {
+      setActionError("Couldn't reach the server. Try again.");
+    } finally {
+      setRowPending(null);
     }
-    router.refresh();
   }
 
   async function saveEdit(rowId: string, field: string, value: string) {
     setActionError(null);
-    const res = await fetch(`/api/quotations/${quotationId}/rows/${rowId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ coercedOverrides: { [field]: value } }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setActionError(data.error ?? "Could not save that edit.");
-    } else {
-      router.refresh();
+    startAction(rowId, "edit");
+    try {
+      const res = await fetch(`/api/quotations/${quotationId}/rows/${rowId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coercedOverrides: { [field]: value } }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setActionError(data.error ?? "Could not save that edit.");
+      } else {
+        refresh();
+      }
+    } catch {
+      setActionError("Couldn't reach the server. Try again.");
+    } finally {
+      setRowPending(null);
     }
   }
 
   async function commitApproved() {
     setCommitting(true);
+    setLastAction({ id: "", kind: "commit" });
     setCommitResult(null);
     try {
       const res = await fetch(`/api/quotations/${quotationId}/commit`, { method: "POST" });
@@ -144,7 +174,7 @@ export function QuoteReviewTable({
           poTail +
           errorTail
       );
-      router.refresh();
+      refresh();
     } finally {
       setCommitting(false);
     }
@@ -206,6 +236,7 @@ export function QuoteReviewTable({
 
   async function bulkApproveUnflagged() {
     setBulkApproving(true);
+    setLastAction({ id: "", kind: "bulk" });
     setActionError(null);
     try {
       const res = await fetch(`/api/quotations/${quotationId}/rows/bulk-approve`, { method: "POST" });
@@ -214,7 +245,7 @@ export function QuoteReviewTable({
         setActionError(data.error ?? "Bulk approve failed.");
         return;
       }
-      router.refresh();
+      refresh();
     } finally {
       setBulkApproving(false);
     }
@@ -231,21 +262,21 @@ export function QuoteReviewTable({
               onChange={(e) => setFilterValue(e.target.value as Filter)}
               className="!w-[160px]"
             >
+              <option value="all">All rows</option>
               <option value="flagged">Flagged rows</option>
               <option value="needs_review">Needs review</option>
-              <option value="all">All rows</option>
             </Select>
           </label>
-          <Button disabled={unflaggedPendingCount === 0 || bulkApproving} onClick={bulkApproveUnflagged}>
+          <Button disabled={unflaggedPendingCount === 0} loading={bulkBusy} onClick={bulkApproveUnflagged}>
             <span className="flex items-center gap-1.5">
-              <CheckCheck size={14} />
-              {bulkApproving ? "Approving…" : `Approve all ${unflaggedPendingCount} unflagged`}
+              {!bulkBusy && <CheckCheck size={14} />}
+              {bulkBusy ? "Approving…" : `Approve all ${unflaggedPendingCount} unflagged`}
             </span>
           </Button>
-          <Button variant="primary" disabled={committing || approvedPendingCount === 0} onClick={commitApproved}>
+          <Button variant="primary" disabled={approvedPendingCount === 0} loading={commitBusy} onClick={commitApproved}>
             <span className="flex items-center gap-1.5">
-              <Database size={14} />
-              {committing ? "Committing…" : `Commit ${approvedPendingCount} approved row(s)`}
+              {!commitBusy && <Database size={14} />}
+              {commitBusy ? "Committing…" : `Commit ${approvedPendingCount} approved row(s)`}
             </span>
           </Button>
           {adding === "quote" ? (
@@ -260,6 +291,11 @@ export function QuoteReviewTable({
                 <Plus size={14} /> Add column to every row
               </span>
             </Button>
+          )}
+          {rowBusy?.kind === "edit" && (
+            <span className="inline-flex items-center gap-1.5 text-[0.82rem] text-ink-soft">
+              <Loader2 size={13} className="animate-spin" /> Saving change…
+            </span>
           )}
           {commitResult && <span className="text-[0.83rem] text-ink-soft">{commitResult}</span>}
           {actionError && <span className="text-[0.83rem] text-critical">{actionError}</span>}
@@ -384,7 +420,8 @@ export function QuoteReviewTable({
                             <div className="flex gap-1.5">
                               <Button
                                 size="sm"
-                                disabled={row.reviewStatus === "approved"}
+                                disabled={row.reviewStatus === "approved" || rowBusy?.id === row._id}
+                                loading={rowBusy?.id === row._id && rowBusy.kind === "approved"}
                                 onClick={() => decide(row._id, "approved")}
                               >
                                 <span className="flex items-center gap-1">
@@ -394,7 +431,8 @@ export function QuoteReviewTable({
                               <Button
                                 size="sm"
                                 variant="danger"
-                                disabled={row.reviewStatus === "rejected"}
+                                disabled={row.reviewStatus === "rejected" || rowBusy?.id === row._id}
+                                loading={rowBusy?.id === row._id && rowBusy.kind === "rejected"}
                                 onClick={() => decide(row._id, "rejected")}
                               >
                                 <span className="flex items-center gap-1">

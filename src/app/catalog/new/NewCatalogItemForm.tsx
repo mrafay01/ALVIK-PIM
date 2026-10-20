@@ -168,6 +168,7 @@ export function NewCatalogItemForm() {
     const cleanBulletFeatures = bulletFeatures.map((b) => b.trim()).filter(Boolean).slice(0, 10);
 
     setSubmitting(true);
+    let navigating = false;
     try {
       const res = await fetch("/api/catalog", {
         method: "POST",
@@ -219,9 +220,11 @@ export function NewCatalogItemForm() {
         setError(data.error ?? "Could not create the item");
         return;
       }
+      // Keep the button busy while the next page loads.
+      navigating = true;
       router.push(`/items/${data.baseItemId}`);
     } finally {
-      setSubmitting(false);
+      if (!navigating) setSubmitting(false);
     }
   }
 
@@ -493,7 +496,7 @@ export function NewCatalogItemForm() {
 
       <div className="flex items-center gap-3 sticky bottom-4 z-10">
         <Card padding={0} className="flex items-center gap-3 px-4 py-3 shadow-lg flex-wrap">
-          <Button type="submit" variant="primary" disabled={submitting}>
+          <Button type="submit" variant="primary" loading={submitting}>
             <span className="flex items-center gap-1.5">
               <Save size={14} />
               {submitting

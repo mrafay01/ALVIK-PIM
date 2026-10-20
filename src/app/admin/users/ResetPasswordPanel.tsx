@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Check, X, KeyRound, ArrowLeft, MailCheck } from "lucide-react";
 import { Field, Input, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 type Step = "form" | "otp";
 
@@ -12,7 +12,7 @@ type Step = "form" | "otp";
 // their own password, then a 2FA code emailed to their own account address
 // — never the target's. See /api/admin/users/[userId]/reset-password.
 export function ResetPasswordPanel({ targetUserId, onClose }: { targetUserId: string; onClose: () => void }) {
-  const router = useRouter();
+  const { refresh, refreshing } = useRefreshAfterSave();
   const [step, setStep] = useState<Step>("form");
   const [adminPassword, setAdminPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -68,7 +68,7 @@ export function ResetPasswordPanel({ targetUserId, onClose }: { targetUserId: st
       const applyData = await applyRes.json().catch(() => ({}));
       if (!applyRes.ok) throw new Error(applyData.error || "Couldn't reset the password.");
 
-      router.refresh();
+      refresh();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't reset the password.");
@@ -95,7 +95,7 @@ export function ResetPasswordPanel({ targetUserId, onClose }: { targetUserId: st
             className="!py-1.5 !px-2 text-[0.8rem] w-[110px] text-center tracking-[0.2em] font-mono"
             autoFocus
           />
-          <Button size="sm" variant="primary" type="submit" disabled={submitting || code.length !== 6}>
+          <Button size="sm" variant="primary" type="submit" disabled={code.length !== 6} loading={submitting || refreshing}>
             <Check size={13} />
           </Button>
           <Button size="sm" variant="ghost" type="button" onClick={() => setStep("form")} disabled={submitting}>
@@ -134,7 +134,7 @@ export function ResetPasswordPanel({ targetUserId, onClose }: { targetUserId: st
             className="!py-1.5 !px-2 text-[0.8rem] w-[160px]"
             required
           />
-          <Button size="sm" variant="primary" type="submit" disabled={submitting}>
+          <Button size="sm" variant="primary" type="submit" loading={submitting}>
             <span className="inline-flex items-center gap-1">
               <KeyRound size={12} /> Send code
             </span>

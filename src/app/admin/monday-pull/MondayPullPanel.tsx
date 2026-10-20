@@ -1,32 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshCw, FileSpreadsheet, TriangleAlert, CheckCircle2, ArrowRight, UserPlus, CloudUpload } from "lucide-react";
+import { RefreshCw, TriangleAlert, CheckCircle2, CloudUpload } from "lucide-react";
 import { Card } from "@/components/ui/Card";
-import { Pill } from "@/components/ui/Pill";
 import { Button } from "@/components/ui/Button";
-
-interface PullPlanRow {
-  mondayItemId: string;
-  mondayItemName: string;
-  action: "update" | "create" | "skip_no_vendor";
-  poId?: string;
-  poNumber?: string;
-  vendorName: string | null;
-  vendorMatched: boolean;
-  statusText: string | null;
-  mappedStatus: string | null;
-  statusChanged: boolean;
-  poTotal: number | null;
-  orderDate: string | null;
-  requestDate: string | null;
-  vendorConfDate: string | null;
-  priorityText: string | null;
-  trackingNumber: string | null;
-  joelShipConfirmed: boolean;
-  fileCount: number;
-  reason?: string;
-}
+import { PullPlanReview, type PullPlanRow } from "./PullPlanReview";
 
 interface PullPlan {
   rows: PullPlanRow[];
@@ -147,11 +125,6 @@ function SharePointArchive({ autoStartKey }: { autoStartKey: number }) {
   );
 }
 
-function actionTone(action: PullPlanRow["action"]) {
-  if (action === "update") return "brass" as const;
-  if (action === "create") return "good" as const;
-  return "neutral" as const;
-}
 
 export function MondayPullPanel() {
   const [plan, setPlan] = useState<PullPlan | null>(null);
@@ -160,6 +133,7 @@ export function MondayPullPanel() {
   const [result, setResult] = useState<PullCommitResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [archiveRun, setArchiveRun] = useState(0);
+  const [planVersion, setPlanVersion] = useState(0);
 
   async function runPreview() {
     setLoading(true);
@@ -172,6 +146,7 @@ export function MondayPullPanel() {
         throw new Error(data.error ?? `Preview failed (${res.status})`);
       }
       setPlan(await res.json());
+      setPlanVersion((v) => v + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -179,7 +154,7 @@ export function MondayPullPanel() {
     }
   }
 
-  async function commit() {
+  async function commit(mondayItemIds: string[]) {
     if (!plan) return;
     setCommitting(true);
     setError(null);
@@ -187,7 +162,7 @@ export function MondayPullPanel() {
       const res = await fetch("/api/monday/pull", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: plan.rows }),
+        body: JSON.stringify({ mondayItemIds }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -261,119 +236,14 @@ export function MondayPullPanel() {
       )}
 
       {plan && (
-        <>
-          <Card>
-            <div className="flex items-center justify-between flex-wrap gap-3.5">
-              <div className="flex gap-5 text-[0.85rem]">
-                <span><strong>{plan.toUpdate}</strong> to update</span>
-                <span><strong>{plan.toCreate}</strong> to create</span>
-                <span className="text-ink-faint"><strong>{plan.skipped}</strong> skipped (no vendor set on board item)</span>
-              </div>
-              <Button variant="primary" disabled={committing || (plan.toUpdate === 0 && plan.toCreate === 0)} onClick={commit}>
-                <span className="flex items-center gap-1.5">
-                  <ArrowRight size={15} />
-                  {committing ? "Importing…" : `Apply ${plan.toUpdate + plan.toCreate} change(s)`}
-                </span>
-              </Button>
-            </div>
-          </Card>
-
-          <Card padding={0}>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse min-w-[1200px]">
-                <thead>
-                  <tr>
-                    {[
-                      "PO #",
-                      "Action",
-                      "Vendor",
-                      "Board status",
-                      "Mapped status",
-                      "Priority",
-                      "Total",
-                      "Order date",
-                      "Request date",
-                      "Vendor conf.",
-                      "Tracking #",
-                      "Ship conf.",
-                      "Files",
-                      "Note",
-                    ].map((h) => (
-                      <th
-                        key={h}
-                        className="text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-3.5 py-2.5 border-b border-border-strong whitespace-nowrap"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {plan.rows.map((row) => (
-                    <tr key={row.mondayItemId} className="border-b border-border">
-                      <td className="px-3.5 py-2.5 font-mono text-[0.82rem] font-semibold">{row.mondayItemName}</td>
-                      <td className="px-3.5 py-2.5">
-                        <Pill tone={actionTone(row.action)}>{row.action.replace(/_/g, " ")}</Pill>
-                      </td>
-                      <td className="px-3.5 py-2.5 text-[0.83rem]">
-                        {row.vendorName ?? "—"}
-                        {!row.vendorMatched && row.vendorName && (
-                          <span
-                            title={`"${row.vendorName}" will be created automatically on import`}
-                            className="ml-1.5 inline-flex items-center gap-1 align-[-1px] text-[0.72rem] text-brass"
-                          >
-                            <UserPlus size={12} /> new
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-[0.83rem] text-ink-soft">
-                        {row.statusText ?? "—"}
-                        {row.statusText && !row.mappedStatus && (
-                          <span
-                            title="No confident pipeline-status equivalent; stored as-is on mondayStatusText, pipeline status left unchanged"
-                            className="ml-1.5 inline-flex items-center gap-1 align-[-1px] text-[0.72rem] text-warn"
-                          >
-                            <TriangleAlert size={12} /> unmapped
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-[0.83rem]">
-                        {row.mappedStatus ? (
-                          <span className={row.statusChanged ? "text-brass font-semibold" : "text-ink-soft font-normal"}>
-                            {row.mappedStatus.replace(/_/g, " ")}
-                          </span>
-                        ) : (
-                          <span className="text-ink-faint">unchanged</span>
-                        )}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-[0.83rem] text-ink-soft capitalize">{row.priorityText ?? "—"}</td>
-                      <td className="px-3.5 py-2.5 font-mono text-[0.82rem]">
-                        {row.poTotal != null ? row.poTotal.toFixed(2) : "—"}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-[0.82rem] text-ink-soft whitespace-nowrap">{row.orderDate ?? "—"}</td>
-                      <td className="px-3.5 py-2.5 text-[0.82rem] text-ink-soft whitespace-nowrap">{row.requestDate ?? "—"}</td>
-                      <td className="px-3.5 py-2.5 text-[0.82rem] text-ink-soft whitespace-nowrap">{row.vendorConfDate ?? "—"}</td>
-                      <td className="px-3.5 py-2.5 font-mono text-[0.8rem] whitespace-nowrap">{row.trackingNumber ?? "—"}</td>
-                      <td className="px-3.5 py-2.5 text-[0.83rem]">{row.joelShipConfirmed ? "Yes" : "No"}</td>
-                      <td className="px-3.5 py-2.5 text-[0.83rem]">
-                        {row.fileCount > 0 ? (
-                          <span className="flex items-center gap-1">
-                            <FileSpreadsheet size={13} /> {row.fileCount}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-[0.78rem] text-ink-faint max-w-[260px]">{row.reason ?? ""}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </>
+        <PullPlanReview
+          // Remount with fresh selections whenever a new preview is loaded.
+          key={planVersion}
+          rows={plan.rows}
+          committing={committing}
+          onApply={commit}
+        />
       )}
-
     </div>
   );
 }

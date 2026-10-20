@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { CheckCircle2, Circle } from "lucide-react";
+import { CheckCircle2, Circle, Loader2 } from "lucide-react";
 import {
   IMAGES_CHECKLIST_STATUSES,
   DATA_CHECKLIST_STATUSES,
@@ -13,6 +12,7 @@ import {
 } from "@/lib/enums";
 import { checklistLabel, isChecklistFieldDone } from "@/lib/statusDisplay";
 import { ErrorText } from "@/components/ui/Field";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 // The six back-office fields in board order, with the values each may take.
 const FIELDS: { field: string; options: readonly string[] }[] = [
@@ -41,15 +41,18 @@ export function PoChecklist({
   checklist: Record<string, string>;
   canEdit: boolean;
 }) {
-  const router = useRouter();
+  const { refresh, refreshing } = useRefreshAfterSave();
   const [values, setValues] = useState<Record<string, string>>(checklist ?? {});
   const [saving, setSaving] = useState<string | null>(null);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const busyField = saving ?? (refreshing ? lastSaved : null);
 
   async function update(field: string, value: string) {
     const prev = values[field];
     setValues((v) => ({ ...v, [field]: value }));
     setSaving(field);
+    setLastSaved(field);
     setError(null);
     try {
       const res = await fetch(`/api/purchase-orders/${poId}`, {
@@ -61,7 +64,7 @@ export function PoChecklist({
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? "Couldn't save that change.");
       }
-      router.refresh();
+      refresh();
     } catch (err) {
       setValues((v) => ({ ...v, [field]: prev }));
       setError(err instanceof Error ? err.message : "Couldn't save that change.");
@@ -86,11 +89,12 @@ export function PoChecklist({
               <span className={`flex items-center gap-1.5 text-[0.8rem] font-semibold ${done ? "text-good" : "text-ink"}`}>
                 {done ? <CheckCircle2 size={14} /> : <Circle size={14} className="text-ink-faint" />}
                 {checklistLabel(field)}
+                {busyField === field && <Loader2 size={12} className="animate-spin text-ink-faint" aria-label="Saving" />}
               </span>
               {canEdit ? (
                 <select
                   value={value}
-                  disabled={saving === field}
+                  disabled={busyField === field}
                   onChange={(e) => update(field, e.target.value)}
                   aria-label={`${checklistLabel(field)} status`}
                   className="font-body text-[0.82rem] px-2.5 py-1.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass disabled:opacity-60"

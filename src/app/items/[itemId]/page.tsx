@@ -366,7 +366,9 @@ export default async function ItemDetailPage({
           initialMedia={(item.media ?? []).map((m) => ({
             sharePointItemId: m.sharePointItemId,
             url: m.url,
+            name: m.name ?? null,
             subfolder: m.subfolder as "main" | "sides" | "models",
+            linkStatus: (m.linkStatus as "ok" | "broken" | undefined) ?? null,
           }))}
           initialCompleteness={{
             main: !!item.imageCompleteness?.main,

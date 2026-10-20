@@ -274,12 +274,13 @@ export async function downloadDriveItem(ctx: SharePointContext, id: string, maxB
 export async function createUploadSession(
   ctx: SharePointContext,
   folder: string[],
-  fileName: string
+  fileName: string,
+  conflictBehavior: "rename" | "replace" = "rename"
 ): Promise<{ uploadUrl: string; expirationDateTime: string }> {
   const res = await graphFetch(ctx, `/root:/${drivePath(...folder, fileName)}:/createUploadSession`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "rename" } }),
+    body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": conflictBehavior } }),
   });
   if (!res.ok) throw new Error(`Starting upload failed: ${res.status} ${await res.text()}`);
   return (await res.json()) as { uploadUrl: string; expirationDateTime: string };
@@ -345,4 +346,34 @@ export async function moveDriveItem(ctx: SharePointContext, id: string, folder: 
 export async function deleteDriveItem(ctx: SharePointContext, id: string): Promise<void> {
   const res = await graphFetch(ctx, `/items/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!res.ok && res.status !== 404) throw new Error(`Deleting file failed: ${res.status} ${await res.text()}`);
+}
+
+// Which of these drive items still exist? Uses Graph's JSON batching (20
+// requests per call). Returns id -> true (exists) / false (deleted or
+// moved out of reach). Ids whose check itself failed (throttling, a
+// network error) are left out rather than reported as missing.
+export async function checkDriveItemsExist(ctx: SharePointContext, ids: string[]): Promise<Map<string, boolean>> {
+  const out = new Map<string, boolean>();
+  for (let i = 0; i < ids.length; i += 20) {
+    const chunk = ids.slice(i, i + 20);
+    const res = await fetch("https://graph.microsoft.com/v1.0/$batch", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: chunk.map((id, n) => ({
+          id: String(n),
+          method: "GET",
+          url: `/drives/${ctx.driveId}/items/${encodeURIComponent(id)}?$select=id`,
+        })),
+      }),
+    });
+    if (!res.ok) throw new Error(`Checking files failed: ${res.status} ${await res.text()}`);
+    const json = (await res.json()) as { responses: { id: string; status: number }[] };
+    for (const r of json.responses) {
+      const id = chunk[Number(r.id)];
+      if (r.status === 200) out.set(id, true);
+      else if (r.status === 404 || r.status === 410) out.set(id, false);
+    }
+  }
+  return out;
 }

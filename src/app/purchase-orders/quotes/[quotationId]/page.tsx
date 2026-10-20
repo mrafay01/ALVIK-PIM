@@ -28,7 +28,7 @@ export default async function QuoteReviewPage({
   const { quotationId } = await params;
   const { filter: filterParam, page: pageParam } = await searchParams;
   const filter: Filter =
-    filterParam === "all" || filterParam === "needs_review" ? filterParam : "flagged";
+    filterParam === "flagged" || filterParam === "needs_review" ? filterParam : "all";
   const page = parsePage(pageParam);
 
   if (!Types.ObjectId.isValid(quotationId)) notFound();

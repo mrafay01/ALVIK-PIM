@@ -49,10 +49,13 @@ const NULLABLE_SORTS: PoSortKey[] = ["vendor", "total", "orderDate", "requestDat
 
 // "Still open" = not received in the pipeline AND not closed on the Monday
 // board. Every quick view about live work starts from this.
-const OPEN: Record<string, unknown>[] = [
+// What "open" means for a PO everywhere (list page, dashboard): not
+// received in the app and not finished/canceled on Monday.
+export const OPEN_PO_CONDITIONS: Record<string, unknown>[] = [
   { status: { $ne: "shipment_received" } },
   { mondayStatusText: { $nin: MONDAY_CLOSED_LABELS } },
 ];
+const OPEN = OPEN_PO_CONDITIONS;
 const RECEIVED_MATCH = { $or: [{ status: "shipment_received" }, { mondayStatusText: { $in: MONDAY_RECEIVED_LABELS } }] };
 const CANCELED_MATCH = { mondayStatusText: { $in: MONDAY_CANCELED_LABELS } };
 

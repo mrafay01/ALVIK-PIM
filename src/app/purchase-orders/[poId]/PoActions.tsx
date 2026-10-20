@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { ArrowRight, ArrowLeft, MessageSquareCheck, TriangleAlert, Ship, RefreshCw, Lock } from "lucide-react";
 import { PO_STATUS_LABEL } from "@/lib/statusDisplay";
 import { checklistLabel } from "@/lib/statusDisplay";
@@ -14,6 +13,7 @@ import type { PoStatus } from "@/lib/enums";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ErrorText } from "@/components/ui/Field";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 export function PoActions({
   poId,
@@ -37,8 +37,16 @@ export function PoActions({
   mondayItemId: string | null;
   lastPushedToMondayAt: string | null;
 }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState<string | null>(null);
+  const { refresh, refreshing } = useRefreshAfterSave();
+  // `busy` stays on the clicked action until the refreshed page data is
+  // shown, not just until the request returns.
+  const [pending, setPending] = useState<string | null>(null);
+  const [lastKey, setLastKey] = useState<string | null>(null);
+  const setBusy = (key: string | null) => {
+    setPending(key);
+    if (key) setLastKey(key);
+  };
+  const busy = pending ?? (refreshing ? lastKey : null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -62,7 +70,7 @@ export function PoActions({
         return;
       }
       if (done) setNotice(done);
-      router.refresh();
+      refresh();
     } finally {
       setBusy(null);
     }
@@ -86,7 +94,7 @@ export function PoActions({
         return;
       }
       setNotice(data.created ? "Created on the Monday board." : "Monday board updated.");
-      router.refresh();
+      refresh();
     } finally {
       setBusy(null);
     }
@@ -123,6 +131,7 @@ export function PoActions({
                     key={next}
                     variant={i === nextOptions.length - 1 ? "primary" : "secondary"}
                     disabled={!!busy || blocked}
+                    loading={busy === `status:${next}`}
                     onClick={() =>
                       patchPo(`status:${next}`, { status: next }, `Moved to "${PO_STATUS_LABEL[next as PoStatus]}".`)
                     }
@@ -163,6 +172,7 @@ export function PoActions({
           {!vendorReplySent && (
             <Button
               disabled={!!busy}
+              loading={busy === "reply"}
               onClick={() => patchPo("reply", { vendorReplySent: true }, "Marked vendor reply as sent.")}
             >
               <span className="flex items-center gap-1.5">
@@ -172,6 +182,7 @@ export function PoActions({
           )}
           <Button
             disabled={!!busy}
+            loading={busy === "ship"}
             onClick={() =>
               patchPo(
                 "ship",

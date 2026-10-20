@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Sparkles, Check } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import type { DescriptionPlatform } from "@/lib/enums";
 import { DESCRIPTION_PLATFORMS } from "@/lib/enums";
 import { DESCRIPTION_PLATFORM_LABEL } from "@/lib/statusDisplay";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 const textareaClass =
   "font-body text-[0.86rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)] resize-y min-h-[90px]";
@@ -25,7 +25,7 @@ export function MarketplaceDescriptions({
   initial: Record<DescriptionPlatform, PlatformEntry>;
   canEdit: boolean;
 }) {
-  const router = useRouter();
+  const { refresh, refreshing } = useRefreshAfterSave();
   const [drafts, setDrafts] = useState<Record<DescriptionPlatform, string>>(
     () =>
       Object.fromEntries(DESCRIPTION_PLATFORMS.map((p) => [p, initial[p].text])) as Record<
@@ -34,11 +34,14 @@ export function MarketplaceDescriptions({
       >
   );
   const [savingPlatform, setSavingPlatform] = useState<DescriptionPlatform | null>(null);
+  const [lastPlatform, setLastPlatform] = useState<DescriptionPlatform | null>(null);
+  const busyPlatform = savingPlatform ?? (refreshing ? lastPlatform : null);
   const [savedPlatform, setSavedPlatform] = useState<DescriptionPlatform | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function save(platform: DescriptionPlatform) {
     setSavingPlatform(platform);
+    setLastPlatform(platform);
     setError(null);
     setSavedPlatform(null);
     try {
@@ -53,7 +56,7 @@ export function MarketplaceDescriptions({
         return;
       }
       setSavedPlatform(platform);
-      router.refresh();
+      refresh();
     } finally {
       setSavingPlatform(null);
     }
@@ -96,10 +99,11 @@ export function MarketplaceDescriptions({
                 <div className="flex items-center gap-2.5">
                   <Button
                     size="sm"
-                    disabled={!dirty || savingPlatform === platform}
+                    disabled={!dirty || busyPlatform === platform}
+                    loading={busyPlatform === platform}
                     onClick={() => save(platform)}
                   >
-                    {savingPlatform === platform ? "Saving…" : "Save"}
+                    {busyPlatform === platform ? "Saving…" : "Save"}
                   </Button>
                   {savedPlatform === platform && !dirty && (
                     <span className="flex items-center gap-1 text-[0.78rem] text-good">

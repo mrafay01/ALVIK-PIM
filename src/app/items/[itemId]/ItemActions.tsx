@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { ErrorText } from "@/components/ui/Field";
+import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 export function ItemActions({
   itemId,
@@ -22,6 +23,9 @@ export function ItemActions({
   hasSampleSku: boolean;
 }) {
   const router = useRouter();
+  const { refresh, refreshing } = useRefreshAfterSave();
+  // Which button started the current save, so only that one spins.
+  const [active, setActive] = useState<string | null>(null);
   const [sampleSku, setSampleSku] = useState("");
   const [poNumber, setPoNumber] = useState("");
   const [qty, setQty] = useState("");
@@ -33,7 +37,8 @@ export function ItemActions({
   const [metal, setMetal] = useState("");
   const [msrp, setMsrp] = useState("");
 
-  async function patchItem(body: Record<string, unknown>) {
+  async function patchItem(body: Record<string, unknown>, key: string) {
+    setActive(key);
     setBusy(true);
     setError(null);
     try {
@@ -47,7 +52,7 @@ export function ItemActions({
         setError(data.error ?? "Update failed");
         return;
       }
-      router.refresh();
+      refresh();
     } finally {
       setBusy(false);
     }
@@ -55,6 +60,7 @@ export function ItemActions({
 
   async function createPO(e: React.FormEvent) {
     e.preventDefault();
+    setActive("po");
     setBusy(true);
     setError(null);
     try {
@@ -76,10 +82,15 @@ export function ItemActions({
         return;
       }
       router.push(`/purchase-orders/${data.purchaseOrder._id}`);
-    } finally {
-      setBusy(false);
+      // Stay busy while the PO page loads.
+      return;
+    } catch {
+      setError("Couldn't reach the server. Try again.");
     }
+    setBusy(false);
   }
+
+  const working = busy || refreshing;
 
   return (
     <div className="flex flex-col gap-4">
@@ -94,7 +105,7 @@ export function ItemActions({
             <Field label="Sample SKU" width={180}>
               <Input value={sampleSku} onChange={(e) => setSampleSku(e.target.value)} placeholder="e.g. SMP-1001" />
             </Field>
-            <Button variant="primary" disabled={busy || !sampleSku} onClick={() => patchItem({ sampleSku })}>
+            <Button variant="primary" disabled={working || !sampleSku} loading={working && active === "sample"} onClick={() => patchItem({ sampleSku }, "sample")}>
               <span className="flex items-center gap-1.5">
                 <Tag size={15} /> Assign
               </span>
@@ -119,7 +130,7 @@ export function ItemActions({
             <Field label="Unit cost" width={100}>
               <Input type="number" step="0.01" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
             </Field>
-            <Button type="submit" variant="primary" disabled={busy}>
+            <Button type="submit" variant="primary" disabled={working} loading={working && active === "po"}>
               <span className="flex items-center gap-1.5">
                 <FileText size={15} /> Create PO
               </span>
@@ -138,25 +149,25 @@ export function ItemActions({
           <Field label="Permanent item #" width={150}>
             <Input value={itemNumber} onChange={(e) => setItemNumber(e.target.value)} />
           </Field>
-          <Button disabled={busy || !itemNumber} onClick={() => patchItem({ itemNumber })}>
+          <Button disabled={working || !itemNumber} loading={working && active === "itemNumber"} onClick={() => patchItem({ itemNumber }, "itemNumber")}>
             Set
           </Button>
           <Field label="Category" width={130}>
             <Input value={category} onChange={(e) => setCategory(e.target.value)} />
           </Field>
-          <Button disabled={busy || !category} onClick={() => patchItem({ category })}>
+          <Button disabled={working || !category} loading={working && active === "category"} onClick={() => patchItem({ category }, "category")}>
             Set
           </Button>
           <Field label="Metal" width={130}>
             <Input value={metal} onChange={(e) => setMetal(e.target.value)} />
           </Field>
-          <Button disabled={busy || !metal} onClick={() => patchItem({ specs: { metal } })}>
+          <Button disabled={working || !metal} loading={working && active === "metal"} onClick={() => patchItem({ specs: { metal } }, "metal")}>
             Set
           </Button>
           <Field label="MSRP" width={90}>
             <Input type="number" step="0.01" value={msrp} onChange={(e) => setMsrp(e.target.value)} />
           </Field>
-          <Button disabled={busy || !msrp} onClick={() => patchItem({ pricing: { msrp: Number(msrp) } })}>
+          <Button disabled={working || !msrp} loading={working && active === "msrp"} onClick={() => patchItem({ pricing: { msrp: Number(msrp) } }, "msrp")}>
             Add
           </Button>
         </div>

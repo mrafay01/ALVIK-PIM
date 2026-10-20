@@ -136,3 +136,49 @@ CZC PIM &middot; Product &amp; purchase order management
 </body>
 </html>`;
 }
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+// A Help & Support form submission, sent to the developer. Reply-To is the
+// person who wrote in, so answering the email reaches them directly.
+export async function sendSupportEmail(input: {
+  to: string;
+  fromName: string;
+  fromEmail: string;
+  role: string;
+  topic: string;
+  subject: string;
+  message: string;
+  pageUrl?: string;
+}): Promise<void> {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const rows: [string, string][] = [
+    ["From", `${input.fromName} <${input.fromEmail}>`],
+    ["Role", input.role],
+    ["Topic", input.topic],
+    ...(input.pageUrl ? ([["Page", input.pageUrl]] as [string, string][]) : []),
+  ];
+  const text = `${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\n${input.message}`;
+  const html = `<div style="font-family:system-ui,sans-serif;font-size:14px;color:#222">
+<table style="border-collapse:collapse;margin-bottom:16px">${rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:2px 12px 2px 0;color:#777">${escapeHtml(k)}</td><td style="padding:2px 0">${escapeHtml(v)}</td></tr>`
+    )
+    .join("")}</table>
+<div style="white-space:pre-wrap;line-height:1.5">${escapeHtml(input.message)}</div></div>`;
+  // The SMTP account can only send as itself, so the message goes out from
+  // that address but under the sender's name ("Pearl via CZC PIM"), with
+  // Reply-To set to the sender so replying reaches them, not the app.
+  const senderName = input.fromName.replace(/["\r\n<>]/g, "").trim() || input.fromEmail;
+  await getTransport().sendMail({
+    from: { name: `${senderName} via CZC PIM`, address: from ?? "" },
+    to: input.to,
+    replyTo: { name: senderName, address: input.fromEmail },
+    subject: `[CZC PIM support] ${input.subject} (from ${senderName})`.replace(/[\r\n]+/g, " "),
+    text,
+    html,
+  });
+}

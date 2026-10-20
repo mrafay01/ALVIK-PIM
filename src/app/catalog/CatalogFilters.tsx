@@ -8,6 +8,7 @@ import { Select } from "@/components/ui/Field";
 export type CatalogFilterState = {
   q: string;
   category: string;
+  brand: string;
   plating: string;
   minPrice: string;
   maxPrice: string;
@@ -19,6 +20,7 @@ const SORTS: { value: string; label: string }[] = [
   { value: "sku", label: "SKU (A–Z)" },
   { value: "sku_desc", label: "SKU (Z–A)" },
   { value: "title", label: "Title (A–Z)" },
+  { value: "brand", label: "Brand (A–Z)" },
   { value: "msrp_asc", label: "MSRP (low → high)" },
   { value: "msrp_desc", label: "MSRP (high → low)" },
   { value: "newest", label: "Recently updated" },
@@ -27,10 +29,12 @@ const SORTS: { value: string; label: string }[] = [
 export function CatalogFilters({
   state,
   categories,
+  brands,
   platings,
 }: {
   state: CatalogFilterState;
   categories: string[];
+  brands: string[];
   platings: string[];
 }) {
   const router = useRouter();
@@ -43,6 +47,7 @@ export function CatalogFilters({
     if (merged.tab && merged.tab !== "all") params.set("filter", merged.tab);
     if (merged.q.trim()) params.set("q", merged.q.trim());
     if (merged.category) params.set("category", merged.category);
+    if (merged.brand) params.set("brand", merged.brand);
     if (merged.plating) params.set("plating", merged.plating);
     if (merged.minPrice) params.set("minPrice", merged.minPrice);
     if (merged.maxPrice) params.set("maxPrice", merged.maxPrice);
@@ -58,7 +63,7 @@ export function CatalogFilters({
   }
 
   const hasActive =
-    state.q || state.category || state.plating || state.minPrice || state.maxPrice || state.sort !== "sku";
+    state.q || state.category || state.brand || state.plating || state.minPrice || state.maxPrice || state.sort !== "sku";
 
   return (
     <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -86,6 +91,18 @@ export function CatalogFilters({
           {categories.map((c) => (
             <option key={c} value={c}>
               {c}
+            </option>
+          ))}
+        </Select>
+      </label>
+
+      <label className="flex flex-col gap-1.5 w-[160px]">
+        <span className="text-[0.72rem] font-semibold text-ink-faint uppercase tracking-wide">Brand</span>
+        <Select value={state.brand} onChange={(e) => pushWith({ brand: e.target.value })}>
+          <option value="">All</option>
+          {brands.map((b) => (
+            <option key={b} value={b}>
+              {b}
             </option>
           ))}
         </Select>
@@ -141,7 +158,7 @@ export function CatalogFilters({
         <button
           type="button"
           onClick={() =>
-            pushWith({ q: "", category: "", plating: "", minPrice: "", maxPrice: "", sort: "sku" })
+            pushWith({ q: "", category: "", brand: "", plating: "", minPrice: "", maxPrice: "", sort: "sku" })
           }
           className="flex items-center gap-1 text-[0.8rem] text-ink-soft hover:text-critical px-2 py-2.5"
         >
