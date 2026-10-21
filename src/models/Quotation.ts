@@ -1,9 +1,5 @@
 import { Schema, model, models, type InferSchemaType, type Model } from "mongoose";
-import {
-  QUOTATION_IMPORT_STATUSES,
-  QUOTATION_STATUSES,
-  QUOTATION_SOURCES,
-} from "@/lib/enums";
+import { QUOTATION_STATUSES, QUOTATION_SOURCES } from "@/lib/enums";
 
 // One document per intaken quote — either a vendor quote file uploaded on the
 // Purchase Orders page, or a quote entered by hand on the "new quote" page.
@@ -19,24 +15,14 @@ const QuotationSchema = new Schema(
 
     source: { type: String, enum: QUOTATION_SOURCES, required: true },
     // Present for file_upload quotes; absent for manual ones.
-    sourceFileName: { type: String, default: null },
-    sourceFileUrl: { type: String, default: null },
+    sourceFileName: String,
 
-    // The vendor's own PO / quote reference, if the sheet or the person
-    // supplied one. Free text — not linked to a PurchaseOrder document.
+    // "PO-<number>": the uploaded file's name, or the number typed on the
+    // hand-entry form (lib/purchase-orders/poNumber.ts). Commit creates or
+    // joins the PurchaseOrder with this number.
     poNumber: { type: String, default: null },
-    receivedDate: Date,
-    season: String,
 
     status: { type: String, enum: QUOTATION_STATUSES, default: "parsing" },
-    // Retained from the original schema for backward compatibility with any
-    // code/readers expecting it; `status` above is the field the review flow
-    // actually drives.
-    importStatus: {
-      type: String,
-      enum: QUOTATION_IMPORT_STATUSES,
-      default: "needs_review",
-    },
 
     totalRows: { type: Number, default: 0 },
     flaggedRows: { type: Number, default: 0 },
@@ -66,7 +52,7 @@ const QuotationSchema = new Schema(
     // (double click, two reviewers) waits instead of creating duplicate
     // items. A lock older than COMMIT_LOCK_TTL_MS in the commit route is
     // treated as abandoned (crashed request) and can be taken over.
-    commitLockedAt: { type: Date, default: null },
+    commitLockedAt: Date,
 
     // The uploaded PO/PI file as stored in SharePoint (file uploads only).
     // `folder` is the path inside the drive, e.g. "Purchase Orders/22906",
@@ -90,7 +76,6 @@ const QuotationSchema = new Schema(
 
 // Quotes list sorts newest-first; the review page loads one by _id.
 QuotationSchema.index({ createdAt: -1 });
-QuotationSchema.index({ vendorId: 1 });
 // Dashboard: quotations needing review
 QuotationSchema.index({ status: 1 });
 

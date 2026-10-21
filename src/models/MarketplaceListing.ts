@@ -25,7 +25,7 @@ const BulletFeatureSchema = new Schema(
 
 const MarketplaceListingSchema = new Schema(
   {
-    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true, index: true },
+    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
     platform: { type: String, enum: MARKETPLACE_EXPORT_PLATFORMS, required: true },
 
     // Identity / copy — shared shape across platforms; export mappers pick

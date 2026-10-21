@@ -7,7 +7,6 @@ const VendorSchema = new Schema(
     email: { type: String },
     phone: { type: String },
     terms: { type: String },
-    paymentTermsDays: { type: Number },
   },
   { timestamps: true }
 );

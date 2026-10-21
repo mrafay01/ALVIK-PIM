@@ -47,7 +47,7 @@ export default async function CatalogImportPage({
 
   return (
     <AppShell
-      activeHref="/catalog"
+      activeHref="/catalog/import"
       backHref="/catalog"
       backLabel="Catalog"
       eyebrow="Catalog"

@@ -606,10 +606,9 @@ async function materializeItemsFromPull(
             sourceMondayItemId: row.mondayItemId,
             // No CZ SKU yet — Monday rows don't carry one at the PO
             // level, and the real PI file (uploaded later) is where the
-            // CZ numbers come from. Left null so a reviewer can fill it
-            // in without a unique-index collision in the meantime.
-            itemNumber: null,
-            baseSku: undefined,
+            // CZ numbers come from. itemNumber is left out entirely, not
+            // set to null: the unique index counts null as a value, so
+            // a second null item number would be rejected as a duplicate.
             variantSuffix: null,
             pricingHistory: [],
             inCatalog: false,
@@ -625,9 +624,12 @@ async function materializeItemsFromPull(
     const result = await Item.bulkWrite(ops as never, { ordered: false });
     return (result.upsertedCount ?? 0) + (result.modifiedCount ?? 0);
   } catch (err) {
-    const writeErrors = (err as { writeErrors?: unknown[] }).writeErrors;
+    const writeErrors = (err as { writeErrors?: { errmsg?: string }[] }).writeErrors;
     if (!writeErrors) throw err;
-    return 0;
+    // Surface the failures instead of silently creating nothing.
+    throw new Error(
+      `${writeErrors.length} Un-Verified item(s) couldn't be created: ${writeErrors[0]?.errmsg ?? "write failed"}`
+    );
   }
 }
 

@@ -94,12 +94,6 @@ export const ON_MASTER_STATUSES = ["pending", "need_msrp", "done"] as const;
 
 export const DESCRIPTIONS_STATUSES = ["pending", "waiting_for_more_items", "done"] as const;
 
-export const QC_RESULTS = ["good", "flagged"] as const;
-export type QcResult = (typeof QC_RESULTS)[number];
-
-export const QUOTATION_IMPORT_STATUSES = ["parsed", "needs_review", "imported"] as const;
-export type QuotationImportStatus = (typeof QUOTATION_IMPORT_STATUSES)[number];
-
 export const QUOTATION_STATUSES = ["parsing", "needs_review", "reviewed", "committed"] as const;
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number];
 
@@ -112,13 +106,9 @@ export type QuotationRowStatus = (typeof QUOTATION_ROW_STATUSES)[number];
 export const SYNC_LOG_RUN_TYPES = ["monday_push", "monday_pull", "marketplace_export"] as const;
 export type SyncLogRunType = (typeof SYNC_LOG_RUN_TYPES)[number];
 
-export const PLATFORMS = ["shopify", "amazon", "macys", "target", "belk", "kohls"] as const;
-export type Platform = (typeof PLATFORMS)[number];
-
 // Platforms this app can generate a marketplace bulk-import file for, in the
 // order they were built (Macy's first, then Target, then Belk, then
-// Kohl's). Kept separate from PLATFORMS because that enum also covers
-// platforms (shopify, amazon) that have no export template defined yet.
+// Kohl's).
 export const MARKETPLACE_EXPORT_PLATFORMS = ["macys", "target", "belk", "kohls"] as const;
 export type MarketplaceExportPlatform = (typeof MARKETPLACE_EXPORT_PLATFORMS)[number];
 

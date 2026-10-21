@@ -32,7 +32,6 @@ type FieldFlag = { field: string; message: string; rawValue: unknown };
 type StagedRow = {
   _id: string;
   rowNumber: number;
-  raw: Record<string, unknown>;
   coerced: Record<string, unknown>;
   flags: FieldFlag[];
   reviewStatus: "needs_review" | "approved" | "rejected";

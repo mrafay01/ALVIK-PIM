@@ -21,9 +21,11 @@ const FieldFlagSchema = new Schema(
 
 const ImportBatchRowSchema = new Schema(
   {
-    batchId: { type: Schema.Types.ObjectId, ref: "ImportBatch", required: true, index: true },
+    // Indexed through the compound index below (batchId leads it).
+    batchId: { type: Schema.Types.ObjectId, ref: "ImportBatch", required: true },
     rowNumber: { type: Number, required: true }, // 1-based, matches spreadsheet row
-    raw: { type: Schema.Types.Mixed, required: true }, // full original row, keyed by column header
+    // No copy of the original row is kept: nothing reads it, each flag
+    // already carries its own rawValue, and the uploaded file is the record.
     coerced: { type: Schema.Types.Mixed, default: {} }, // best-effort parsed values, dot-path keyed to match Item schema
     flags: [FieldFlagSchema],
     reviewStatus: {

@@ -19,7 +19,7 @@ import {
 // mass-assigned fields and illegal enum values can't reach the database.
 //
 // Helper for handlers:
-//   const parsed = ItemCreateSchema.safeParse(await req.json());
+//   const parsed = ItemPatchSchema.safeParse(await req.json());
 //   if (!parsed.success) return badRequest(parsed.error);
 
 import { NextResponse } from "next/server";
@@ -36,15 +36,6 @@ const money = z.number().finite().min(0).max(1e12);
 const shortText = z.string().trim().min(1).max(500);
 
 // ---------------------------------------------------------------- items
-
-export const ItemCreateSchema = z.object({
-  vendorId: objectId,
-  vendorSku: shortText,
-  category: z.string().trim().max(200).optional(),
-  costPerUnit: money.optional(),
-  msrp: money.optional(),
-  notes: z.string().trim().max(2000).optional(),
-});
 
 // specs is an intentionally open shape (SpecsSchema is strict:false), but
 // it must still be a flat-ish object of primitives — not an arbitrary
@@ -345,12 +336,9 @@ export const QuotationManualSchema = z
     // auto-create pattern used by the Monday pull.
     vendorId: objectId.optional(),
     vendorName: z.string().trim().min(1).max(200).optional(),
-    poNumber: z.string().trim().max(200).optional(),
-    receivedDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .optional(),
-    season: z.string().trim().max(120).optional(),
+    // Required: a hand-entered quote has no file to name its PO after.
+    // Stored as "PO-<number>" (see lib/purchase-orders/poNumber.ts).
+    poNumber: z.string().trim().min(1, "Enter the PO number").max(200),
     // Labels of the quote-level custom columns, for reference/echo.
     customColumns: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
     items: z.array(QuoteManualItemSchema).min(1, "add at least one item").max(200),
@@ -418,9 +406,14 @@ export const MarketplaceListingPatchSchema = z
 
 const userName = z.string().trim().min(1).max(120);
 const userEmail = z.string().trim().toLowerCase().email().max(200);
-// Same floor as the NextAuth credentials provider assumes — bcrypt itself
-// truncates at 72 bytes, so there's no ceiling worth enforcing here.
-const userPassword = z.string().min(8).max(200);
+// Applies when a password is set (create, change, reset), not at sign-in,
+// so existing passwords keep working. Capped at 72 bytes because bcrypt
+// silently ignores anything past that.
+const userPassword = z
+  .string()
+  .min(10, "Use at least 10 characters")
+  .refine((p) => Buffer.byteLength(p, "utf8") <= 72, "Use at most 72 characters")
+  .refine((p) => /[A-Za-z]/.test(p) && /\d/.test(p), "Use at least one letter and one number");
 
 export const UserCreateSchema = z.object({
   name: userName,

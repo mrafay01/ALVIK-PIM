@@ -57,9 +57,9 @@ export function CreateUserForm({ roles, roleLabel }: { roles: readonly Role[]; r
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            minLength={8}
+            minLength={10}
             maxLength={200}
-            placeholder="At least 8 characters"
+            placeholder="At least 10 characters, with a letter and a number"
           />
         </Field>
         <Field label="Role">

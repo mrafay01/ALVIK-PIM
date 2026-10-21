@@ -2,21 +2,10 @@ import { Schema, model, models, type InferSchemaType, type Model } from "mongoos
 import { ITEM_STATUSES, ITEM_ORIGINS, ORDER_REASONS, URGENCIES, IMAGE_SUBFOLDERS } from "@/lib/enums";
 import { splitSku } from "@/lib/catalog/sku";
 
-const StoneInfoSchema = new Schema(
-  {
-    type: String,
-    color: String,
-    count: Number,
-    size: String,
-  },
-  { _id: false }
-);
-
 const SpecsSchema = new Schema(
   {
     metal: String,
     plating: String,
-    stoneInfo: [StoneInfoSchema],
     weight: {
       totalG: Number,
       silverG: Number,
@@ -139,7 +128,7 @@ const CostHistoryEntrySchema = new Schema(
 const ItemSchema = new Schema(
   {
     status: { type: String, enum: ITEM_STATUSES, required: true, default: "quoted" },
-    sampleSku: { type: String, index: true },
+    sampleSku: String,
     itemNumber: { type: String, index: true, unique: true, sparse: true },
 
     vendorId: { type: Schema.Types.ObjectId, ref: "Vendor" },
@@ -183,14 +172,14 @@ const ItemSchema = new Schema(
     description2: String,
     bulletFeatures: { type: [String], default: undefined },
     brand: String,
-    upc: { type: String, index: true, sparse: true },
+    upc: String,
     // A second UPC some items carry (e.g. a repackaged/relabeled variant
     // sharing the same product) and an alternate SKU used to cross-reference
     // this item under a different system/vendor naming — both free text,
     // neither unique (unlike upc/itemNumber) since the same value can
     // legitimately appear on more than one row.
     upc2: { type: String, trim: true },
-    aliasSku: { type: String, trim: true, index: true },
+    aliasSku: { type: String, trim: true },
 
     // Per-marketplace description overrides, keyed by DESCRIPTION_PLATFORMS
     // ("macys", "kohls", ...). A Map rather than one field per platform —
@@ -212,7 +201,7 @@ const ItemSchema = new Schema(
       reviewerId: { type: Schema.Types.ObjectId, ref: "User" },
       decidedAt: Date,
     },
-    rejectionReason: { type: String, default: null },
+    rejectionReason: String,
 
     sharePointFolderPath: String,
     media: [MediaItemSchema],
@@ -222,7 +211,7 @@ const ItemSchema = new Schema(
       models: { type: Boolean, default: false },
     },
 
-    boxNumber: { type: String, default: null },
+    boxNumber: String,
 
     // Free-form columns a vendor quote carried that don't map to a known
     // spec field — the quote sheet's column set isn't fixed. Keyed by the
@@ -231,14 +220,13 @@ const ItemSchema = new Schema(
     customFields: { type: Map, of: String, default: undefined },
 
     pricingHistory: [PricingHistoryEntrySchema],
-    costHistory: [CostHistoryEntrySchema],
+    // Left unset (not an empty array) until something records a cost.
+    costHistory: { type: [CostHistoryEntrySchema], default: undefined },
 
     urgency: { type: String, enum: URGENCIES },
     orderReason: { type: String, enum: ORDER_REASONS },
 
     masterRecordComplete: { type: Boolean, default: false },
-
-    mondayItemId: { type: String, default: null },
 
     // How the item entered the system.
     origin: { type: String, enum: ITEM_ORIGINS },
@@ -265,14 +253,14 @@ const ItemSchema = new Schema(
     //                      reviewer sees what stage this item is at on
     //                      the vendor-pipeline side. Updated by every
     //                      pull; left blank for manual intake.
-    intakeSource: {
-      type: String,
-      enum: ["manual_quote", "monday_pull"],
-      default: null,
-    },
-    sourcePoNumber: { type: String, default: null, index: true },
-    sourceMondayItemId: { type: String, default: null, index: true, sparse: true },
-    sourceMondayStatus: { type: String, default: null },
+    //
+    // None of these has a default: they are left out of the document
+    // entirely (not stored as null) when they don't apply, which is most
+    // items. `{ field: null }` queries still match a missing field.
+    intakeSource: { type: String, enum: ["manual_quote", "monday_pull"] },
+    sourcePoNumber: String,
+    sourceMondayItemId: { type: String, index: true, sparse: true },
+    sourceMondayStatus: String,
     // Whether this item belongs in the finalized company catalog. Master
     // File imports and manual catalog entries are in it directly; a
     // quotation-origin item only after someone submits it and an admin
@@ -297,7 +285,7 @@ const ItemSchema = new Schema(
     // `updatedAt` alone (that already auto-updates via `timestamps` below,
     // but carries no "by whom"). Shown on the Catalog list as "Last
     // edited" — see src/app/catalog/page.tsx.
-    lastEditedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    lastEditedBy: { type: Schema.Types.ObjectId, ref: "User" },
 
     // Count of unresolved CatalogConflict documents pointing at this
     // item. Maintained by the quote-commit reconciliation (on write)
@@ -306,7 +294,7 @@ const ItemSchema = new Schema(
     // field instead of a per-row aggregation. 0 for every item that
     // hasn't gone through reconciliation yet — set as a default so
     // existing rows don't need a backfill query to be queryable.
-    conflictCount: { type: Number, default: 0, index: true },
+    conflictCount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
@@ -329,18 +317,9 @@ ItemSchema.pre("save", function (next) {
 });
 
 ItemSchema.index({ vendorId: 1, vendorSku: 1 });
-// List/detail pages filter by status and always sort by updatedAt desc.
-ItemSchema.index({ status: 1, updatedAt: -1 });
-// /catalog?filter=incomplete queries this directly.
-ItemSchema.index({ masterRecordComplete: 1, updatedAt: -1 });
 // Catalog list: filter by inCatalog, sort by itemNumber.
 ItemSchema.index({ inCatalog: 1, itemNumber: 1 });
-// Item detail resolves POs for an item; buildPullPlan matches by mondayItemId.
-ItemSchema.index({ mondayItemId: 1 }, { sparse: true });
-// GET /api/items with no ?status= filter sorts purely by updatedAt desc —
-// none of the compound indexes above lead with updatedAt, so an unfiltered
-// call would otherwise fall back to an in-memory sort over the whole
-// collection before skip/limit could apply.
+// Dashboard "recently updated items" sorts the whole collection by updatedAt.
 ItemSchema.index({ updatedAt: -1 });
 // Catalog list sorts by itemNumber (alphabetical, clustering a variation
 // family by its leading base SKU) within inCatalog — the compound

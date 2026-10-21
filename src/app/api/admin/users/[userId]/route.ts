@@ -5,23 +5,6 @@ import { UserPatchSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
 import { isObjectId } from "@/lib/ids";
 
-// GET: single user detail.
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ userId: string }> }
-) {
-  const gate = await requireRole(ROLE_SETS.adminOnly);
-  if (isAuthFail(gate)) return gate.response;
-
-  const { userId } = await params;
-  if (!isObjectId(userId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  await connectDB();
-  const user = await User.findById(userId).select("name email role active createdAt updatedAt").lean();
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-
-  return NextResponse.json({ user });
-}
-
 // PATCH: change a user's name, role, or active flag. Admin only. An admin
 // can't demote or deactivate their own account here — that's a
 // self-lockout risk with no upside; have another admin do it. Password

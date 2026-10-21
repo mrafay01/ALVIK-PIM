@@ -19,6 +19,10 @@ import {
   ChevronUp,
   LifeBuoy,
   Images,
+  Flag,
+  RefreshCw,
+  Plus,
+  FileUp,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -40,6 +44,10 @@ const ICONS = {
   Settings,
   LifeBuoy,
   Images,
+  Flag,
+  RefreshCw,
+  Plus,
+  FileUp,
 };
 
 export type NavIconName = keyof typeof ICONS;
@@ -48,7 +56,110 @@ export type NavItem = {
   href: string;
   label: string;
   icon: NavIconName;
+  // Sub-pages shown as a dropdown under this item (e.g. Un-Verified Items
+  // under Purchase Orders).
+  children?: NavItem[];
 };
+
+function isActive(activeHref: string, href: string): boolean {
+  return activeHref === href || activeHref.startsWith(href + "/");
+}
+
+const ROW_ACTIVE = "font-bold text-ink bg-brass-bg border-[color:var(--brass-glow)]";
+const ROW_IDLE = "font-medium text-ink-soft bg-transparent border-transparent";
+
+// A nav item with sub-pages: the row links to the parent page, a separate
+// chevron opens/closes the list. Starts open when one of its sub-pages is
+// the current page. In the collapsed sidebar the sub-pages show as their
+// own icon links under the parent, so they stay one click away.
+function NavGroup({
+  item,
+  activeHref,
+  collapsed,
+}: {
+  item: NavItem & { children: NavItem[] };
+  activeHref: string;
+  collapsed: boolean;
+}) {
+  const childActive = item.children.some((c) => isActive(activeHref, c.href));
+  const [open, setOpen] = useState(childActive);
+  const Icon = ICONS[item.icon];
+  // A sub-page under the parent's path (/catalog/flagged) highlights the
+  // sub-item, not the parent too.
+  const parentActive = isActive(activeHref, item.href) && !childActive;
+  const highlighted = parentActive || childActive;
+
+  if (collapsed) {
+    return (
+      <>
+        {[item, ...item.children].map((entry) => {
+          const EntryIcon = ICONS[entry.icon];
+          const on = entry === item ? parentActive : isActive(activeHref, entry.href);
+          return (
+            <Link
+              key={entry.href}
+              href={entry.href}
+              title={entry.label}
+              className={`relative flex items-center justify-center rounded-sm no-underline border p-[11px] transition-[background,color] duration-150 ${
+                on ? ROW_ACTIVE : ROW_IDLE
+              }`}
+            >
+              <EntryIcon size={entry === item ? 18 : 15} strokeWidth={2} className={`shrink-0 ${on ? "text-brass" : "text-ink-faint"}`} />
+            </Link>
+          );
+        })}
+      </>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div
+        className={`relative flex items-center gap-1 rounded-sm text-[0.87rem] whitespace-nowrap transition-[background,color] duration-150 border justify-start pl-3 pr-1.5 py-1 ${
+          parentActive ? ROW_ACTIVE : ROW_IDLE
+        }`}
+      >
+        {highlighted && (
+          <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-[3px] h-[18px] rounded-full bg-brass" />
+        )}
+        <Link href={item.href} className="relative flex items-center gap-3 no-underline flex-1 min-w-0 justify-start py-1.5">
+          <Icon size={18} strokeWidth={2} className={`shrink-0 ${highlighted ? "text-brass" : "text-ink-faint"}`} />
+          <span className={highlighted ? "font-bold text-ink" : ""}>{item.label}</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-label={open ? `Collapse ${item.label} menu` : `Expand ${item.label} menu`}
+          aria-expanded={open}
+          className="shrink-0 flex items-center justify-center w-7 h-7 rounded-sm bg-transparent border-0 cursor-pointer text-ink-faint hover:text-ink hover:bg-surface-overlay"
+        >
+          <ChevronUp size={14} className={`transition-transform duration-150 ${open ? "" : "rotate-180"}`} />
+        </button>
+      </div>
+
+      {open && (
+        <div className="flex flex-col mt-[3px] ml-3 pl-3 border-l border-border gap-[3px]">
+          {item.children.map((child) => {
+            const ChildIcon = ICONS[child.icon];
+            const on = isActive(activeHref, child.href);
+            return (
+              <Link
+                key={child.href}
+                href={child.href}
+                className={`flex items-center gap-2.5 no-underline text-[0.83rem] whitespace-nowrap rounded-sm px-3 py-2 ${
+                  on ? "font-semibold text-ink bg-brass-bg" : "text-ink-soft hover:text-ink hover:bg-surface-overlay"
+                }`}
+              >
+                <ChildIcon size={14} className={`shrink-0 ${on ? "text-brass" : "text-ink-faint"}`} />
+                {child.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Sidebar({
   nav,
@@ -141,8 +252,19 @@ export function Sidebar({
 
         <nav className="flex flex-col gap-[3px] flex-1 overflow-y-auto">
         {nav.map((item) => {
-          const active = activeHref === item.href || activeHref.startsWith(item.href + "/");
+          const active = isActive(activeHref, item.href);
           const Icon = ICONS[item.icon];
+
+          if (item.children && item.children.length > 0) {
+            return (
+              <NavGroup
+                key={item.href}
+                item={item as NavItem & { children: NavItem[] }}
+                activeHref={activeHref}
+                collapsed={collapsed}
+              />
+            );
+          }
 
           // Settings is a real link to /settings (clicking the row
           // navigates there, same as every other nav item) plus a separate

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Types } from "mongoose";
-import { getSession } from "@/lib/authz";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import PurchaseOrder from "@/models/PurchaseOrder";
@@ -13,9 +12,6 @@ import {
   ClipboardList,
   TriangleAlert,
   DollarSign,
-  FilePlus2,
-  Upload,
-  RefreshCw,
   CalendarClock,
   ArrowUp,
   ArrowDown,
@@ -25,7 +21,7 @@ import {
   PackagePlus,
 } from "lucide-react";
 import { PO_STATUS_LABEL, PO_STATUS_TONE } from "@/lib/statusDisplay";
-import { PO_STATUSES, PRIORITIES, ORDER_PURPOSE_CATEGORIES, IMAGE_STATUSES, type Role, type PoStatus } from "@/lib/enums";
+import { PO_STATUSES, PRIORITIES, ORDER_PURPOSE_CATEGORIES, IMAGE_STATUSES, type PoStatus } from "@/lib/enums";
 import {
   parsePoListState,
   poListStateToQuery,
@@ -73,9 +69,6 @@ export default async function PurchaseOrdersPage({
   const sp = await searchParams;
   const state = parsePoListState(sp);
   const page = parsePage(sp.page);
-  const session = await getSession();
-  const role = session?.user?.role as Role | undefined;
-  const isAdmin = role === "administrator";
   const now = new Date();
 
   await connectDB();
@@ -118,35 +111,6 @@ export default async function PurchaseOrdersPage({
         committed here. Search, filter and sort below; the URL keeps your view, so you can bookmark or
         share it.
       </p>
-
-      <div className="flex items-center gap-2.5 mb-6 flex-wrap">
-        <Link
-          href="/purchase-orders/quotes/new"
-          className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-brass text-on-brass border border-brass shadow-[0_2px_10px_var(--brass-glow)] no-underline hover:bg-brass-hover"
-        >
-          <FilePlus2 size={15} /> New quote manually
-        </Link>
-        <Link
-          href="/purchase-orders/quotes/import"
-          className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-surface text-ink border border-border-strong no-underline hover:border-brass hover:text-brass"
-        >
-          <Upload size={15} /> Import quote file
-        </Link>
-        <Link
-          href="/purchase-orders/quotes"
-          className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-transparent text-ink-soft border border-transparent no-underline hover:text-ink hover:bg-surface-overlay"
-        >
-          View all quotes
-        </Link>
-        {isAdmin && (
-          <Link
-            href="/admin/monday-pull"
-            className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-transparent text-ink-soft border border-border-strong no-underline hover:border-brass hover:text-brass ml-auto"
-          >
-            <RefreshCw size={15} /> Monday Import
-          </Link>
-        )}
-      </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
         <StatCard

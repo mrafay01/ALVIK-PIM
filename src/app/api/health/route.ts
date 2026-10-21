@@ -5,10 +5,8 @@ export async function GET() {
   try {
     await connectDB();
     return NextResponse.json({ ok: true, db: "connected" });
-  } catch (err) {
-    return NextResponse.json(
-      { ok: false, error: (err as Error).message },
-      { status: 500 }
-    );
+  } catch {
+    // Public endpoint: never echo the driver error (it names cluster hosts).
+    return NextResponse.json({ ok: false, db: "unavailable" }, { status: 503 });
   }
 }

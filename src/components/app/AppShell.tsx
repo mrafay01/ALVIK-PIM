@@ -6,7 +6,16 @@ import type { Role } from "@/lib/enums";
 import { Sidebar, type NavItem } from "./Sidebar";
 import { ThemeSwitcherButton } from "./ThemeSwitcherButton";
 
-const NAV: (NavItem & { roles: Role[] | null })[] = [
+// `children` render as a dropdown under their parent in the sidebar. Each
+// entry (parent or child) has its own role list; a child whose parent the
+// user can't see is shown as a top-level item instead, so nobody loses a
+// page they're allowed to open.
+type NavEntry = Omit<NavItem, "children"> & {
+  roles: Role[] | null;
+  children?: (Omit<NavItem, "children"> & { roles: Role[] | null })[];
+};
+
+const NAV: NavEntry[] = [
   { href: "/dashboard", label: "Dashboard", icon: "LayoutDashboard", roles: null },
   // Matches middleware's /purchase-orders gate — warehouse and photography
   // roles would only ever get "Not authorized" from this link.
@@ -15,9 +24,32 @@ const NAV: (NavItem & { roles: Role[] | null })[] = [
     label: "Purchase Orders",
     icon: "ClipboardList",
     roles: ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"] as Role[],
+    children: [
+      // Quotes list; importing a file or entering a quote by hand starts from there.
+      {
+        href: "/purchase-orders/quotes",
+        label: "Quotes",
+        icon: "FileSpreadsheet",
+        roles: ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"] as Role[],
+      },
+      { href: "/items", label: "Un-Verified Items", icon: "PackageSearch", roles: null },
+      // Admin only, same as middleware's /admin gate.
+      { href: "/admin/monday-pull", label: "Monday Import", icon: "RefreshCw", roles: [] },
+    ],
   },
-  { href: "/items", label: "Un-Verified Items", icon: "PackageSearch", roles: null },
-  { href: "/catalog", label: "Catalog", icon: "BookOpenCheck", roles: null },
+  {
+    href: "/catalog",
+    label: "Catalog",
+    icon: "BookOpenCheck",
+    roles: null,
+    // Role lists match middleware's /catalog/new, /catalog/import and
+    // /catalog/flagged gates ([] = administrator only).
+    children: [
+      { href: "/catalog/new", label: "New catalog item", icon: "Plus", roles: ["marketplace_listing"] as Role[] },
+      { href: "/catalog/import", label: "Import Master File", icon: "FileUp", roles: [] },
+      { href: "/catalog/flagged", label: "Flagged Items", icon: "Flag", roles: [] },
+    ],
+  },
   { href: "/images", label: "Images", icon: "Images", roles: null },
   {
     href: "/marketplace-export",
@@ -27,9 +59,6 @@ const NAV: (NavItem & { roles: Role[] | null })[] = [
   },
   // Master File import lives on the Catalog page ("Import Master File",
   // admin only) rather than its own nav entry.
-  // Monday Import ("/admin/monday-pull") is deliberately not in this list
-  // any more — it's reached from a button on the Purchase Orders page
-  // instead (still admin-only, still /admin-prefix gated in middleware.ts).
   // Settings is the last item in the main nav list (not a separate footer
   // block) and expands as a dropdown in place — see Sidebar.tsx. Visible to
   // everyone; "Users & Roles" inside it is filtered to admins there.
@@ -76,7 +105,12 @@ export async function AppShell({
     .join("")
     .toUpperCase();
 
-  const visibleNav = NAV.filter((item) => !item.roles || role === "administrator" || (role && item.roles.includes(role)));
+  const allowed = (roles: Role[] | null) => !roles || role === "administrator" || roles.includes(role);
+  const visibleNav: NavItem[] = NAV.flatMap(({ roles, children, ...item }) => {
+    const kids = (children ?? []).filter((c) => allowed(c.roles)).map((c) => ({ href: c.href, label: c.label, icon: c.icon }));
+    if (!allowed(roles)) return kids;
+    return [kids.length > 0 ? { ...item, children: kids } : item];
+  });
 
   return (
     // suppressHydrationWarning here (and on the wrapper divs inside Sidebar):

@@ -6,13 +6,13 @@ import type { PipelineStage } from "mongoose";
 import Item from "@/models/Item";
 import CatalogConflict from "@/models/CatalogConflict";
 import ImportBatch from "@/models/ImportBatch";
-import ImportBatchRow from "@/models/ImportBatchRow";
-import { ON_FLAGGED_PAGE } from "@/lib/import/reviewQuery";
 import { checkMasterRecordComplete } from "@/lib/masterRecordComplete";
+import { loadCatalogFacets } from "@/lib/catalog/facets";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
-import { ShieldCheck, Plus, TriangleAlert, FileUp, ListChecks, Flag } from "lucide-react";
+import { StatCard } from "@/components/ui/StatCard";
+import { ShieldCheck, TriangleAlert, ListChecks, BookOpenCheck, CircleCheck, CircleDashed, Hourglass } from "lucide-react";
 import { CatalogRowFlags } from "./CatalogRowFlags";
 import { CatalogFilters } from "./CatalogFilters";
 
@@ -100,22 +100,15 @@ export default async function CatalogPage({
   // may be the only row with that base SKU, in which case the hyphen is
   // just encoding its plating, not marking a sibling relationship. A row
   // is a real variation only when another catalog item shares its baseSku,
-  // so that has to be counted across the whole catalog. Only the
-  // "variations" tab needs it before the main query can be built; every
-  // other tab fetches it alongside.
-  const familySkusQuery = Item.aggregate<{ _id: string }>([
-    { $match: { inCatalog: true, baseSku: { $ne: null } } },
-    { $group: { _id: "$baseSku", count: { $sum: 1 } } },
-    { $match: { count: { $gt: 1 } } },
-    { $project: { _id: 1 } },
-  ]).then((rows) => rows.map((r) => r._id));
-  const familySkusEarly = tab === "variations" ? await familySkusQuery : null;
+  // so that has to be counted across the whole catalog (cached, together
+  // with the filter dropdown values — see lib/catalog/facets.ts).
+  const { counts, familySkus, categories, brands, platings } = await loadCatalogFacets();
 
   // Base match — the tab filter + always inCatalog.
   const match: Record<string, unknown> = { inCatalog: true };
   if (tab === "incomplete") match.masterRecordComplete = false;
   if (tab === "pending") match["catalogApproval.status"] = "pending";
-  if (tab === "variations") match.baseSku = { $in: familySkusEarly };
+  if (tab === "variations") match.baseSku = { $in: familySkus };
   if (tab === "inactive") match.active = false;
   if (category) match.category = category;
   if (brand) match.brand = brand;
@@ -192,20 +185,15 @@ export default async function CatalogPage({
     },
   });
 
-  const [facetResult, categories, brands, platings, pendingConflictCount, familySkus, role, openImports, flaggedCount] = await Promise.all([
+  const [facetResult, pendingConflictCount, role, openImports] = await Promise.all([
     Item.aggregate(pipeline).collation({ locale: "en", numericOrdering: true }),
-    Item.distinct("category", { inCatalog: true }),
-    Item.distinct("brand", { inCatalog: true }),
-    Item.distinct("specs.plating", { inCatalog: true }),
     CatalogConflict.countDocuments({ status: "pending" }),
-    familySkusEarly ?? familySkusQuery,
     getSessionRole(),
     ImportBatch.find({ status: "needs_review" })
       .select("sourceFileName totalRows")
       .sort({ uploadedAt: -1 })
       .limit(1)
       .lean(),
-    ImportBatchRow.countDocuments(ON_FLAGGED_PAGE),
   ]);
   const isAdmin = role === "administrator";
   const openImport = isAdmin ? openImports[0] : undefined;
@@ -276,35 +264,20 @@ export default async function CatalogPage({
             </div>
           </div>
         </Card>
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {isAdmin && (
-            <Link
-              href="/catalog/flagged"
-              className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-surface text-ink border border-border-strong no-underline hover:border-brass hover:text-brass"
-            >
-              <Flag size={15} /> Flagged Items
-              {flaggedCount > 0 && (
-                <span className="ml-0.5 rounded-full bg-warn-bg px-2 py-0.5 font-mono text-[0.72rem] text-warn">
-                  {flaggedCount.toLocaleString()}
-                </span>
-              )}
-            </Link>
-          )}
-          {isAdmin && (
-            <Link
-              href="/catalog/import"
-              className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-surface text-ink border border-border-strong no-underline hover:border-brass hover:text-brass"
-            >
-              <FileUp size={15} /> Import Master File
-            </Link>
-          )}
-          <Link
-            href="/catalog/new"
-            className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-brass text-on-brass border border-brass shadow-[0_2px_10px_var(--brass-glow)] no-underline hover:bg-brass-hover"
-          >
-            <Plus size={15} /> New catalog item
-          </Link>
-        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5">
+        <StatCard label="Catalog items" value={counts.total.toLocaleString()} icon={BookOpenCheck} tone="brass" />
+        <StatCard
+          label="Complete"
+          value={`${counts.complete.toLocaleString()}${
+            counts.total > 0 ? ` (${Math.round((counts.complete / counts.total) * 100)}%)` : ""
+          }`}
+          icon={CircleCheck}
+          tone="good"
+        />
+        <StatCard label="Incomplete" value={counts.incomplete.toLocaleString()} icon={CircleDashed} tone="warn" />
+        <StatCard label="Pending approval" value={counts.pendingApproval.toLocaleString()} icon={Hourglass} tone="neutral" />
       </div>
 
       {openImport && (
@@ -379,9 +352,9 @@ export default async function CatalogPage({
 
       <CatalogFilters
         state={filterState}
-        categories={(categories as string[]).filter(Boolean).sort()}
-        brands={(brands as string[]).filter(Boolean).sort((a, b) => a.localeCompare(b))}
-        platings={(platings as string[]).filter(Boolean).sort()}
+        categories={categories}
+        brands={brands}
+        platings={platings}
       />
 
       {total === 0 ? (

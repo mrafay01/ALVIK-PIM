@@ -39,7 +39,7 @@ export default async function QuoteReviewPage({
 
   const query = filterToQuery(quotationId, filter);
   const [rows, filteredTotal, approvedPending, unflaggedPending, grandTotal, committedCount, linkedPo] = await Promise.all([
-    QuotationRow.find(query).sort({ rowNumber: 1 }).skip((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).lean(),
+    QuotationRow.find(query).select("-raw").sort({ rowNumber: 1 }).skip((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).lean(),
     QuotationRow.countDocuments(query),
     QuotationRow.countDocuments({ quotationId, reviewStatus: "approved", committedItemId: null }),
     QuotationRow.countDocuments({ quotationId, reviewStatus: "needs_review", "flags.0": { $exists: false } }),
@@ -55,7 +55,7 @@ export default async function QuoteReviewPage({
 
   return (
     <AppShell
-      activeHref="/purchase-orders"
+      activeHref="/purchase-orders/quotes"
       backHref="/purchase-orders/quotes"
       backLabel="Quotes"
       eyebrow={`Quote review · ${vendorName}`}

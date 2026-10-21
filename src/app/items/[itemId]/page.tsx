@@ -228,7 +228,6 @@ export default async function ItemDetailPage({
               <DetailField label="Catalog approval" value={item.catalogApproval?.status} />
               <DetailField label="Catalog submitted" value={fmtDate(item.catalogSubmittedAt)} />
               <DetailField label="Rejection reason" value={item.rejectionReason} />
-              <DetailField label="Monday.com item ID" value={item.mondayItemId} />
               <DetailField label="Created" value={fmtDate(item.createdAt)} />
               <DetailField label="Last updated" value={fmtDate(item.updatedAt)} />
             </FieldGrid>

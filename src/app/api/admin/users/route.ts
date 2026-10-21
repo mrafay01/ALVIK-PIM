@@ -5,21 +5,6 @@ import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { UserCreateSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
 
-// GET: list every user, newest first. Admin only — this is the account
-// directory, not a profile lookup any role should be able to hit.
-export async function GET() {
-  const gate = await requireRole(ROLE_SETS.adminOnly);
-  if (isAuthFail(gate)) return gate.response;
-
-  await connectDB();
-  const users = await User.find({})
-    .select("name email role active createdAt updatedAt")
-    .sort({ createdAt: -1 })
-    .lean();
-
-  return NextResponse.json({ users });
-}
-
 // POST: create a new user with a role and a real, immediately-usable
 // password (unlike the seed script, which deliberately issues unusable
 // random ones). Admin only — this is the one place account creation and

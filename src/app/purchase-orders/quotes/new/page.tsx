@@ -9,7 +9,7 @@ export default async function NewQuotePage() {
 
   return (
     <AppShell
-      activeHref="/purchase-orders"
+      activeHref="/purchase-orders/quotes"
       backHref="/purchase-orders/quotes"
       backLabel="Quotes"
       eyebrow="Vendor pipeline"

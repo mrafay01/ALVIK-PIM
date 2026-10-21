@@ -10,7 +10,7 @@ export default async function QuoteImportPage() {
 
   return (
     <AppShell
-      activeHref="/purchase-orders"
+      activeHref="/purchase-orders/quotes"
       backHref="/purchase-orders/quotes"
       backLabel="Quotes"
       eyebrow="Vendor pipeline"

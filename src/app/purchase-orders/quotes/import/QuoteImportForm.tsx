@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Upload, FileSpreadsheet } from "lucide-react";
 import { Field, Input, Select, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { poNumberFromFileName } from "@/lib/purchase-orders/poNumber";
 
 const MANUAL_VENDOR_OPTION = "__manual__";
 const MAX_FILE_BYTES = 30 * 1024 * 1024;
@@ -26,8 +27,9 @@ export function QuoteImportForm({ vendors }: { vendors: { id: string; name: stri
   const router = useRouter();
   const [vendorId, setVendorId] = useState(vendors[0]?.id ?? MANUAL_VENDOR_OPTION);
   const [manualVendorName, setManualVendorName] = useState("");
-  const [poNumber, setPoNumber] = useState("");
-  const [season, setSeason] = useState("");
+  // The PO is named after the file ("22906.xlsx" -> "PO-22906"); shown so
+  // the user can check it before uploading.
+  const [poPreview, setPoPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export function QuoteImportForm({ vendors }: { vendors: { id: string; name: stri
     const start = await fetch("/api/quotations/upload-session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileName: file.name, size: file.size, poNumber: poNumber.trim() || undefined }),
+      body: JSON.stringify({ fileName: file.name, size: file.size }),
     });
     const session = await start.json().catch(() => ({}));
     if (!start.ok) throw new Error(session.error ?? `Couldn't start the upload (${start.status})`);
@@ -86,8 +88,6 @@ export function QuoteImportForm({ vendors }: { vendors: { id: string; name: stri
       body: JSON.stringify({
         file: uploaded,
         ...(isManualVendor ? { vendorName: manualVendorName.trim() } : { vendorId }),
-        poNumber: poNumber.trim() || undefined,
-        season: season.trim() || undefined,
         sheetName,
       }),
     });
@@ -184,23 +184,27 @@ export function QuoteImportForm({ vendors }: { vendors: { id: string; name: stri
         </Field>
       )}
 
-      <div className="flex gap-3.5 flex-wrap">
-        <Field label="Vendor PO (optional)" width={220}>
-          <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO-1234" />
-        </Field>
-        <Field label="Season (optional)" width={160}>
-          <Input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="SS26" />
-        </Field>
-      </div>
-
-      <Field label="Quote file (.xlsx, .xls, or .csv — up to 30 MB, saved to the PO's SharePoint folder)">
+      <Field label="PO file (.xlsx, .xls, or .csv — up to 30 MB, saved to the PO's SharePoint folder)">
         <input
           type="file"
           name="file"
           accept=".xlsx,.xls,.csv"
           required
+          onChange={(e) => {
+            const f = e.currentTarget.files?.[0];
+            setPoPreview(f ? poNumberFromFileName(f.name) : null);
+          }}
           className="text-[0.85rem] text-ink-soft"
         />
+        <div className="mt-1.5 text-[0.8rem] text-ink-soft">
+          {poPreview ? (
+            <>
+              This will be <strong className="text-ink font-mono">{poPreview}</strong>. The PO is named after the file.
+            </>
+          ) : (
+            "The PO is named after the file, e.g. 22906.xlsx becomes PO-22906."
+          )}
+        </div>
       </Field>
 
       <div>

@@ -7,6 +7,7 @@ import { Field, Input, Select, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { QUOTE_FIELDS, QUOTE_HEADER_TO_KEY, IMAGE_PLACEHOLDER_NOTE } from "@/lib/quote-import/fields";
+import { formatPoNumber } from "@/lib/purchase-orders/poNumber";
 
 type ItemRow = {
   fields: Record<string, string>;
@@ -39,8 +40,6 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
   const [vendorId, setVendorId] = useState(vendors[0]?.id ?? MANUAL_VENDOR_OPTION);
   const [manualVendorName, setManualVendorName] = useState("");
   const [poNumber, setPoNumber] = useState("");
-  const [receivedDate, setReceivedDate] = useState("");
-  const [season, setSeason] = useState("");
   const [customCols, setCustomCols] = useState<string[]>([]);
   const [newColName, setNewColName] = useState("");
   const [rows, setRows] = useState<ItemRow[]>([emptyRow([])]);
@@ -109,6 +108,10 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
       setError("Enter the new vendor's name.");
       return;
     }
+    if (!formatPoNumber(poNumber)) {
+      setError("Enter the PO number.");
+      return;
+    }
 
     const items = rows.map((r) => {
       const fields: Record<string, string> = {};
@@ -136,9 +139,7 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
         body: JSON.stringify({
           vendorId: isManualVendor ? undefined : vendorId,
           vendorName: isManualVendor ? manualVendorName.trim() : undefined,
-          poNumber: poNumber.trim() || undefined,
-          receivedDate: receivedDate || undefined,
-          season: season.trim() || undefined,
+          poNumber: poNumber.trim(),
           customColumns: customCols.length > 0 ? customCols : undefined,
           items,
         }),
@@ -182,16 +183,19 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
               />
             </Field>
           )}
-          <Field label="Vendor PO / quote ref" width={180}>
-            <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO-1234" />
-          </Field>
-          <Field label="Received date" width={160}>
-            <Input type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />
-          </Field>
-          <Field label="Season" width={120}>
-            <Input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="SS26" />
+          <Field label="PO number" width={180}>
+            <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="22906" required />
           </Field>
         </div>
+        <p className="text-[0.8rem] text-ink-soft mt-2 mb-0">
+          {formatPoNumber(poNumber) ? (
+            <>
+              This will be <strong className="text-ink font-mono">{formatPoNumber(poNumber)}</strong>.
+            </>
+          ) : (
+            "Saved as PO-<number>, the same as an uploaded file named <number>.xlsx."
+          )}
+        </p>
 
         <div className="mt-5 pt-4 border-t border-border">
           <span className="text-[0.7rem] font-semibold text-ink-faint uppercase tracking-wide">

@@ -1,29 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
-import { requireSession, requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
+import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { ItemPatchSchema, ITEM_TRANSITIONS, badRequest } from "@/lib/schemas";
 import Item from "@/models/Item";
 import { Types } from "mongoose";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { validateItemMeasurements, formatValidationIssues } from "@/lib/measurements/validate";
 import { isObjectId } from "@/lib/ids";
-
-// GET: single item detail.
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ itemId: string }> }
-) {
-  const gate = await requireSession();
-  if (isAuthFail(gate)) return gate.response;
-
-  const { itemId } = await params;
-  if (!isObjectId(itemId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  await connectDB();
-  const item = await Item.findById(itemId).populate("vendorId", "name").lean();
-  if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
-
-  return NextResponse.json({ item });
-}
+import { refreshCatalogFacets } from "@/lib/catalog/facets";
 
 // PATCH: move an item through the pilot lifecycle — review decision,
 // sample SKU assignment, or any other status/field update. One endpoint
@@ -155,5 +139,6 @@ export async function PATCH(
     }
     throw err;
   }
+  if (item.inCatalog) refreshCatalogFacets();
   return NextResponse.json({ item });
 }

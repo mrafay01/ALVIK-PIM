@@ -11,28 +11,6 @@ import {
 import { PO_STATUS_LABEL } from "@/lib/statusDisplay";
 import PurchaseOrder from "@/models/PurchaseOrder";
 
-// GET: single PO detail, with line-item and vendor references populated.
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ poId: string }> }
-) {
-  const gate = await requireRole(ROLE_SETS.quotes);
-  if (isAuthFail(gate)) return gate.response;
-
-  const { poId } = await params;
-  if (!Types.ObjectId.isValid(poId)) {
-    return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
-  }
-  await connectDB();
-  const po = await PurchaseOrder.findById(poId)
-    .populate("vendorId", "name")
-    .populate("lineItems.itemId", "itemNumber sampleSku vendorSku status")
-    .lean();
-  if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
-
-  return NextResponse.json({ purchaseOrder: po });
-}
-
 // PATCH: advance the PO through the 8-stage pipeline (§ blueprint), or
 // update the back-office checklist. Every status change is appended to
 // statusHistory so the pipeline stays auditable, matching how it worked

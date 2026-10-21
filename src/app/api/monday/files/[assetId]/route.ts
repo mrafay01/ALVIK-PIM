@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { mondayRequest, MondayApiError } from "@/lib/monday/client";
+import { connectDB } from "@/lib/db";
+import PurchaseOrder from "@/models/PurchaseOrder";
 
 interface AssetResult {
   assets: { id: string; name: string; public_url: string | null }[];
@@ -21,6 +23,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ ass
   // caller input to the upstream API.
   if (!/^\d+$/.test(assetId)) {
     return NextResponse.json({ error: "Invalid asset id" }, { status: 400 });
+  }
+
+  // Only files attached to a PO in this app — the API token can see far
+  // more of the Monday account than any one user should be able to open.
+  await connectDB();
+  if (!(await PurchaseOrder.exists({ "mondayFiles.assetId": assetId }))) {
+    return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 
   const query = `query ($ids: [ID!]!) { assets(ids: $ids) { id name public_url } }`;

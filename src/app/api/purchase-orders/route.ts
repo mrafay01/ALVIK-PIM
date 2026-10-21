@@ -7,32 +7,6 @@ import PurchaseOrder from "@/models/PurchaseOrder";
 import Item from "@/models/Item";
 import { normalizePoNumber } from "@/lib/purchase-orders/fromQuotation";
 
-// GET: list purchase orders, most recently updated first. Supports ?limit=50, ?skip=0.
-export async function GET(req: NextRequest) {
-  const gate = await requireRole(ROLE_SETS.quotes);
-  if (isAuthFail(gate)) return gate.response;
-
-  await connectDB();
-  const limitParam = req.nextUrl.searchParams.get("limit");
-  const skipParam = req.nextUrl.searchParams.get("skip");
-
-  // Pagination: limit between 1-500, default 50. skip >= 0, default 0.
-  const limit = Math.min(500, Math.max(1, parseInt(limitParam ?? "50", 10) || 50));
-  const skip = Math.max(0, parseInt(skipParam ?? "0", 10) || 0);
-
-  const pos = await PurchaseOrder.find({})
-    .select("poNumber vendorId status orderPurpose priority poTotal updatedAt")
-    .populate("vendorId", "name")
-    .sort({ updatedAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean();
-
-  const total = await PurchaseOrder.countDocuments({});
-
-  return NextResponse.json({ purchaseOrders: pos, pagination: { skip, limit, total } });
-}
-
 // POST: create a PO/PI for one or more items — the next step in the pilot
 // after an item has an approved review decision and a sample SKU. This is
 // part of the item intake flow (driven from /items/[itemId]), so item

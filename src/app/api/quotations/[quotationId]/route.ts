@@ -28,6 +28,9 @@ export async function PATCH(
   if (isAuthFail(gate)) return gate.response;
 
   const { quotationId } = await params;
+  if (!Types.ObjectId.isValid(quotationId)) {
+    return NextResponse.json({ error: "Quotation not found" }, { status: 404 });
+  }
   const parsed = QuotationPatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
 

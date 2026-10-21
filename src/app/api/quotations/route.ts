@@ -23,6 +23,7 @@ import {
   MAX_QUOTE_FILE_BYTES,
 } from "@/lib/purchase-orders/files";
 import { normalizePoNumber } from "@/lib/purchase-orders/fromQuotation";
+import { formatPoNumber, poNumberFromFileName } from "@/lib/purchase-orders/poNumber";
 import logger from "@/lib/logger";
 
 // Who may intake a quote — buyers/purchasing own the PO area this lives
@@ -37,27 +38,9 @@ const FileImportSchema = z.object({
   file: z.object({ ticket: z.string().max(2000), driveItemId: z.string().min(1).max(200) }),
   vendorId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
   vendorName: z.string().trim().max(200).optional(),
-  poNumber: z.string().trim().max(200).optional(),
-  season: z.string().trim().max(120).optional(),
   // Set on the resubmit after the "which sheet?" picker.
   sheetName: z.string().trim().max(100).optional(),
 });
-
-// GET: list quotations, newest first, for the quotes index page.
-export async function GET() {
-  const gate = await requireRole([...QUOTE_ROLES]);
-  if (isAuthFail(gate)) return gate.response;
-
-  await connectDB();
-  const quotations = await Quotation.find({})
-    .select("source sourceFileName poNumber vendorId status totalRows flaggedRows approvedRows rejectedRows createdAt")
-    .populate("vendorId", "name")
-    .sort({ createdAt: -1 })
-    .limit(200)
-    .lean();
-
-  return NextResponse.json({ quotations });
-}
 
 // POST: intake a quote, as JSON either way:
 //   { file: { ticket, driveItemId }, vendor..., sheetName? } -> a vendor
@@ -80,8 +63,6 @@ export async function POST(req: NextRequest) {
   let sourceFileName: string | null = null;
   let sourceFile: { driveItemId: string; name: string; size?: number; webUrl: string; folder: string } | null = null;
   let poNumber: string | null = null;
-  let receivedDate: Date | undefined;
-  let season: string | undefined;
   let staged: StagedQuoteRow[];
 
   if (body && typeof body === "object" && "file" in body) {
@@ -91,13 +72,14 @@ export async function POST(req: NextRequest) {
     if (d.vendorId) vendorId = d.vendorId;
     else if (d.vendorName) vendorName = d.vendorName;
     else return NextResponse.json({ error: "Choose a vendor for this quote" }, { status: 400 });
-    poNumber = d.poNumber || null;
-    season = d.season || undefined;
 
     const ticket = verifyUploadTicket(d.file.ticket, session.user?.id ?? "");
     if (!ticket) {
       return NextResponse.json({ error: "The upload has expired. Choose the file again." }, { status: 400 });
     }
+    // The PO is named after the file as the user uploaded it (the ticket's
+    // name, not SharePoint's "22906 1.xlsx" rename of a duplicate).
+    poNumber = poNumberFromFileName(ticket.n);
 
     let ctx;
     let buffer: ArrayBuffer;
@@ -130,11 +112,8 @@ export async function POST(req: NextRequest) {
     try {
       const parsedFile = await parseQuoteFileBuffer(buffer, sourceFile.name, { sheetName: d.sheetName });
       staged = parsedFile.rows;
-      // Fallback: if the user didn't type a PO number into the form,
-      // use what the parser pulled from the file's preamble (e.g.
-      // "CZ's PO: 20711 2025FFCZ052" -> "20711"). Explicit form input
-      // still wins — the preamble value is a convenience, not an
-      // override.
+      // Only when the file name gave nothing: the PO number printed in the
+      // file's preamble ("CZ's PO: 20711 2025FFCZ052" -> "20711").
       if (!poNumber && parsedFile.preamblePoNumber) poNumber = parsedFile.preamblePoNumber;
     } catch (err) {
       if (err instanceof SheetChoiceNeededError) {
@@ -165,9 +144,7 @@ export async function POST(req: NextRequest) {
     vendorId = parsed.data.vendorId;
     vendorName = parsed.data.vendorName;
     source = "manual";
-    poNumber = parsed.data.poNumber ?? null;
-    if (parsed.data.receivedDate) receivedDate = new Date(parsed.data.receivedDate);
-    season = parsed.data.season;
+    poNumber = formatPoNumber(parsed.data.poNumber);
     staged = parsed.data.items.map((it, i) => stageManualRow(i + 1, it.fields, it.custom ?? {}));
   }
 
@@ -221,10 +198,7 @@ export async function POST(req: NextRequest) {
     sourceFileName,
     sourceFile,
     poNumber,
-    receivedDate,
-    season,
     status: "needs_review",
-    importStatus: "needs_review",
     totalRows: staged.length,
     flaggedRows: flaggedCount,
     createdBy: userId,
@@ -234,7 +208,6 @@ export async function POST(req: NextRequest) {
     staged.map((r) => ({
       quotationId: quotation._id,
       rowNumber: r.rowNumber,
-      raw: r.raw,
       coerced: r.coerced,
       flags: r.flags,
       reviewStatus: "needs_review" as const,

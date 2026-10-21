@@ -18,7 +18,7 @@ import {
   itemMatchesTicket,
   MAX_QUOTE_FILE_BYTES,
 } from "@/lib/purchase-orders/files";
-import { normalizePoNumber } from "@/lib/purchase-orders/fromQuotation";
+import { poNumberFromFileName } from "@/lib/purchase-orders/poNumber";
 import logger from "@/lib/logger";
 
 // Quote files go from the browser straight to SharePoint, never through
@@ -34,12 +34,11 @@ const StartSchema = z.object({
     .max(200)
     .regex(/\.(xlsx|xls|csv)$/i, "Upload an .xlsx, .xls or .csv file"),
   size: z.number().int().positive(),
-  poNumber: z.string().trim().max(200).optional(),
 });
 
-// POST: start an upload. The file lands in "Purchase Orders/{PO number}"
-// when the user typed one, otherwise in "Purchase Orders/_Unassigned" until
-// the PO number is read from the file or assigned on commit.
+// POST: start an upload. The PO number is the file's name ("22906.xlsx" ->
+// "PO-22906"), so the file lands straight in "Purchase Orders/PO-22906".
+// Only a name with nothing before the extension goes to _Unassigned.
 export async function POST(req: NextRequest) {
   const gate = await requireRole(ROLE_SETS.quotes);
   if (isAuthFail(gate)) return gate.response;
@@ -48,7 +47,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = StartSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
-  const { fileName, size, poNumber } = parsed.data;
+  const { fileName, size } = parsed.data;
   if (size > MAX_QUOTE_FILE_BYTES) {
     return NextResponse.json(
       { error: `File too large. The limit is ${MAX_QUOTE_FILE_BYTES / 1024 / 1024} MB` },
@@ -56,9 +55,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const po = normalizePoNumber(poNumber);
-  const folder = po ? poFolder(po) : unassignedFolder();
   const name = safeSharePointName(fileName);
+  const po = poNumberFromFileName(name);
+  const folder = po ? poFolder(po) : unassignedFolder();
 
   try {
     const ctx = await getSharePointContext();

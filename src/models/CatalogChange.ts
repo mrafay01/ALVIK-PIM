@@ -24,7 +24,7 @@ export type CatalogChangeSource = (typeof CATALOG_CHANGE_SOURCES)[number];
 
 const CatalogChangeSchema = new Schema(
   {
-    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true, index: true },
+    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
 
     field: { type: String, required: true },
     fieldLabel: { type: String, required: true },

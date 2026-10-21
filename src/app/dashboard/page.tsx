@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import { getSession, roleCan, ROLE_SETS } from "@/lib/authz";
@@ -42,6 +43,88 @@ function count(facet: { n: number }[] | undefined): number {
   return facet?.[0]?.n ?? 0;
 }
 
+type Facet = { n: number }[];
+type DashboardCounts = {
+  po: Record<string, Facet | { _id: string; n: number }[]>;
+  it: Record<string, Facet | { _id: string; n: number }[]>;
+  quotesToReview: number;
+  pendingConflicts: number;
+};
+
+// The whole-collection counts behind the dashboard: two aggregations that
+// read every PO and every item, plus two counts. They're the same for every
+// user, so they're computed at most once per 30 seconds rather than on
+// every visit. (Dates in the result come back as strings from the cache.)
+const loadDashboardCounts = unstable_cache(
+  async (): Promise<DashboardCounts> => {
+    await connectDB();
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - WEEK);
+    const twelveWeeksAgo = new Date(now.getTime() - 12 * WEEK);
+    const unverifiedMatch = { inCatalog: { $ne: true }, intakeSource: { $in: ["manual_quote", "monday_pull"] } };
+
+    const [poFacets, itemFacets, quotesToReview, pendingConflicts] = await Promise.all([
+      PurchaseOrder.aggregate([
+        // Filter first so the projection only runs over open POs.
+        { $match: { $and: OPEN_PO_CONDITIONS } },
+        { $project: { status: 1, mondayStatusMapped: 1, requestDate: 1, imageStatus: 1 } },
+        {
+          $facet: {
+            byStatus: [{ $group: { _id: "$status", n: { $sum: 1 } } }],
+            total: [{ $count: "n" }],
+            overdue: [{ $match: { requestDate: { $lt: now } } }, { $count: "n" }],
+            sideLane: [{ $match: { mondayStatusMapped: false } }, { $count: "n" }],
+            withPhotographer: [
+              { $match: { imageStatus: { $in: ["sent_to_photo_guy", "submitted_on_fiverr"] } } },
+              { $count: "n" },
+            ],
+          },
+        },
+      ]),
+      Item.aggregate([
+        // Only the fields the facets read, not whole item documents.
+        {
+          $project: {
+            inCatalog: 1,
+            masterRecordComplete: 1,
+            approval: "$catalogApproval.status",
+            intakeSource: 1,
+            createdAt: 1,
+            main: "$imageCompleteness.main",
+            sides: "$imageCompleteness.sides",
+            models: "$imageCompleteness.models",
+            mediaCount: { $size: { $ifNull: ["$media", []] } },
+            broken: { $in: ["broken", { $ifNull: ["$media.linkStatus", []] }] },
+          },
+        },
+        {
+          $facet: {
+            catalog: [{ $match: { inCatalog: true } }, { $count: "n" }],
+            complete: [{ $match: { inCatalog: true, masterRecordComplete: true } }, { $count: "n" }],
+            pendingApproval: [{ $match: { inCatalog: true, approval: "pending" } }, { $count: "n" }],
+            catMain: [{ $match: { inCatalog: true, main: true } }, { $count: "n" }],
+            catSides: [{ $match: { inCatalog: true, sides: true } }, { $count: "n" }],
+            catModels: [{ $match: { inCatalog: true, models: true } }, { $count: "n" }],
+            catNoImages: [{ $match: { inCatalog: true, mediaCount: 0 } }, { $count: "n" }],
+            broken: [{ $match: { broken: true } }, { $count: "n" }],
+            unverified: [{ $match: unverifiedMatch }, { $count: "n" }],
+            unverifiedThisWeek: [{ $match: { ...unverifiedMatch, createdAt: { $gte: weekAgo } } }, { $count: "n" }],
+            weekly: [
+              { $match: { createdAt: { $gte: twelveWeeksAgo } } },
+              { $group: { _id: { $dateTrunc: { date: "$createdAt", unit: "week", timezone: "UTC" } }, n: { $sum: 1 } } },
+            ],
+          },
+        },
+      ]),
+      Quotation.countDocuments({ status: "needs_review" }),
+      CatalogConflict.countDocuments({ status: "pending" }),
+    ]);
+    return { po: poFacets[0] ?? {}, it: itemFacets[0] ?? {}, quotesToReview, pendingConflicts };
+  },
+  ["dashboard-counts"],
+  { revalidate: 30 }
+);
+
 // The overview: a few headline numbers, the open PO pipeline, what's
 // waiting on someone, catalog and image health, and recent activity. Every
 // number links to the page that owns it. "Open" POs use the same
@@ -54,65 +137,11 @@ export default async function DashboardPage() {
   const firstName = (session?.user?.name ?? "").split(" ")[0];
 
   const now = new Date();
-  const weekAgo = new Date(now.getTime() - WEEK);
   const twelveWeeksAgo = new Date(now.getTime() - 12 * WEEK);
   const open = { $and: OPEN_PO_CONDITIONS };
-  const unverifiedMatch = { inCatalog: { $ne: true }, intakeSource: { $in: ["manual_quote", "monday_pull"] } };
 
-  const [poFacets, itemFacets, quotesToReview, pendingConflicts, recentPos, recentItems, flaggedRows] = await Promise.all([
-    PurchaseOrder.aggregate([
-      { $project: { status: 1, mondayStatusText: 1, mondayStatusMapped: 1, requestDate: 1, imageStatus: 1 } },
-      { $match: open },
-      {
-        $facet: {
-          byStatus: [{ $group: { _id: "$status", n: { $sum: 1 } } }],
-          total: [{ $count: "n" }],
-          overdue: [{ $match: { requestDate: { $lt: now } } }, { $count: "n" }],
-          sideLane: [{ $match: { mondayStatusMapped: false } }, { $count: "n" }],
-          withPhotographer: [
-            { $match: { imageStatus: { $in: ["sent_to_photo_guy", "submitted_on_fiverr"] } } },
-            { $count: "n" },
-          ],
-        },
-      },
-    ]),
-    Item.aggregate([
-      // Only the fields the facets read, not whole item documents.
-      {
-        $project: {
-          inCatalog: 1,
-          masterRecordComplete: 1,
-          approval: "$catalogApproval.status",
-          intakeSource: 1,
-          createdAt: 1,
-          main: "$imageCompleteness.main",
-          sides: "$imageCompleteness.sides",
-          models: "$imageCompleteness.models",
-          mediaCount: { $size: { $ifNull: ["$media", []] } },
-          broken: { $in: ["broken", { $ifNull: ["$media.linkStatus", []] }] },
-        },
-      },
-      {
-        $facet: {
-          catalog: [{ $match: { inCatalog: true } }, { $count: "n" }],
-          complete: [{ $match: { inCatalog: true, masterRecordComplete: true } }, { $count: "n" }],
-          pendingApproval: [{ $match: { inCatalog: true, approval: "pending" } }, { $count: "n" }],
-          catMain: [{ $match: { inCatalog: true, main: true } }, { $count: "n" }],
-          catSides: [{ $match: { inCatalog: true, sides: true } }, { $count: "n" }],
-          catModels: [{ $match: { inCatalog: true, models: true } }, { $count: "n" }],
-          catNoImages: [{ $match: { inCatalog: true, mediaCount: 0 } }, { $count: "n" }],
-          broken: [{ $match: { broken: true } }, { $count: "n" }],
-          unverified: [{ $match: unverifiedMatch }, { $count: "n" }],
-          unverifiedThisWeek: [{ $match: { ...unverifiedMatch, createdAt: { $gte: weekAgo } } }, { $count: "n" }],
-          weekly: [
-            { $match: { createdAt: { $gte: twelveWeeksAgo } } },
-            { $group: { _id: { $dateTrunc: { date: "$createdAt", unit: "week", timezone: "UTC" } }, n: { $sum: 1 } } },
-          ],
-        },
-      },
-    ]),
-    Quotation.countDocuments({ status: "needs_review" }),
-    CatalogConflict.countDocuments({ status: "pending" }),
+  const [counts, recentPos, recentItems, flaggedRows] = await Promise.all([
+    loadDashboardCounts(),
     PurchaseOrder.find(open)
       .select("poNumber status mondayStatusText vendorId updatedAt")
       .populate("vendorId", "name")
@@ -126,9 +155,7 @@ export default async function DashboardPage() {
       .lean(),
     role === "administrator" ? ImportBatchRow.countDocuments(ON_FLAGGED_PAGE) : Promise.resolve(0),
   ]);
-
-  const po = poFacets[0] ?? {};
-  const it = itemFacets[0] ?? {};
+  const { po, it, quotesToReview, pendingConflicts } = counts;
   const statusCount = new Map(
     ((po.byStatus as { _id: string; n: number }[] | undefined) ?? []).map((r) => [r._id, r.n])
   );

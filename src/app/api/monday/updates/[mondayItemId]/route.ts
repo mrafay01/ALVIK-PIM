@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { mondayRequest, MondayApiError } from "@/lib/monday/client";
+import { connectDB } from "@/lib/db";
+import PurchaseOrder from "@/models/PurchaseOrder";
 
 interface UpdatesResult {
   items: {
@@ -25,6 +27,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ mon
 
   if (!/^\d+$/.test(mondayItemId)) {
     return NextResponse.json({ error: "Invalid item id" }, { status: 400 });
+  }
+  // Only the thread of a PO in this app, not any board item the token sees.
+  await connectDB();
+  if (!(await PurchaseOrder.exists({ mondayItemId }))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   const query = `
     query ($ids: [ID!]!) {

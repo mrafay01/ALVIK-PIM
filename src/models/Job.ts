@@ -31,13 +31,13 @@ export type JobKind = (typeof JOB_KINDS)[number];
 
 const JobSchema = new Schema(
   {
-    kind: { type: String, enum: JOB_KINDS, required: true, index: true },
-    status: { type: String, enum: JOB_STATUSES, required: true, default: "pending", index: true },
+    kind: { type: String, enum: JOB_KINDS, required: true },
+    status: { type: String, enum: JOB_STATUSES, required: true, default: "pending" },
     // Opaque per-kind payload — each worker knows how to read its own shape.
     payload: { type: Schema.Types.Mixed, default: {} },
     attempts: { type: Number, default: 0 },
     maxAttempts: { type: Number, default: 3 },
-    runAt: { type: Date, default: () => new Date(), index: true },
+    runAt: { type: Date, default: () => new Date() },
     // Set while a worker holds the row. Workers reclaim stale leases
     // (older than LEASE_MS) by matching leaseExpiresAt < now, so a
     // crashed worker's job isn't lost.

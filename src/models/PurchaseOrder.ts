@@ -80,7 +80,7 @@ const BackOfficeChecklistSchema = new Schema(
 
 const PurchaseOrderSchema = new Schema(
   {
-    poNumber: { type: String, required: true, unique: true, index: true },
+    poNumber: { type: String, required: true, unique: true },
     vendorId: { type: Schema.Types.ObjectId, ref: "Vendor", required: true },
 
     orderPurpose: {
@@ -103,7 +103,6 @@ const PurchaseOrderSchema = new Schema(
     remainingBalance: Number,
     prepaymentDeposit: Number,
 
-    shipmentId: { type: Schema.Types.ObjectId, ref: "Shipment", default: null },
     trackingNumber: { type: String, default: null },
 
     joelShipConfirmed: { type: Boolean, default: false },

@@ -18,9 +18,11 @@ const FieldFlagSchema = new Schema(
 
 const QuotationRowSchema = new Schema(
   {
-    quotationId: { type: Schema.Types.ObjectId, ref: "Quotation", required: true, index: true },
+    // Indexed through the compound index below (quotationId leads it).
+    quotationId: { type: Schema.Types.ObjectId, ref: "Quotation", required: true },
     rowNumber: { type: Number, required: true }, // 1-based
-    raw: { type: Schema.Types.Mixed, required: true }, // original row, keyed by column header
+    // No copy of the original row is kept: nothing reads it, flags carry
+    // their rawValue, and the uploaded PI itself is filed in SharePoint.
     coerced: { type: Schema.Types.Mixed, default: {} }, // parsed values, dot-path keyed to Item
     flags: [FieldFlagSchema],
     reviewStatus: {

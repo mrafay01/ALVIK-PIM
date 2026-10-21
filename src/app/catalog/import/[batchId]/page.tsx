@@ -56,7 +56,7 @@ export default async function BatchReviewPage({
 
   return (
     <AppShell
-      activeHref="/catalog"
+      activeHref="/catalog/import"
       backHref="/catalog/import"
       backLabel="Import Master File"
       eyebrow="Master File import"

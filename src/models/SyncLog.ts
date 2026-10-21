@@ -24,6 +24,11 @@ const SyncLogSchema = new Schema(
   { timestamps: true }
 );
 
+// Nothing in the app reads these back; they're a debugging trail for
+// Monday pushes/pulls and exports. Keep 90 days so the collection can't
+// grow forever.
+SyncLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
+
 export type SyncLogDoc = InferSchemaType<typeof SyncLogSchema>;
 export default (models.SyncLog as Model<SyncLogDoc>) ||
   model<SyncLogDoc>("SyncLog", SyncLogSchema);

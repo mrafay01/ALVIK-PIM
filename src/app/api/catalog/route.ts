@@ -8,6 +8,7 @@ import { splitSku } from "@/lib/catalog/sku";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { validateItemMeasurements, formatValidationIssues } from "@/lib/measurements/validate";
 import type { ItemMeasurements } from "@/lib/measurements/types";
+import { refreshCatalogFacets } from "@/lib/catalog/facets";
 
 const CATALOG_ROLES = ["marketplace_listing"] as const;
 
@@ -281,5 +282,6 @@ export async function POST(req: NextRequest) {
     }
     throw err;
   }
+  refreshCatalogFacets();
   return NextResponse.json({ baseItemId: inserted[0]._id, created: inserted.length }, { status: 201 });
 }

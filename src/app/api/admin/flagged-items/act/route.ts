@@ -7,6 +7,7 @@ import { badRequest } from "@/lib/schemas";
 import ImportBatchRow from "@/models/ImportBatchRow";
 import { commitImportRows, excludeImportRows, updateBatchStatus } from "@/lib/import/commitRows";
 import { flaggedFilter } from "../filter";
+import { refreshCatalogFacets } from "@/lib/catalog/facets";
 
 export const maxDuration = 60;
 
@@ -53,5 +54,6 @@ export async function POST(req: NextRequest) {
     { $set: { reviewStatus: "approved", reviewedBy: userId, reviewedAt: new Date() } }
   );
   const result = await commitImportRows({ _id: { $in: ids } });
+  refreshCatalogFacets();
   return NextResponse.json({ affected: ids.length, ...result });
 }

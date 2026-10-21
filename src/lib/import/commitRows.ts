@@ -57,7 +57,7 @@ export type CommitResult = {
 // can span several batches. Rows already committed are skipped, so this is
 // safe to re-run. Each touched batch's counters and status are refreshed.
 export async function commitImportRows(filter: Record<string, unknown>): Promise<CommitResult> {
-  const toCommit = await ImportBatchRow.find({ ...filter, committedItemId: null }).lean();
+  const toCommit = await ImportBatchRow.find({ ...filter, committedItemId: null }).select("batchId coerced").lean();
 
   const errors: { rowId: string; message: string }[] = [];
   const validRows = toCommit.filter((row) => {

@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail } from "@/lib/authz";
 import Item from "@/models/Item";
 import { isObjectId } from "@/lib/ids";
+import { refreshCatalogFacets } from "@/lib/catalog/facets";
 
 // POST: an admin approves a quotation-origin item that was submitted to the
 // catalog. Admin-only (the empty allow-list means "administrator passes,
@@ -36,5 +37,6 @@ export async function POST(
   if (gate.session.user?.id) item.lastEditedBy = new Types.ObjectId(gate.session.user.id);
   await item.save();
 
+  refreshCatalogFacets();
   return NextResponse.json({ approved: true });
 }

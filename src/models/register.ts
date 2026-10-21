@@ -15,10 +15,7 @@ import Item from "./Item";
 import Quotation from "./Quotation";
 import QuotationRow from "./QuotationRow";
 import PurchaseOrder from "./PurchaseOrder";
-import Shipment from "./Shipment";
-import ReceivingLog from "./ReceivingLog";
 import SyncLog from "./SyncLog";
-import PlatformTemplate from "./PlatformTemplate";
 import ImportBatch from "./ImportBatch";
 import ImportBatchRow from "./ImportBatchRow";
 import MarketplaceListing from "./MarketplaceListing";
@@ -37,10 +34,7 @@ export const MODELS = {
   Quotation,
   QuotationRow,
   PurchaseOrder,
-  Shipment,
-  ReceivingLog,
   SyncLog,
-  PlatformTemplate,
   ImportBatch,
   ImportBatchRow,
   MarketplaceListing,

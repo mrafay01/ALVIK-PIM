@@ -6,20 +6,6 @@ import ImportBatchRow from "@/models/ImportBatchRow";
 import Item from "@/models/Item";
 import { parseMasterFileBuffer } from "@/lib/import/parseMasterFile";
 
-// GET: list all import batches (most recent first).
-export async function GET() {
-  const gate = await requireRole(ROLE_SETS.adminOnly);
-  if (isAuthFail(gate)) return gate.response;
-
-  await connectDB();
-  const batches = await ImportBatch.find({})
-    .select("sourceFileName uploadedAt status totalRows flaggedRows approvedRows rejectedRows")
-    .sort({ uploadedAt: -1 })
-    .lean();
-
-  return NextResponse.json({ batches });
-}
-
 // POST: upload a Master File .xlsx, parse it, and stage every row for review.
 // Nothing is written to `items` here — see the batch commit route for that.
 //
@@ -128,7 +114,6 @@ export async function POST(req: NextRequest) {
     return {
       batchId: batch._id,
       rowNumber: r.rowNumber,
-      raw: r.raw,
       coerced: r.coerced,
       flags,
       reviewStatus: "needs_review" as const,

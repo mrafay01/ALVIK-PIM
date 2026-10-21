@@ -1,61 +1,8 @@
 import {
-  ItemCreateSchema,
   ItemSpecsSchema,
   ITEM_TRANSITIONS,
   CatalogItemCreateSchema,
 } from "@/lib/schemas";
-
-describe("ItemCreateSchema", () => {
-  it("should accept valid item creation", () => {
-    const valid = {
-      vendorId: "507f1f77bcf86cd799439011",
-      vendorSku: "TEST-SKU-123",
-      category: "Rings",
-      costPerUnit: 50.0,
-      msrp: 150.0,
-      notes: "Sample notes",
-    };
-    const result = ItemCreateSchema.safeParse(valid);
-    expect(result.success).toBe(true);
-  });
-
-  it("should reject invalid ObjectId", () => {
-    const invalid = {
-      vendorId: "not-a-valid-id",
-      vendorSku: "TEST-SKU-123",
-    };
-    const result = ItemCreateSchema.safeParse(invalid);
-    expect(result.success).toBe(false);
-  });
-
-  it("should reject empty vendorSku", () => {
-    const invalid = {
-      vendorId: "507f1f77bcf86cd799439011",
-      vendorSku: "",
-    };
-    const result = ItemCreateSchema.safeParse(invalid);
-    expect(result.success).toBe(false);
-  });
-
-  it("should reject negative money values", () => {
-    const invalid = {
-      vendorId: "507f1f77bcf86cd799439011",
-      vendorSku: "TEST-SKU",
-      costPerUnit: -10.0,
-    };
-    const result = ItemCreateSchema.safeParse(invalid);
-    expect(result.success).toBe(false);
-  });
-
-  it("should allow optional fields to be omitted", () => {
-    const minimal = {
-      vendorId: "507f1f77bcf86cd799439011",
-      vendorSku: "TEST-SKU-123",
-    };
-    const result = ItemCreateSchema.safeParse(minimal);
-    expect(result.success).toBe(true);
-  });
-});
 
 describe("ItemSpecsSchema", () => {
   it("should accept valid specs", () => {

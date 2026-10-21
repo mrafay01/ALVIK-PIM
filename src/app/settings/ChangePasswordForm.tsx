@@ -31,8 +31,8 @@ export function ChangePasswordForm() {
     setError(null);
     setSuccess(false);
 
-    if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters.");
+    if (newPassword.length < 10 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      setError("New password needs at least 10 characters, including a letter and a number.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -147,9 +147,9 @@ export function ChangePasswordForm() {
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           autoComplete="new-password"
-          minLength={8}
+          minLength={10}
           required
-          placeholder="At least 8 characters"
+          placeholder="At least 10 characters, with a letter and a number"
         />
       </Field>
       <Field label="Confirm new password">
@@ -158,7 +158,7 @@ export function ChangePasswordForm() {
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           autoComplete="new-password"
-          minLength={8}
+          minLength={10}
           required
           placeholder="Re-enter new password"
         />

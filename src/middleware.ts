@@ -94,16 +94,20 @@ function tooLargeResponse(limit: number) {
   );
 }
 
+function hasSessionCookie(req: Request): boolean {
+  return (req.headers.get("cookie") ?? "").includes("next-auth.session-token");
+}
+
 function isSameOrigin(req: Request): boolean {
   const origin = req.headers.get("origin");
   if (!origin) {
     // Non-browser clients (curl, server-to-server) don't send Origin.
-    // Fall back to Referer; if neither is present, treat it as same-origin
-    // only for cookie-less requests — a request with our auth cookie that
-    // omits both is nearly always a browser bug or an attacker stripping
-    // headers, so this is the safe deny path handled by the caller.
+    // Fall back to Referer. With neither, allow only a cookie-less request
+    // (it can't act as anyone). Browsers always send Origin on a mutating
+    // fetch, so a request carrying our session cookie without either
+    // header has had them stripped and is refused.
     const referer = req.headers.get("referer");
-    if (!referer) return true;
+    if (!referer) return !hasSessionCookie(req);
     try {
       const refUrl = new URL(referer);
       const host = req.headers.get("host") ?? "";
@@ -150,6 +154,14 @@ export default withAuth(
     // but rejecting an oversized header here saves the request from ever
     // being read into a handler.
     if (isApi && MUTATING_METHODS.has(req.method)) {
+      // A body sent without Content-Length (chunked) would skip the cap
+      // below, and handlers read bodies with req.json() / formData(), so
+      // such requests are refused outright. Browsers always send the
+      // header for the bodies this app posts. (Node enforces that the
+      // body matches a declared Content-Length, so the header can't lie.)
+      if (!req.headers.has("content-length") && req.headers.has("transfer-encoding")) {
+        return NextResponse.json({ error: "Content-Length required" }, { status: 411 });
+      }
       const contentLength = Number(req.headers.get("content-length") ?? "");
       if (Number.isFinite(contentLength) && contentLength > 0) {
         const contentType = (req.headers.get("content-type") ?? "").toLowerCase();

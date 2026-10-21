@@ -12,6 +12,7 @@ import { splitSku } from "@/lib/catalog/sku";
 import { attachQuotationToPurchaseOrder } from "@/lib/purchase-orders/fromQuotation";
 import logger from "@/lib/logger";
 import { isObjectId } from "@/lib/ids";
+import { refreshCatalogFacets } from "@/lib/catalog/facets";
 
 const QUOTE_ROLES = ROLE_SETS.quotes;
 const COMMIT_LOCK_TTL_MS = 5 * 60 * 1000;
@@ -83,11 +84,13 @@ export async function POST(
   }
 
   try {
-    return await commitQuotation(quotation, quotationId);
+    const res = await commitQuotation(quotation, quotationId);
+    refreshCatalogFacets();
+    return res;
   } finally {
     await Quotation.updateOne(
       { _id: quotationId, commitLockedAt: now },
-      { $set: { commitLockedAt: null } },
+      { $unset: { commitLockedAt: "" } },
       { timestamps: false }
     );
   }
@@ -102,6 +105,7 @@ async function commitQuotation(
     reviewStatus: "approved",
     committedItemId: null,
   })
+    .select("rowNumber coerced")
     .sort({ rowNumber: 1 })
     .lean();
 
@@ -216,7 +220,7 @@ async function commitQuotation(
         vendorId: quotation.vendorId,
         pricingHistory: [] as Record<string, unknown>[],
         intakeSource: "manual_quote",
-        sourcePoNumber: quotation.poNumber ?? null,
+        ...(quotation.poNumber ? { sourcePoNumber: quotation.poNumber } : {}),
       };
       if (key.startsWith("cz:")) {
         const num = key.slice(3);
@@ -337,7 +341,7 @@ async function commitQuotation(
   if (remaining === 0) {
     await Quotation.updateOne(
       { _id: quotationId },
-      { $set: { status: "committed", importStatus: "imported" } }
+      { $set: { status: "committed" } }
     );
   }
 

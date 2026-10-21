@@ -83,7 +83,7 @@ export default async function FlaggedItemsPage({
   });
 
   return (
-    <AppShell activeHref="/catalog" backHref="/catalog" backLabel="Catalog" eyebrow="Catalog" title="Flagged Items">
+    <AppShell activeHref="/catalog/flagged" backHref="/catalog" backLabel="Catalog" eyebrow="Catalog" title="Flagged Items">
       <p className="text-ink-soft max-w-[72ch] mb-5 text-[0.92rem]">
         Master File rows sent here from an import&apos;s review to be fixed. Filter by issue, fix rows one at a time or
         give every row with the same issue one value, then commit the fixed rows to the catalog. Nothing here is in the

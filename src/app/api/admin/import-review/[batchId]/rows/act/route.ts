@@ -9,6 +9,7 @@ import ImportBatchRow from "@/models/ImportBatchRow";
 import { isObjectId } from "@/lib/ids";
 import { commitImportRows, excludeImportRows, updateBatchStatus } from "@/lib/import/commitRows";
 import { onReviewPage, scopeFilter, searchFilter } from "@/lib/import/reviewQuery";
+import { refreshCatalogFacets } from "@/lib/catalog/facets";
 
 export const maxDuration = 60;
 
@@ -59,5 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ bat
     { _id: { $in: ids } },
     { $set: { reviewStatus: "approved", reviewedBy: userId, reviewedAt: new Date() } }
   );
-  return NextResponse.json(await commitImportRows({ _id: { $in: ids } }));
+  const result = await commitImportRows({ _id: { $in: ids } });
+  refreshCatalogFacets();
+  return NextResponse.json(result);
 }

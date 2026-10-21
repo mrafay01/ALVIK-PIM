@@ -44,7 +44,7 @@ export default async function QuotesListPage({
 
   return (
     <AppShell
-      activeHref="/purchase-orders"
+      activeHref="/purchase-orders/quotes"
       backHref="/purchase-orders"
       backLabel="Purchase Orders"
       eyebrow="Vendor pipeline"

@@ -6,7 +6,7 @@ import { Schema, model, models, type InferSchemaType, type Model } from "mongoos
 // and the files on disk.
 const MigrationSchema = new Schema(
   {
-    name: { type: String, required: true, unique: true, index: true },
+    name: { type: String, required: true, unique: true },
     appliedAt: { type: Date, default: Date.now },
     // Short free-text describing what the migration did — for the admin
     // audit view only; the authoritative source is the file itself.

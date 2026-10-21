@@ -9,7 +9,7 @@ export default async function NewCatalogItemPage() {
 
   return (
     <AppShell
-      activeHref="/catalog"
+      activeHref="/catalog/new"
       backHref="/catalog"
       backLabel="Catalog"
       eyebrow="Finalized database"

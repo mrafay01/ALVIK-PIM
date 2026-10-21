@@ -31,8 +31,9 @@ export type ConflictStatus = (typeof CONFLICT_STATUSES)[number];
 
 const CatalogConflictSchema = new Schema(
   {
-    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true, index: true },
-    quotationId: { type: Schema.Types.ObjectId, ref: "Quotation", required: true, index: true },
+    // itemId is indexed through { itemId, status } below.
+    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
+    quotationId: { type: Schema.Types.ObjectId, ref: "Quotation", required: true },
     quotationRowId: { type: Schema.Types.ObjectId, ref: "QuotationRow", required: true },
 
     // Dot-path on the Item document (e.g. "specs.weight.totalG") —
@@ -56,7 +57,6 @@ const CatalogConflictSchema = new Schema(
       enum: CONFLICT_STATUSES,
       required: true,
       default: "pending",
-      index: true,
     },
     // Only set when status === "custom" — the value the reviewer typed
     // in place of either side.

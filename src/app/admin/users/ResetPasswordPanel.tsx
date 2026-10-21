@@ -24,8 +24,8 @@ export function ResetPasswordPanel({ targetUserId, onClose }: { targetUserId: st
     e.preventDefault();
     setError(null);
 
-    if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters.");
+    if (newPassword.length < 10 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      setError("New password needs at least 10 characters, including a letter and a number.");
       return;
     }
 
@@ -130,7 +130,7 @@ export function ResetPasswordPanel({ targetUserId, onClose }: { targetUserId: st
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             placeholder="New password"
-            minLength={8}
+            minLength={10}
             className="!py-1.5 !px-2 text-[0.8rem] w-[160px]"
             required
           />
