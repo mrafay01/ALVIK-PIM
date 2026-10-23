@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { CheckCircle2, Circle, Link2Off, Search, Upload, ShieldCheck, X, ImagePlus } from "lucide-react";
 import { Card } from "@/components/ui/Card";
@@ -48,7 +48,26 @@ function fileName(m: ItemMediaEntry): string {
 // SharePoint from the popover list.
 function KindCell({ media, kind }: { media: ItemMediaEntry[]; kind: Kind }) {
   const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
   const list = media.filter((m) => m.subfolder === kind);
+
+  // Close on a click anywhere outside this cell (button + popover), or Esc.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   const broken = list.filter((m) => m.linkStatus === "broken").length;
   const ok = list.length - broken;
   if (list.length === 0) {
@@ -59,10 +78,11 @@ function KindCell({ media, kind }: { media: ItemMediaEntry[]; kind: Kind }) {
     );
   }
   return (
-    <div className="relative">
+    <div ref={boxRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
         className={`inline-flex items-center gap-1.5 text-[0.8rem] font-semibold px-2 py-1 rounded-sm border-0 cursor-pointer ${
           broken > 0 ? "bg-critical-bg text-critical" : "bg-good-bg text-good"
         }`}
