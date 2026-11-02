@@ -1,15 +1,21 @@
 import type { ImageSubfolder } from "@/lib/sharepoint/client";
+import type { ImageSubfolder as ImageKindEnum } from "@/lib/enums";
 
-// Item images in SharePoint: Images/{itemNumber or sampleSku}/{Main|Sides|Models}/
-// named {key}.jpg (main), {key}-S{n}.jpg (sides), {key}-M{n}.jpg (models).
+// Item images in SharePoint: Images/{itemNumber or sampleSku}/{Main|Sides|Models|Lifestyle}/
+// named {key}.jpg (main), {key}-S{n}.jpg (sides), {key}-M{n}.jpg (models),
+// {key}-LS{n}.jpg (lifestyle, optional).
 
-export type ImageKind = "main" | "sides" | "models";
+export type ImageKind = ImageKindEnum;
 
 export const SUBFOLDER_FOR: Record<ImageKind, ImageSubfolder> = {
   main: "Main",
   sides: "Sides",
   models: "Models",
+  lifestyle: "Lifestyle",
 };
+
+// What a numbered image's name carries after "{key}-".
+const NUMBER_PREFIX: Record<Exclude<ImageKind, "main">, string> = { sides: "S", models: "M", lifestyle: "LS" };
 
 export const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".tif", ".tiff", ".heic"];
 export const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
@@ -36,7 +42,7 @@ export function mediaFileName(m: MediaLike): string {
 // number after the ones already on the item.
 export function conventionalImageName(key: string, kind: ImageKind, ext: string, media: MediaLike[]): string {
   if (kind === "main") return `${key}${ext}`;
-  const letter = kind === "sides" ? "S" : "M";
+  const letter = NUMBER_PREFIX[kind];
   const rx = new RegExp(`-${letter}(\\d+)$`, "i");
   let max = 0;
   for (const m of media) {
@@ -49,7 +55,7 @@ export function conventionalImageName(key: string, kind: ImageKind, ext: string,
 }
 
 // A subfolder counts as present when it has at least one image that isn't
-// known to be broken.
+// known to be broken. Lifestyle images are optional, so they're not part of it.
 export function imageCompletenessOf(media: MediaLike[]) {
   const live = media.filter((m) => m.linkStatus !== "broken");
   return {

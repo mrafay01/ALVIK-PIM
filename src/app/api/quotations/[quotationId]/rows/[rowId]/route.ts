@@ -6,6 +6,7 @@ import { QuotationRowPatchSchema, badRequest } from "@/lib/schemas";
 import Quotation from "@/models/Quotation";
 import QuotationRow from "@/models/QuotationRow";
 import { isObjectId } from "@/lib/ids";
+import { coerceQuoteValue, type FieldFlag } from "@/lib/quote-import/parseQuoteFile";
 
 const QUOTE_ROLES = ROLE_SETS.quotes;
 
@@ -41,8 +42,15 @@ export async function PATCH(
     );
   }
 
+  // Only standard quote fields and "custom.<label>" entries can be edited.
+  const unknownKey = Object.keys(coercedOverrides ?? {}).find(
+    (k) => !(k.startsWith("custom.") && k.length > "custom.".length) && !coerceQuoteValue(k, "")
+  );
+  if (unknownKey) return NextResponse.json({ error: `"${unknownKey}" isn't a field you can edit` }, { status: 400 });
+
   if (coercedOverrides) {
     const base = { ...(row.coerced ?? {}) } as Record<string, unknown>;
+    const newFlags: FieldFlag[] = [];
     // Keys of the form "custom.<label>" edit one entry of the free-form
     // __custom map without clobbering the rest of it; everything else is a
     // top-level coerced field.
@@ -52,7 +60,12 @@ export async function PATCH(
         const label = k.slice("custom.".length);
         if (label) customPatch[label] = v == null ? "" : String(v);
       } else {
-        base[k] = v;
+        // Same rules as the import: an invalid value isn't stored and the
+        // field stays flagged with the reason.
+        const c = coerceQuoteValue(k, v)!;
+        if (c.value === null) delete base[k];
+        else base[k] = c.value;
+        newFlags.push(...c.flags);
       }
     }
     if (Object.keys(customPatch).length > 0) {
@@ -69,13 +82,21 @@ export async function PATCH(
       else delete base.__custom;
     }
     row.coerced = base;
-    // A corrected value clears the flag that was pointing at it.
-    if (row.flags.length > 0) {
-      const fixed = new Set(Object.keys(coercedOverrides));
-      for (let i = row.flags.length - 1; i >= 0; i--) {
-        if (fixed.has(row.flags[i].field)) row.flags.splice(i, 1);
-      }
+    // An edited field's old flag is replaced by the new check's result: a
+    // valid value clears it, an invalid one stays flagged with the reason.
+    const edited = new Set(Object.keys(coercedOverrides));
+    for (let i = row.flags.length - 1; i >= 0; i--) {
+      if (edited.has(row.flags[i].field)) row.flags.splice(i, 1);
     }
+    for (const f of newFlags) row.flags.push(f);
+    // The row needs a CZ item number or a vendor item# to commit: either one
+    // clears that flag, losing both raises it again.
+    const NO_ID = "No CZ item number and no vendor item#; the row needs one of them to be committed";
+    const hasId = !!base.itemNumber || !!base.vendorSku;
+    for (let i = row.flags.length - 1; i >= 0; i--) {
+      if (row.flags[i].message === NO_ID) row.flags.splice(i, 1);
+    }
+    if (!hasId) row.flags.push({ field: "itemNumber", message: NO_ID, rawValue: null });
   }
   if (reviewStatus) {
     row.reviewStatus = reviewStatus;

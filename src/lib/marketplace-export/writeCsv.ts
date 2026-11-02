@@ -4,8 +4,21 @@
 // platforms, so a second CSV dependency isn't worth adding for one column
 // set (Target).
 
+// Text that Excel would run as a formula when the file is opened
+// ("=HYPERLINK(...)", "+cmd", "@SUM", "-2+3"). Prefixed with an apostrophe,
+// the standard defence against CSV formula injection. Plain numbers, including
+// negative ones like "-5" or "-1.25", are left alone.
+const FORMULA_START = /^[=+@\t\r]/;
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
+
+export function neutralizeFormula(str: string): string {
+  if (FORMULA_START.test(str)) return `'${str}`;
+  if (str.startsWith("-") && !PLAIN_NUMBER.test(str)) return `'${str}`;
+  return str;
+}
+
 function escapeCsvCell(value: string | number): string {
-  const str = String(value);
+  const str = typeof value === "number" ? String(value) : neutralizeFormula(String(value));
   if (/[",\r\n]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }

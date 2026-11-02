@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
+import type { ImageSubfolder } from "@/lib/enums";
 import { useRouter, usePathname } from "next/navigation";
 import { CheckCircle2, Circle, Link2Off, Search, Upload, ShieldCheck, X, ImagePlus } from "lucide-react";
 import { Card } from "@/components/ui/Card";
@@ -21,7 +22,7 @@ export type ImageRow = {
 };
 
 type State = { scope: string; status: string; q: string; sort: string };
-type Kind = "main" | "sides" | "models";
+type Kind = ImageSubfolder;
 
 const STATUS_TABS: { value: string; label: string }[] = [
   { value: "all", label: "All" },
@@ -31,7 +32,10 @@ const STATUS_TABS: { value: string; label: string }[] = [
   { value: "complete", label: "Complete" },
 ];
 
-const KIND_LABEL: Record<Kind, string> = { main: "Main", sides: "Sides", models: "Models" };
+const KIND_LABEL: Record<Kind, string> = { main: "Main", sides: "Sides", models: "Models", lifestyle: "Lifestyle" };
+// Table columns, in folder order. Lifestyle is optional and doesn't count
+// towards "complete".
+const KIND_COLUMNS: Kind[] = ["main", "sides", "models", "lifestyle"];
 
 function fileName(m: ItemMediaEntry): string {
   if (m.name) return m.name;
@@ -153,8 +157,13 @@ function UploadPanel({ row, onDone }: { row: ImageRow; onDone: () => void }) {
     if (errs.length < list.length) onDone();
   }
 
-  const example =
-    kind === "main" ? `${row.sku}.jpg` : kind === "sides" ? `${row.sku}-S1.jpg, -S2…` : kind === "models" ? `${row.sku}-M1.jpg, -M2…` : "";
+  const EXAMPLES: Record<Kind, string> = {
+    main: `${row.sku}.jpg`,
+    sides: `${row.sku}-S1.jpg, -S2…`,
+    models: `${row.sku}-M1.jpg, -M2…`,
+    lifestyle: `${row.sku}-LS1.jpg, -LS2…`,
+  };
+  const example = kind === "auto" ? "" : EXAMPLES[kind];
 
   return (
     <div className="flex flex-col gap-2.5 px-4 py-3.5 bg-surface-sunken border-t border-border">
@@ -169,6 +178,7 @@ function UploadPanel({ row, onDone }: { row: ImageRow; onDone: () => void }) {
           <option value="main">Main image</option>
           <option value="sides">Side images</option>
           <option value="models">Model images</option>
+          <option value="lifestyle">Lifestyle images (optional)</option>
           <option value="auto">Use the file names</option>
         </Select>
         <Button size="sm" variant="primary" loading={busy} onClick={() => inputRef.current?.click()}>
@@ -188,7 +198,7 @@ function UploadPanel({ row, onDone }: { row: ImageRow; onDone: () => void }) {
       </div>
       <p className="text-[0.76rem] text-ink-faint m-0">
         {kind === "auto"
-          ? `Files must already be named ${row.sku}.jpg / ${row.sku}-S1.jpg / ${row.sku}-M1.jpg.`
+          ? `Files must already be named ${row.sku}.jpg / ${row.sku}-S1.jpg / ${row.sku}-M1.jpg / ${row.sku}-LS1.jpg.`
           : `Saved to SharePoint Images/${row.sku}/${KIND_LABEL[kind as Kind]} as ${example}${
               kind === "main" ? " (replaces the current main image)" : ""
             }.`}
@@ -378,7 +388,7 @@ export function ImagesTable({
             <table className="w-full border-collapse min-w-[860px]">
               <thead>
                 <tr>
-                  {["SKU", "Title", "Main", "Sides", "Models", ""].map((h, i) => (
+                  {["SKU", "Title", "Main", "Sides", "Models", "Lifestyle (optional)", ""].map((h, i) => (
                     <th
                       key={i}
                       className="text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap"
@@ -406,7 +416,7 @@ export function ImagesTable({
                       <td className="px-4 py-3 text-[0.84rem] text-ink-soft max-w-[300px] truncate" title={row.title ?? undefined}>
                         {row.title ?? "—"}
                       </td>
-                      {(["main", "sides", "models"] as const).map((k) => (
+                      {KIND_COLUMNS.map((k) => (
                         <td key={k} className="px-4 py-3">
                           <KindCell media={row.media} kind={k} />
                         </td>
@@ -441,7 +451,7 @@ export function ImagesTable({
                     </tr>
                     {uploadingFor === row._id && (
                       <tr>
-                        <td colSpan={6} className="p-0">
+                        <td colSpan={7} className="p-0">
                           <UploadPanel row={row} onDone={refresh} />
                         </td>
                       </tr>

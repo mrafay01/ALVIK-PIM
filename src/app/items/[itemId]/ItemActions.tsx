@@ -47,12 +47,14 @@ export function ItemActions({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? "Update failed");
         return;
       }
       refresh();
+    } catch {
+      setError("Couldn't reach the server. Try again.");
     } finally {
       setBusy(false);
     }
@@ -76,7 +78,7 @@ export function ItemActions({
           unitCost: unitCost ? Number(unitCost) : undefined,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? "Could not create PO");
         return;

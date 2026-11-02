@@ -27,8 +27,7 @@ export async function POST() {
   try {
     return NextResponse.json(await archiveMondayFiles({ timeBudgetMs: 40_000 }));
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error("PO file copy batch failed", { error: message });
-    return NextResponse.json({ error: `Copying PO files to SharePoint failed: ${message.slice(0, 200)}` }, { status: 502 });
+    logger.error("PO file copy batch failed", { error: err instanceof Error ? err.message : String(err) });
+    return NextResponse.json({ error: "Couldn't reach SharePoint. Try again in a moment." }, { status: 502 });
   }
 }

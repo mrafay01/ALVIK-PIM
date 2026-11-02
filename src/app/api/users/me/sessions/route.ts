@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken, encode } from "next-auth/jwt";
 import { connectDB } from "@/lib/db";
 import { requireSession, isAuthFail } from "@/lib/authz";
-import { authOptions } from "@/lib/auth";
+import { readSessionToken, setFreshSessionCookie } from "@/lib/sessionCookie";
 import User from "@/models/User";
 
 // DELETE: "Sign out of all other devices" (Settings > Security).
@@ -20,36 +19,14 @@ export async function DELETE(req: NextRequest) {
   const gate = await requireSession();
   if (isAuthFail(gate)) return gate.response;
 
-  const secret = process.env.NEXTAUTH_SECRET;
-  const secureCookie = (process.env.NEXTAUTH_URL ?? "").startsWith("https://");
-  const cookieName = `${secureCookie ? "__Secure-" : ""}next-auth.session-token`;
-  const token = await getToken({ req, secret, secureCookie });
-  if (!token || token.invalid || typeof token.id !== "string") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const token = await readSessionToken(req);
+  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   await connectDB();
-  const user = await User.findByIdAndUpdate(
-    token.id,
-    { $inc: { sessionVersion: 1 } },
-    { new: true }
-  ).select("sessionVersion");
+  const user = await User.findByIdAndUpdate(token.id, { $inc: { sessionVersion: 1 } }, { new: true }).select("sessionVersion");
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  const maxAge = authOptions.session?.maxAge ?? 30 * 24 * 60 * 60;
-  const fresh = await encode({
-    token: { ...token, sessionVersion: user.sessionVersion },
-    secret: secret!,
-    maxAge,
-  });
-
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(cookieName, fresh, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    secure: secureCookie,
-    maxAge,
-  });
+  await setFreshSessionCookie(res, token, user.sessionVersion);
   return res;
 }

@@ -1,3 +1,4 @@
+import type { ImageSubfolder } from "@/lib/enums";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
@@ -12,6 +13,8 @@ import { MediaUpload } from "./MediaUpload";
 import { ItemDetailSection } from "./ItemDetailSection";
 import { ItemActiveToggle } from "./ItemActiveToggle";
 import { ItemEditButton } from "./ItemEditButton";
+import { SubmitToCatalog } from "./SubmitToCatalog";
+import { checkMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { MarketplaceDescriptions } from "./MarketplaceDescriptions";
 import { DESCRIPTION_PLATFORMS, type DescriptionPlatform } from "@/lib/enums";
 import { isMarketplaceDescriptionOverridden } from "@/lib/marketplaceDescription";
@@ -56,6 +59,11 @@ export default async function ItemDetailPage({
   if (!item) notFound();
   const canEditItem = roleCan(role, ROLE_SETS.items);
   const canUploadMedia = roleCan(role, ROLE_SETS.media);
+  // Same role as POST /api/items/[id]/submit-to-catalog.
+  const canSubmitToCatalog = roleCan(role, ["marketplace_listing"]);
+  const missingForCatalog = checkMasterRecordComplete(item)
+    .filter((c) => !c.ok)
+    .map((c) => c.reason ?? c.field);
 
   const siblingVariations = await findSiblingVariations(item);
 
@@ -169,6 +177,10 @@ export default async function ItemDetailPage({
             which is when its authoritative fields become subject to the
             conflict/change-log flow. Pipeline items don't accumulate rows
             here, so showing an empty accordion would just be noise. */}
+        {!item.inCatalog && (
+          <SubmitToCatalog itemId={String(item._id)} missing={missingForCatalog} canSubmit={canSubmitToCatalog} />
+        )}
+
         {item.inCatalog && <ChangeHistory itemId={String(item._id)} />}
 
         {/* ---------- Pricing & lifecycle ---------- */}
@@ -366,7 +378,7 @@ export default async function ItemDetailPage({
             sharePointItemId: m.sharePointItemId,
             url: m.url,
             name: m.name ?? null,
-            subfolder: m.subfolder as "main" | "sides" | "models",
+            subfolder: m.subfolder as ImageSubfolder,
             linkStatus: (m.linkStatus as "ok" | "broken" | undefined) ?? null,
           }))}
           initialCompleteness={{

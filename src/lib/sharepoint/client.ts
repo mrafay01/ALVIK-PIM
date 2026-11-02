@@ -35,6 +35,7 @@ async function getAccessToken(): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params.toString(),
+    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`SharePoint auth failed: ${res.status} ${await res.text()}`);
 
@@ -54,6 +55,7 @@ async function getSiteId(token: string): Promise<string> {
 
   const res = await fetch(`https://graph.microsoft.com/v1.0/sites/${url.hostname}:${url.pathname}`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`Resolving SharePoint site failed: ${res.status} ${await res.text()}`);
 
@@ -72,6 +74,7 @@ async function getDriveId(token: string): Promise<string> {
   const siteId = await getSiteId(token);
   const res = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/drives`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`Listing SharePoint drives failed: ${res.status} ${await res.text()}`);
 
@@ -94,9 +97,14 @@ export async function getSharePointContext(): Promise<SharePointContext> {
   return { token, driveId };
 }
 
+// Every Graph call gets a timeout unless the caller sets its own signal, so
+// a stalled SharePoint request can't hold a page or batch indefinitely.
+const GRAPH_TIMEOUT_MS = 60_000;
+
 async function graphFetch(ctx: SharePointContext, path: string, init?: RequestInit) {
   const res = await fetch(`https://graph.microsoft.com/v1.0/drives/${ctx.driveId}${path}`, {
     ...init,
+    signal: init?.signal ?? AbortSignal.timeout(GRAPH_TIMEOUT_MS),
     headers: { Authorization: `Bearer ${ctx.token}`, ...(init?.headers ?? {}) },
   });
   return res;
@@ -126,19 +134,26 @@ export async function ensureFolderPath(ctx: SharePointContext, segments: string[
   return getDriveItemByPath(ctx, segments);
 }
 
-// Ensures /Images/{itemNumber}/Main, /Sides, /Models exist.
-export async function ensureItemFolders(ctx: SharePointContext, itemNumber: string): Promise<void> {
+// Item images: Images/{itemNumber}/Main, /Sides, /Models (required) and
+// /Lifestyle (optional, so it's only created once a lifestyle image is
+// uploaded; pass `also`).
+const REQUIRED_IMAGE_FOLDERS = ["Main", "Sides", "Models"] as const;
+
+export async function ensureItemFolders(
+  ctx: SharePointContext,
+  itemNumber: string,
+  also?: ImageSubfolder
+): Promise<void> {
   await ensureFolderPath(ctx, ["Images", itemNumber]);
-  await Promise.all(
-    ["Main", "Sides", "Models"].map((subfolder) => ensureChildFolder(ctx, ["Images", itemNumber], subfolder))
-  );
+  const folders = new Set<string>([...REQUIRED_IMAGE_FOLDERS, ...(also ? [also] : [])]);
+  await Promise.all([...folders].map((subfolder) => ensureChildFolder(ctx, ["Images", itemNumber], subfolder)));
 }
 
-export type ImageSubfolder = "Main" | "Sides" | "Models";
+export type ImageSubfolder = "Main" | "Sides" | "Models" | "Lifestyle";
 
-// Filename-suffix routing, exactly as specified in the blueprint's Image
-// Storage convention: bare "{itemNumber}.jpg" -> Main, "-S{n}" -> Sides,
-// "-M{n}" -> Models. Anything else is rejected rather than silently misfiled.
+// Filename-suffix routing, as in the blueprint's Image Storage convention:
+// bare "{itemNumber}.jpg" -> Main, "-S{n}" -> Sides, "-M{n}" -> Models,
+// "-LS{n}" -> Lifestyle. Anything else is rejected rather than misfiled.
 export function inferSubfolder(itemNumber: string, filename: string): ImageSubfolder {
   const base = filename.replace(/\.[^.]+$/, "");
   // The name must start with this item's number; otherwise another item's
@@ -151,43 +166,11 @@ export function inferSubfolder(itemNumber: string, filename: string): ImageSubfo
   if (suffix === "") return "Main";
   if (/^-S\d+$/i.test(suffix)) return "Sides";
   if (/^-M\d+$/i.test(suffix)) return "Models";
+  if (/^-LS\d+$/i.test(suffix)) return "Lifestyle";
 
   throw new Error(
-    `Filename "${filename}" doesn't match the "{itemNumber}.jpg" / "-S{n}" / "-M{n}" convention`
+    `Filename "${filename}" doesn't match the "{itemNumber}.jpg" / "-S{n}" / "-M{n}" / "-LS{n}" convention`
   );
-}
-
-export interface UploadedImage {
-  sharePointItemId: string;
-  url: string;
-  subfolder: "main" | "sides" | "models";
-}
-
-// Uploads one file's bytes to its inferred subfolder. Small-file upload
-// (<4MB) via PUT is the Graph-recommended path for this size class; the
-// resumable-session API is only needed above that and isn't wired up here.
-export async function uploadItemImage(
-  ctx: SharePointContext,
-  itemNumber: string,
-  filename: string,
-  bytes: Buffer
-): Promise<UploadedImage> {
-  const subfolder = inferSubfolder(itemNumber, filename);
-  const path = `/root:/${drivePath("Images", itemNumber, subfolder, filename)}:/content`;
-
-  const res = await graphFetch(ctx, path, {
-    method: "PUT",
-    headers: { "Content-Type": "application/octet-stream" },
-    body: new Uint8Array(bytes),
-  });
-  if (!res.ok) throw new Error(`Uploading ${filename} failed: ${res.status} ${await res.text()}`);
-
-  const json = (await res.json()) as { id: string; webUrl: string };
-  return {
-    sharePointItemId: json.id,
-    url: json.webUrl,
-    subfolder: subfolder.toLowerCase() as "main" | "sides" | "models",
-  };
 }
 
 // Moves an item's whole /Images/{sampleSku} folder to /Images/{itemNumber}
@@ -238,6 +221,22 @@ export async function getDriveItemByPath(ctx: SharePointContext, segments: strin
     await graphFetch(ctx, `/root:/${drivePath(...segments)}?$select=${ITEM_FIELDS}`),
     `Reading "${segments.join("/")}"`
   );
+}
+
+// The files directly inside a folder (not subfolders). A folder that doesn't
+// exist yet has no files, so a 404 returns [].
+export async function listFolderFiles(ctx: SharePointContext, segments: string[]): Promise<DriveItem[]> {
+  const files: DriveItem[] = [];
+  let res = await graphFetch(ctx, `/root:/${drivePath(...segments)}:/children?$select=${ITEM_FIELDS}&$top=200`);
+  for (;;) {
+    if (res.status === 404) return [];
+    if (!res.ok) throw new Error(`Listing "${segments.join("/")}" failed: ${res.status} ${await res.text()}`);
+    const page = (await res.json()) as { value: DriveItem[]; "@odata.nextLink"?: string };
+    files.push(...page.value.filter((i) => i.file));
+    const next = page["@odata.nextLink"];
+    if (!next) return files;
+    res = await fetch(next, { headers: { Authorization: `Bearer ${ctx.token}` } });
+  }
 }
 
 // The folder an item sits in, relative to the drive root, e.g.

@@ -7,7 +7,7 @@ Monday.com API. Target hosting: **Vercel (serverless)**.
 
 Living blueprint (architecture, schema, decisions, history):
 https://claude.ai/artifact/APHSSNFBsgt1SFvj8wyzxk — update it when behaviour or the data model changes.
-Older docs in the repo: `PROJECT-REPORT.md`, `AUDIT-HISTORY.md`, `GETTING-STARTED-PRODUCTION.md`.
+Older docs in the repo: `PROJECT-REPORT.md`, `GETTING-STARTED-PRODUCTION.md` (the blueprint is newer).
 
 ---
 
@@ -22,8 +22,11 @@ Older docs in the repo: `PROJECT-REPORT.md`, `AUDIT-HISTORY.md`, `GETTING-STARTE
 - **New vendor PIs are checked against the catalog.** If a PI disagrees with a catalog item on an
   authoritative field (weights, sizes/measurements, vendor SKU), the catalog value is kept and a
   **conflict** is raised for a human (Catalog → Conflicts). Non-authoritative fields and pricing merge.
-- **SharePoint holds every file**: item images (`Images/{sku}/Main|Sides|Models`) and every PO
-  document (`Purchase Orders/{poNumber}/`). MongoDB stores only ids, names and links, never bytes.
+- **SharePoint holds every file**: item images (`Images/{sku}/Main|Sides|Models`, plus optional
+  `Lifestyle`) and every PO document (`Purchase Orders/{poNumber}/`, e.g. `Purchase Orders/22906/`,
+  including the files copied from Monday). MongoDB stores only ids, names and links, never bytes.
+- **One order is one PO**, keyed by the bare PO number Monday uses (`22906`); "PO-22906" is only a
+  label on screen.
 - **Payables / payments are out of scope** (they live in Jm, a third-party app, and Monday).
   Removed 2026-10-13 — don't reintroduce.
 
@@ -92,7 +95,8 @@ src/scripts/migrations/     dated migrations (run via npm run migrate)
 | Catalog → New catalog item (with variations) | **Catalog** | `api/catalog` POST |
 
 There is deliberately **no generic "create item" endpoint** (`POST /api/items` was removed).
-Un-Verified items reach the catalog via *Submit to catalog* (needs `masterRecordComplete`) + admin approval.
+Un-Verified items reach the catalog via *Submit to catalog* on the item page (`SubmitToCatalog.tsx`; lists
+what's missing until `masterRecordComplete`; marketplace_listing + admin) + admin approval on the Catalog list.
 
 ### Vendor quotes → items + PO
 1. `/purchase-orders/quotes/import`: the browser uploads the file **straight to SharePoint**
@@ -100,10 +104,13 @@ Un-Verified items reach the catalog via *Submit to catalog* (needs `masterRecord
    `POST /api/quotations` with `{ file: { ticket, driveItemId } }` downloads + parses it server-side.
    Multi-sheet workbooks return 409 + candidates; the picker resubmits with `sheetName` (no re-upload).
    The form asks only for the vendor and the file: the **PO number is the file name**
-   (`22906.xlsx` → `PO-22906`, `lib/purchase-orders/poNumber.ts`), derived server-side from the
-   upload ticket's name, so the file goes straight into `Purchase Orders/PO-22906/`.
-   The hand-entry form (`/quotes/new`) is the same: vendor + a required PO number, stored as
-   `PO-<number>` (`formatPoNumber`). Quotes have no season or received date.
+   (`22906.xlsx` → PO `22906`), derived server-side from the upload ticket's name, so the file goes
+   straight into `Purchase Orders/22906/`. The hand-entry form (`/quotes/new`) is the same: vendor + a
+   required PO number. Quotes have no season or received date.
+   **PO numbers are stored bare** (`22906`, exactly as Monday names the board item), so an uploaded PI,
+   a hand-entered quote, a sample PO and the Monday PO for one order are the same PO. "PO-22906" is
+   only a label in the UI. One rule everywhere: `formatPoNumber` (`lib/purchase-orders/poNumber.ts`)
+   drops a leading `PO` / `PO-` / `PO#` and stray `#`s; `normalizePoNumber` and the Monday pull use it.
 2. Rows stage in `quotation_rows` (`coerced` values + `flags`), reviewed on `/purchase-orders/quotes/[id]`.
 3. Commit (`commit` route): per-quote lock (`commitLockedAt`), creates/merges items, reconciles against
    catalog items (conflicts), attaches the quote to its PO (`fromQuotation.ts`; normalized PO number,
@@ -128,8 +135,16 @@ Un-Verified items reach the catalog via *Submit to catalog* (needs `masterRecord
   (`commitSelectedPullRows`). Matches POs by PO number = item name. Stores the board's status label
   verbatim (`mondayStatusText`) and maps it to `status` only when the mapping is confident.
   Finished labels (Received, Canceled, …) mean **closed**: such POs are read-only and excluded from "open".
-- After an import, the panel copies each PO's board files into SharePoint (`POST /api/admin/po-files`,
-  time-boxed batches, resumable; job kind `archive_po_files` does the same from the worker).
+- **PO files go to SharePoint for good.** The import has an "Also save PO files to SharePoint" option
+  (on by default); the panel then copies each PO's board files into `Purchase Orders/{poNumber}/`
+  (`POST /api/admin/po-files`, ~40 s batches, resumable). One PO: "Copy to SharePoint" on the PO page
+  (`POST /api/purchase-orders/[id]/files`, purchaseOrders role). Job `archive_po_files` does the same.
+  All three use `archiveMondayFiles` (`lib/purchase-orders/files.ts`): each PO is claimed atomically
+  (`archiveLockedAt`, 5-min lease) so overlapping runs never copy twice; a file already in the folder
+  but unrecorded (run cut off after uploading) is adopted by name, never a quote's uncommitted PI;
+  recording is idempotent per asset; an attempt is counted before each download, so killed runs count;
+  3 failures or "deleted on Monday" → given up (`archiveGaveUp`). The PO page opens files from
+  SharePoint only; a given-up file is the one case that still links to Monday.
 - **Push** (`lib/monday/sync.ts`): status/checklist to the board; never pushes an unmapped status,
   skips POs closed on Monday. Pull stamps `lastPushedToMondayAt` so pulled POs don't look changed.
 
@@ -139,8 +154,10 @@ Status flow in `lib/purchase-orders/transitions.ts` (forward-only except admin "
 in `listQuery.ts` (not received, not closed on Monday) — reuse it anywhere you count open POs.
 
 ### Images
-Folder `Images/{itemNumber or sampleSku}/{Main|Sides|Models}`; names `{key}.jpg`, `{key}-S{n}`, `{key}-M{n}`
-(`inferSubfolder` rejects names that don't start with the key). Uploads are browser → SharePoint:
+Folder `Images/{itemNumber or sampleSku}/{Main|Sides|Models|Lifestyle}`; names `{key}.jpg`, `{key}-S{n}`,
+`{key}-M{n}`, `{key}-LS{n}` (`inferSubfolder` rejects names that don't start with the key). **Lifestyle is
+optional**: its folder is created only when one is uploaded, and it never counts in `imageCompleteness`
+(the type list is `IMAGE_SUBFOLDERS` in `lib/enums.ts`). Uploads are browser → SharePoint:
 `api/items/[id]/media/upload-session` (server picks the conventional name for main/sides/models, or
 "auto" keeps the file's name) → `.../media/confirm`. `/images` checks links via Graph `$batch`
 (`api/images/check`) and records `media.linkStatus`; broken images don't count in `imageCompleteness`,
@@ -229,6 +246,16 @@ Roles: `administrator`, `buyer_merchandiser`, `buying_purchasing`, `warehouse_re
 - Monday proxy routes (`api/monday/files`, `api/monday/updates`) only serve items/files belonging
   to a PO in the app. Public `/api/health` never returns error details.
 - Passwords (when set): 10+ characters, a letter and a number, at most 72 bytes (bcrypt limit).
+  Changing your password signs out your other devices (`lib/sessionCookie.ts` keeps this one); an admin
+  reset signs the user out everywhere; admins can't reset their own password from Users.
+- `safeCallbackPath` resolves the path like a browser and requires it to stay on-site (tab/newline tricks).
+- Every staged-row fix is allow-listed and re-coerced: quote rows via `coerceQuoteValue`, Master File rows via
+  `isMasterFileField` + `fixRowField` (commit also skips non-column paths), so a fix can't set fields like
+  `inCatalog` and a flag clears only when the value is valid.
+- Marketplace export: page and generator share `EXPORT_ELIGIBLE`; the Target CSV neutralizes formula-like
+  text (`neutralizeFormula`).
+- Outbound calls have timeouts: Monday 30 s (non-JSON answers become `MondayApiError`), Graph 60 s.
+- Client fetch handlers always `catch` (show "Couldn't reach the server") and parse JSON with `.catch(() => ({}))`.
 
 ## 7. Environment variables (`.env.local`; template in `.env.local.example`)
 `MONGODB_URI` (non-SRV string), `NEXTAUTH_SECRET` (also signs upload tickets), `NEXTAUTH_URL`,
@@ -251,15 +278,21 @@ People need CZCPIM site membership to open the links the app shows.
 - Atlas sometimes refuses connections after the machine sleeps or the IP changes (IP Access List);
   that's environmental, not a code bug.
 
-## 9. Status (2026-10-21)
+## 9. Status (2026-10-28)
 Built: auth + 2FA, roles, PO list/detail + Monday push/pull, vendor quote intake + review + commit,
-catalog (+ variations, conflicts, approvals), Master File import + Flagged Items, Un-Verified Items,
-SharePoint images + PO documents, Images page, marketplace export, dashboard, settings, Help & Support.
+catalog (+ variations, conflicts, approvals, Submit to catalog), Master File import + Flagged Items,
+Un-Verified Items, SharePoint images (incl. optional Lifestyle) + PO documents (Monday files saved to
+SharePoint for good), Images page, marketplace export, dashboard, settings, Help & Support, sidebar
+dropdowns.
+
+Open decisions (see the blueprint's "Open — decisions needed"): whether export enforces
+`masterRecordComplete` (not yet: almost no item has images), whether photography/warehouse should see
+pricing, and a "send back" for catalog submissions. Known gaps: SKU change leaves images in the old
+folder; the Master File import doesn't refuse case-only duplicate SKUs; no button for bulk Monday push.
 
 Pending: run `npm run migrate` to apply `2026-10-22-unset-null-item-numbers` and
 `2026-10-23-slim-database` (removes `raw` rows, null fields, dead fields, 3 empty collections,
-unused indexes). **No "Submit to catalog" button exists** — `POST /api/items/[id]/submit-to-catalog`
-works but nothing in the UI calls it, so Un-Verified items can't reach the catalog yet.
+unused indexes).
 
 Not built / open: receiving & warehouse screen (role has no screen yet; its `ReceivingLog` and
 `Shipment` models were removed 2026-10-23 as unused — recreate when built), shipment grouping, extracting

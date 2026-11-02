@@ -36,19 +36,20 @@ export async function PATCH(
   const po = await PurchaseOrder.findById(poId);
   if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
 
+  // Monday marks this PO Received/Canceled: it's finished and read-only here
+  // (stage, checklist and flags alike), so Monday stays the record of it.
+  if (isClosedOnMonday(po.mondayStatusText)) {
+    return NextResponse.json(
+      { error: `This PO is marked "${po.mondayStatusText}" on Monday, so it can't be changed here.` },
+      { status: 409 }
+    );
+  }
+
   if (body.backOfficeChecklist) {
     Object.assign(po.backOfficeChecklist, body.backOfficeChecklist);
   }
 
   if (body.status && body.status !== po.status) {
-    // Monday marks this PO Received/Canceled; its stored stage is a stale
-    // default, so moving it along the pipeline would be meaningless.
-    if (isClosedOnMonday(po.mondayStatusText)) {
-      return NextResponse.json(
-        { error: `This PO is marked "${po.mondayStatusText}" on Monday, so its stage can't be changed here.` },
-        { status: 409 }
-      );
-    }
     const isAdmin = gate.role === "administrator";
     if (!isValidPoTransition(po.status as string, body.status, { allowBack: isAdmin })) {
       const from = PO_STATUS_LABEL[po.status as keyof typeof PO_STATUS_LABEL] ?? po.status;

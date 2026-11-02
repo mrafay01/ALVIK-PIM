@@ -29,6 +29,9 @@ export async function POST(
 
   const adminId = session.user?.id;
   if (!adminId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (adminId === targetUserId) {
+    return NextResponse.json({ error: "Change your own password from Settings instead" }, { status: 400 });
+  }
 
   const perAdmin = await rateLimit(`admin-reset-request:${adminId}`, { limit: 5, windowMs: 60_000 });
   if (!perAdmin.allowed) {
@@ -76,6 +79,9 @@ export async function PATCH(
 
   const adminId = session.user?.id;
   if (!adminId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (adminId === targetUserId) {
+    return NextResponse.json({ error: "Change your own password from Settings instead" }, { status: 400 });
+  }
 
   await connectDB();
   const ticketOk = await redeemSessionTicket(new Types.ObjectId(adminId), sessionTicket, "admin_reset");
@@ -86,7 +92,9 @@ export async function PATCH(
   const target = await User.findById(targetUserId);
   if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+  // Signs the user out everywhere, so the old password's sessions end too.
   target.passwordHash = await bcrypt.hash(newPassword, 12);
+  target.sessionVersion = (target.sessionVersion ?? 0) + 1;
   await target.save();
 
   return NextResponse.json({ ok: true });

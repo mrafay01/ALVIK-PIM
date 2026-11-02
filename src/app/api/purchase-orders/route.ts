@@ -5,7 +5,8 @@ import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { PoCreateSchema, badRequest } from "@/lib/schemas";
 import PurchaseOrder from "@/models/PurchaseOrder";
 import Item from "@/models/Item";
-import { normalizePoNumber } from "@/lib/purchase-orders/fromQuotation";
+import { formatPoNumber } from "@/lib/purchase-orders/poNumber";
+import Vendor from "@/models/Vendor";
 
 // POST: create a PO/PI for one or more items — the next step in the pilot
 // after an item has an approved review decision and a sample SKU. This is
@@ -20,15 +21,16 @@ export async function POST(req: NextRequest) {
   const parsed = PoCreateSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
   const { vendorId, orderPurposeCategory, priority, itemId, qty, unitCost } = parsed.data;
-  // Same normalization as quote-created POs ("#22906" -> "22906"), so the
-  // same PO typed two ways can't become two records.
-  const poNumber = normalizePoNumber(parsed.data.poNumber);
+  // Stored as the bare number, like quote-created and Monday POs, so the same
+  // PO typed two ways ("22906" / "PO-22906" / "#22906") can't become two records.
+  const poNumber = formatPoNumber(parsed.data.poNumber);
   if (!poNumber) return NextResponse.json({ error: "Enter a PO number" }, { status: 400 });
 
   await connectDB();
 
-  const item = await Item.findById(itemId);
+  const [item, vendorExists] = await Promise.all([Item.findById(itemId), Vendor.exists({ _id: vendorId })]);
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
+  if (!vendorExists) return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
 
   const totalCost = qty && unitCost ? Number(qty) * Number(unitCost) : undefined;
 
@@ -61,8 +63,11 @@ export async function POST(req: NextRequest) {
         { session: dbSession }
       );
       po = created[0];
-      item.status = "po_sent";
-      await item.save({ session: dbSession });
+      // A catalog item keeps its own status; only a pipeline item moves on.
+      if (!item.inCatalog) {
+        item.status = "po_sent";
+        await item.save({ session: dbSession });
+      }
     });
   } catch (err) {
     if ((err as { code?: number }).code === 11000) {

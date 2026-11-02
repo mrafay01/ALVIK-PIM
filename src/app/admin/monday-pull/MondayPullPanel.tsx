@@ -33,7 +33,7 @@ interface ArchiveBatch {
 // SharePoint folder. Runs automatically after an import is applied (and
 // can be started by hand); each call copies for ~40s and reports what's
 // left, so it keeps calling until done.
-function SharePointArchive({ autoStartKey }: { autoStartKey: number }) {
+function SharePointArchive({ autoStartKey, recheckKey }: { autoStartKey: number; recheckKey: number }) {
   const [remaining, setRemaining] = useState<{ pos: number; files: number } | null>(null);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState({ copied: 0, failed: 0, skipped: 0 });
@@ -41,8 +41,13 @@ function SharePointArchive({ autoStartKey }: { autoStartKey: number }) {
   const stopRef = useRef(false);
 
   const refresh = useCallback(async () => {
-    const res = await fetch("/api/admin/po-files");
-    if (res.ok) setRemaining((await res.json()).remaining);
+    try {
+      const res = await fetch("/api/admin/po-files");
+      if (res.ok) setRemaining((await res.json()).remaining);
+      else setError("Couldn't check how many PO files are left to copy.");
+    } catch {
+      setError("Couldn't reach the server to check the PO files.");
+    }
   }, []);
 
   const start = useCallback(async () => {
@@ -75,8 +80,10 @@ function SharePointArchive({ autoStartKey }: { autoStartKey: number }) {
 
   useEffect(() => {
     if (autoStartKey > 0) void start();
-    else void refresh();
-  }, [autoStartKey, start, refresh]);
+  }, [autoStartKey, start]);
+  useEffect(() => {
+    void refresh();
+  }, [recheckKey, refresh]);
 
   const done = totals.copied + totals.skipped + totals.failed > 0;
   return (
@@ -87,8 +94,10 @@ function SharePointArchive({ autoStartKey }: { autoStartKey: number }) {
             <CloudUpload size={16} /> PO files in SharePoint
           </h2>
           <p className="text-[0.85rem] text-ink-soft m-0 max-w-[620px]">
-            Vendor files attached to POs on Monday are copied into SharePoint, one folder per PO
-            (Purchase Orders/&lt;PO number&gt;), newest POs first. This starts by itself after every import.
+            The PO files attached on Monday are saved in SharePoint for good, one folder per PO (named after
+            the PO), newest POs first. Everyone then opens them from SharePoint in this app. This runs after an
+            import when &quot;Also save PO files to SharePoint&quot; is ticked, and you can start it here any time.
+            You can close this page; it picks up where it stopped.
           </p>
           <p className="text-[0.85rem] mt-2 mb-0">
             {remaining == null
@@ -133,6 +142,8 @@ export function MondayPullPanel() {
   const [result, setResult] = useState<PullCommitResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [archiveRun, setArchiveRun] = useState(0);
+  // Re-reads the "still to copy" count after an import that didn't copy.
+  const [archiveCheck, setArchiveCheck] = useState(0);
   const [planVersion, setPlanVersion] = useState(0);
 
   async function runPreview() {
@@ -154,7 +165,7 @@ export function MondayPullPanel() {
     }
   }
 
-  async function commit(mondayItemIds: string[]) {
+  async function commit(mondayItemIds: string[], saveFiles: boolean) {
     if (!plan) return;
     setCommitting(true);
     setError(null);
@@ -170,8 +181,9 @@ export function MondayPullPanel() {
       }
       setResult(await res.json());
       setPlan(null);
-      // New or changed files on the board: copy them into SharePoint now.
-      setArchiveRun((n) => n + 1);
+      // "Also save PO files to SharePoint" was ticked: copy them now.
+      if (saveFiles) setArchiveRun((n) => n + 1);
+      else setArchiveCheck((n) => n + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -204,7 +216,7 @@ export function MondayPullPanel() {
         </div>
       </Card>
 
-      <SharePointArchive autoStartKey={archiveRun} />
+      <SharePointArchive autoStartKey={archiveRun} recheckKey={archiveCheck} />
 
       {error && (
         <Card className="!border-critical-bg">

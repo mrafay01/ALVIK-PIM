@@ -71,6 +71,8 @@ export function PoActions({
       }
       if (done) setNotice(done);
       refresh();
+    } catch {
+      setError("Couldn't reach the server. Try again.");
     } finally {
       setBusy(null);
     }
@@ -95,6 +97,8 @@ export function PoActions({
       }
       setNotice(data.created ? "Created on the Monday board." : "Monday board updated.");
       refresh();
+    } catch {
+      setError("Couldn't reach the server. Try again.");
     } finally {
       setBusy(null);
     }

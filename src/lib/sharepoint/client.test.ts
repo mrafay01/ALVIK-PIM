@@ -6,6 +6,8 @@ describe("inferSubfolder", () => {
     expect(inferSubfolder("A1234", "A1234.jpg")).toBe("Main");
     expect(inferSubfolder("A1234", "A1234-S2.png")).toBe("Sides");
     expect(inferSubfolder("A1234", "a1234-m1.JPG")).toBe("Models");
+    expect(inferSubfolder("A1234", "A1234-LS1.jpg")).toBe("Lifestyle");
+    expect(inferSubfolder("A1234", "a1234-ls12.png")).toBe("Lifestyle");
   });
 
   it("rejects files named for a different item", () => {
@@ -15,6 +17,8 @@ describe("inferSubfolder", () => {
 
   it("rejects unknown suffixes", () => {
     expect(() => inferSubfolder("A1234", "A1234-final.jpg")).toThrow(/convention/);
+    expect(() => inferSubfolder("A1234", "A1234-L1.jpg")).toThrow(/convention/);
+    expect(() => inferSubfolder("A1234", "A1234-LS.jpg")).toThrow(/convention/);
   });
 });
 

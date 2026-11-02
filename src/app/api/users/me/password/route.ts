@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rateLimit";
 import { issueOtp, redeemSessionTicket, OtpDeliveryError, otpDeliveryFailed } from "@/lib/otp";
 import { ChangePasswordRequestSchema, ChangePasswordConfirmSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
+import { readSessionToken, setFreshSessionCookie } from "@/lib/sessionCookie";
 
 // POST: step 1 of a self-service password change. Verifies the caller's
 // current password, then emails a 2FA code to their own account address —
@@ -66,11 +67,17 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Verification expired or already used. Start over." }, { status: 400 });
   }
 
+  const token = await readSessionToken(req);
   const user = await User.findById(userId);
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+  // A new password signs out every other device (a session stolen before
+  // the change would otherwise keep working); this one stays signed in.
   user.passwordHash = await bcrypt.hash(newPassword, 12);
+  user.sessionVersion = (user.sessionVersion ?? 0) + 1;
   await user.save();
 
-  return NextResponse.json({ ok: true });
+  const res = NextResponse.json({ ok: true });
+  if (token) await setFreshSessionCookie(res, token, user.sessionVersion);
+  return res;
 }

@@ -151,13 +151,13 @@ export function QuoteReviewTable({
     setCommitResult(null);
     try {
       const res = await fetch(`/api/quotations/${quotationId}/commit`, { method: "POST" });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setCommitResult(`Error: ${data.error ?? "commit failed"}`);
         return;
       }
       const errorTail =
-        data.errors.length > 0
+        (data.errors?.length ?? 0) > 0
           ? ` ${data.errors.length} failed: ${data.errors
               .slice(0, 3)
               .map((e: { message: string }) => e.message)
@@ -174,6 +174,8 @@ export function QuoteReviewTable({
           errorTail
       );
       refresh();
+    } catch {
+      setCommitResult("Error: couldn't reach the server. Check whether the rows were committed, then try again.");
     } finally {
       setCommitting(false);
     }
@@ -186,33 +188,41 @@ export function QuoteReviewTable({
     setActionError(null);
     const trimmed = label.trim();
     if (!trimmed) return;
-    const res = await fetch(`/api/quotations/${quotationId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ op: "add_custom_column", label: trimmed }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setActionError(data.error ?? "Could not add that column.");
-      return;
+    try {
+      const res = await fetch(`/api/quotations/${quotationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op: "add_custom_column", label: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionError(data.error ?? "Could not add that column.");
+        return;
+      }
+      setCustomColumns(data.customColumns as string[]);
+      setAdding(null);
+    } catch {
+      setActionError("Couldn't reach the server. Try again.");
     }
-    setCustomColumns(data.customColumns as string[]);
-    setAdding(null);
   }
 
   async function removeQuoteColumn(label: string) {
     setActionError(null);
-    const res = await fetch(`/api/quotations/${quotationId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ op: "remove_custom_column", label }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setActionError(data.error ?? "Could not remove that column.");
-      return;
+    try {
+      const res = await fetch(`/api/quotations/${quotationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op: "remove_custom_column", label }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionError(data.error ?? "Could not remove that column.");
+        return;
+      }
+      setCustomColumns(data.customColumns as string[]);
+    } catch {
+      setActionError("Couldn't reach the server. Try again.");
     }
-    setCustomColumns(data.customColumns as string[]);
   }
 
   // Add a one-off custom field to a single row (not the whole quote).
@@ -245,6 +255,8 @@ export function QuoteReviewTable({
         return;
       }
       refresh();
+    } catch {
+      setActionError("Couldn't reach the server. Try again.");
     } finally {
       setBulkApproving(false);
     }

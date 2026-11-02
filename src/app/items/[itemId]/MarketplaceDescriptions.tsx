@@ -57,6 +57,8 @@ export function MarketplaceDescriptions({
       }
       setSavedPlatform(platform);
       refresh();
+    } catch {
+      setError("Couldn't reach the server. Try again.");
     } finally {
       setSavingPlatform(null);
     }

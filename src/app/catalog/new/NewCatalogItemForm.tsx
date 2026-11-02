@@ -215,7 +215,7 @@ export function NewCatalogItemForm() {
           variations: payloadVariations.length ? payloadVariations : undefined,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? "Could not create the item");
         return;
@@ -223,6 +223,8 @@ export function NewCatalogItemForm() {
       // Keep the button busy while the next page loads.
       navigating = true;
       router.push(`/items/${data.baseItemId}`);
+    } catch {
+      setError("Couldn't reach the server. Try again.");
     } finally {
       if (!navigating) setSubmitting(false);
     }

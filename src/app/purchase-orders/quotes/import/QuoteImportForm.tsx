@@ -27,7 +27,7 @@ export function QuoteImportForm({ vendors }: { vendors: { id: string; name: stri
   const router = useRouter();
   const [vendorId, setVendorId] = useState(vendors[0]?.id ?? MANUAL_VENDOR_OPTION);
   const [manualVendorName, setManualVendorName] = useState("");
-  // The PO is named after the file ("22906.xlsx" -> "PO-22906"); shown so
+  // The PO is named after the file ("22906.xlsx" -> PO 22906); shown so
   // the user can check it before uploading.
   const [poPreview, setPoPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -199,7 +199,8 @@ export function QuoteImportForm({ vendors }: { vendors: { id: string; name: stri
         <div className="mt-1.5 text-[0.8rem] text-ink-soft">
           {poPreview ? (
             <>
-              This will be <strong className="text-ink font-mono">{poPreview}</strong>. The PO is named after the file.
+              This will be <strong className="text-ink font-mono">PO-{poPreview}</strong>. The PO is named after the
+              file, and joins the Monday PO with the same number if there is one.
             </>
           ) : (
             "The PO is named after the file, e.g. 22906.xlsx becomes PO-22906."

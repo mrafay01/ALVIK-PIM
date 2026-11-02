@@ -112,7 +112,9 @@ export type SyncLogRunType = (typeof SYNC_LOG_RUN_TYPES)[number];
 export const MARKETPLACE_EXPORT_PLATFORMS = ["macys", "target", "belk", "kohls"] as const;
 export type MarketplaceExportPlatform = (typeof MARKETPLACE_EXPORT_PLATFORMS)[number];
 
-export const IMAGE_SUBFOLDERS = ["main", "sides", "models"] as const;
+// Item image types. Main, sides and models are required for a complete item;
+// lifestyle images are optional and never count towards completeness.
+export const IMAGE_SUBFOLDERS = ["main", "sides", "models", "lifestyle"] as const;
 export type ImageSubfolder = (typeof IMAGE_SUBFOLDERS)[number];
 
 // Marketplaces that get their own tailored product description on the item

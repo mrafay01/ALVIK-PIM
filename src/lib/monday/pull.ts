@@ -5,6 +5,15 @@ import Vendor from "@/models/Vendor";
 import Item from "@/models/Item";
 import type { PoStatus, Priority } from "@/lib/enums";
 import { PRIORITIES } from "@/lib/enums";
+import { formatPoNumber } from "@/lib/purchase-orders/poNumber";
+
+// The PO number a board item stands for: its name, by the app's one PO-number
+// rule ("PO-22906" / "#22906" -> "22906"), so it matches the PO an uploaded or
+// hand-entered quote created for the same order. Names the rule doesn't change
+// (plain numbers, "16187 (copy)") are used as they are.
+function poKey(name: string): string {
+  return formatPoNumber(name) ?? name;
+}
 
 // The PO status at which a Monday-pulled board item is also materialized
 // as an un-verified Item (shown on /items). Per the client's rule:
@@ -164,7 +173,7 @@ export interface PullPlan {
 // ever been recorded on the inbound direction for pre-existing board items.
 export async function buildPullPlan(prefetched?: MondayItem[]): Promise<PullPlan> {
   const items = prefetched ?? (await fetchAllBoardItems());
-  const poNumbers = items.map((i) => i.name);
+  const poNumbers = items.map((i) => poKey(i.name));
   const existingPOs = await PurchaseOrder.find({ poNumber: { $in: poNumbers } }).lean();
   const poByNumber = new Map(existingPOs.map((po) => [po.poNumber, po]));
 
@@ -187,7 +196,7 @@ export async function buildPullPlan(prefetched?: MondayItem[]): Promise<PullPlan
     const trackingNumber = colText(item, MONDAY_COLUMN_IDS.trackingNumber);
     const joelShipConfirmed = parseCheckbox(colText(item, MONDAY_COLUMN_IDS.joelShipConfirmed));
     const files = parseFiles(item);
-    const existing = poByNumber.get(item.name);
+    const existing = poByNumber.get(poKey(item.name));
 
     if (existing) {
       // Existing POs always update, regardless of status mapping — the raw
@@ -462,7 +471,7 @@ export async function commitPullPlan(rows: PullPlanRow[], prefetched?: MondayIte
       ops.push({
         insertOne: {
           document: {
-            poNumber: row.mondayItemName,
+            poNumber: poKey(row.mondayItemName),
             vendorId,
             source: "monday",
             orderPurpose: { category: "stock" },
@@ -558,7 +567,7 @@ async function materializeItemsFromPull(
   // because the insert above assigned the _id but we don't have it in
   // this function's scope. One batch query by (poNumber, mondayItemId)
   // covers both cases.
-  const keys = rows.map((r) => ({ mondayItemId: r.mondayItemId, poNumber: r.mondayItemName }));
+  const keys = rows.map((r) => ({ mondayItemId: r.mondayItemId, poNumber: poKey(r.mondayItemName) }));
   const pos = await PurchaseOrder.find({
     $or: keys.map((k) => ({ mondayItemId: k.mondayItemId })).concat(
       keys.map((k) => ({ poNumber: k.poNumber })) as never
@@ -579,7 +588,7 @@ async function materializeItemsFromPull(
   const ops: ItemUpsert[] = [];
 
   for (const row of rows) {
-    const po = poByMondayId.get(row.mondayItemId) ?? poByNumber.get(row.mondayItemName);
+    const po = poByMondayId.get(row.mondayItemId) ?? poByNumber.get(poKey(row.mondayItemName));
     if (!po) continue; // defensive; the PO write pass should have made one
     const vendorId = row.vendorName ? vendorIdByName.get(row.vendorName) : po.vendorId;
     if (!vendorId) continue;

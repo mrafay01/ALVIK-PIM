@@ -5,7 +5,7 @@ import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { badRequest } from "@/lib/schemas";
 import ImportBatchRow from "@/models/ImportBatchRow";
 import { fixRowField } from "@/lib/import/commitRows";
-import { masterFileFieldLabel } from "@/lib/import/parseMasterFile";
+import { masterFileFieldLabel, isMasterFileField } from "@/lib/import/parseMasterFile";
 import { flaggedFilter } from "../filter";
 
 export const maxDuration = 60;
@@ -29,6 +29,9 @@ export async function POST(req: NextRequest) {
   const parsed = BodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
   const { field, value, scope, q, rowIds } = parsed.data;
+  if (!isMasterFileField(field)) {
+    return NextResponse.json({ error: `"${field}" isn't a Master File column` }, { status: 400 });
+  }
   if (field === "itemNumber") {
     return NextResponse.json({ error: "Each row needs its own SKU, so it can't be set in bulk" }, { status: 400 });
   }

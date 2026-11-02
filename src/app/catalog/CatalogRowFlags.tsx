@@ -24,6 +24,7 @@ export function CatalogRowFlags({
   const { refresh, refreshing } = useRefreshAfterSave();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,9 +45,13 @@ export function CatalogRowFlags({
 
   async function approve() {
     setBusy(true);
+    setApproveError(null);
     try {
       const res = await fetch(`/api/catalog/${itemId}/approve`, { method: "POST" });
       if (res.ok) refresh();
+      else setApproveError((await res.json().catch(() => ({}))).error ?? "Couldn't approve");
+    } catch {
+      setApproveError("Couldn't reach the server");
     } finally {
       setBusy(false);
     }
@@ -84,6 +89,7 @@ export function CatalogRowFlags({
           )}
         </button>
       )}
+      {approveError && <span className="text-[0.72rem] text-critical whitespace-nowrap">{approveError}</span>}
 
       {missing.length > 0 ? (
         <button

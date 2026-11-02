@@ -46,10 +46,10 @@ const HANDLERS: Record<JobKind, Handler> = {
   },
 
   // Copies Monday PO files into SharePoint (see lib/purchase-orders/files).
-  // Runs in slices well under the job lease; if files remain, it queues
-  // the next slice so a large backlog drains across ticks.
+  // Runs in ~40 s slices so one fits inside a 60 s tick; if files remain,
+  // it queues the next slice so a large backlog drains across ticks.
   async archive_po_files() {
-    const result = await archiveMondayFiles({ timeBudgetMs: 3 * 60 * 1000 });
+    const result = await archiveMondayFiles({ timeBudgetMs: 40_000 });
     if (result.remaining.files > 0 && result.copied + result.skipped > 0) {
       await enqueue({ kind: "archive_po_files" });
     }

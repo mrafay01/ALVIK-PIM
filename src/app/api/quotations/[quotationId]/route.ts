@@ -8,6 +8,7 @@ import Quotation from "@/models/Quotation";
 import QuotationRow from "@/models/QuotationRow";
 import { getSharePointContext, deleteDriveItem } from "@/lib/sharepoint/client";
 import logger from "@/lib/logger";
+import { commitLockFree } from "@/lib/quote-import/commitLock";
 
 const QUOTE_ROLES = ROLE_SETS.quotes;
 
@@ -100,11 +101,24 @@ export async function DELETE(
     return NextResponse.json({ error: "Quotation not found" }, { status: 404 });
   }
   await connectDB();
-  const quotation = await Quotation.findById(quotationId).select("_id sourceFile").lean();
-  if (!quotation) return NextResponse.json({ error: "Quotation not found" }, { status: 404 });
+  if (!(await Quotation.exists({ _id: quotationId }))) {
+    return NextResponse.json({ error: "Quotation not found" }, { status: 404 });
+  }
+  // Take the commit lock, so a commit can't start (or still be running)
+  // while the quote's rows are being deleted.
+  const now = new Date();
+  const quotation = await Quotation.findOneAndUpdate(
+    { _id: quotationId, ...commitLockFree(now) },
+    { $set: { commitLockedAt: now } },
+    { new: true, timestamps: false, projection: "_id sourceFile" }
+  ).lean();
+  if (!quotation) {
+    return NextResponse.json({ error: "This quote is being committed right now. Try again in a moment." }, { status: 409 });
+  }
 
   const committed = await QuotationRow.countDocuments({ quotationId, committedItemId: { $ne: null } });
   if (committed > 0) {
+    await Quotation.updateOne({ _id: quotationId, commitLockedAt: now }, { $unset: { commitLockedAt: "" } }, { timestamps: false });
     return NextResponse.json(
       { error: `${committed} row(s) from this quote are already committed, so it can't be deleted.` },
       { status: 409 }

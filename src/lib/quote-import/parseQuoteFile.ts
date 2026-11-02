@@ -323,6 +323,21 @@ function looksLikeDataRow(
   return hasIdentity || fillCount >= 3;
 }
 
+// A reviewer's correction to one standard field, put through the same rules
+// as the file import, so a fix only clears the flag when the value is valid
+// ("abc" in a price field stays flagged instead of failing at commit).
+// Returns null for a key that isn't a standard quote field.
+export function coerceQuoteValue(key: string, raw: unknown): { value: unknown; flags: FieldFlag[] } | null {
+  const field = QUOTE_FIELDS.find((f) => f.key === key);
+  if (!field || field.kind === "image") return null;
+  if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")) {
+    return { value: null, flags: [] };
+  }
+  const flags: FieldFlag[] = [];
+  const out = coerceByKind(field.kind, raw, field.key, flags);
+  return { value: out === "" ? null : (out ?? null), flags };
+}
+
 export function stageRow(
   rowNumber: number,
   rawByHeader: Record<string, unknown>

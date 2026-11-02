@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
 import { uploadItemImage, type ItemMediaEntry, type UploadKind } from "@/lib/client/uploadItemImage";
+import type { ImageSubfolder } from "@/lib/enums";
 
 interface Completeness {
   main: boolean;
@@ -13,10 +14,11 @@ interface Completeness {
   models: boolean;
 }
 
-const SUBFOLDER_LABEL: Record<keyof Completeness, string> = {
+const SUBFOLDER_LABEL: Record<ImageSubfolder, string> = {
   main: "Main",
   sides: "Sides",
   models: "Models",
+  lifestyle: "Lifestyle",
 };
 
 const KIND_OPTIONS: { value: UploadKind; label: string }[] = [
@@ -24,6 +26,7 @@ const KIND_OPTIONS: { value: UploadKind; label: string }[] = [
   { value: "main", label: "Main image" },
   { value: "sides", label: "Side images" },
   { value: "models", label: "Model images" },
+  { value: "lifestyle", label: "Lifestyle images (optional)" },
 ];
 
 function displayName(m: ItemMediaEntry): string {
@@ -101,6 +104,7 @@ export function MediaUpload({
   }
 
   const broken = media.filter((m) => m.linkStatus === "broken").length;
+  const lifestyleCount = media.filter((m) => m.subfolder === "lifestyle" && m.linkStatus !== "broken").length;
 
   return (
     <Card>
@@ -144,8 +148,9 @@ export function MediaUpload({
           <>
             Name files <code className="font-mono">{folderKey}.jpg</code> for the main shot,{" "}
             <code className="font-mono">{folderKey}-S1.jpg</code> for sides,{" "}
-            <code className="font-mono">{folderKey}-M1.jpg</code> for models; each goes to its SharePoint folder by
-            the name.
+            <code className="font-mono">{folderKey}-M1.jpg</code> for models and{" "}
+            <code className="font-mono">{folderKey}-LS1.jpg</code> for optional lifestyle shots; each goes to its
+            SharePoint folder by the name.
           </>
         ) : (
           <>Any file name works: it&apos;s renamed to the {SUBFOLDER_LABEL[kind].toLowerCase()} convention on upload.</>
@@ -163,6 +168,11 @@ export function MediaUpload({
             {SUBFOLDER_LABEL[key]}
           </span>
         ))}
+        {/* Optional: shown as a count, never as missing. */}
+        <span className="flex items-center gap-1.5 text-[0.82rem] text-ink-soft">
+          {lifestyleCount > 0 ? <CheckCircle2 size={14} color="var(--good)" /> : <Circle size={14} color="var(--ink-faint)" />}
+          Lifestyle <span className="text-ink-faint">(optional{lifestyleCount > 0 ? `, ${lifestyleCount}` : ""})</span>
+        </span>
         {broken > 0 && (
           <span className="flex items-center gap-1.5 text-[0.82rem] text-critical">
             <Link2Off size={14} /> {broken} broken link{broken === 1 ? "" : "s"}

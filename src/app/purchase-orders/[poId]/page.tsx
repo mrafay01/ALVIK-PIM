@@ -25,6 +25,8 @@ import { isClosedOnMonday, CHECKLIST_DONE } from "@/lib/purchase-orders/transiti
 import { PoActions } from "./PoActions";
 import { PoChecklist } from "./PoChecklist";
 import { MondayUpdates } from "./MondayUpdates";
+import { CopyPoFilesButton } from "./CopyPoFilesButton";
+import { poFolder } from "@/lib/purchase-orders/files";
 
 function fmtDate(d: Date | string | null | undefined): string {
   if (!d) return "—";
@@ -71,9 +73,14 @@ export default async function PurchaseOrderDetailPage({
   const sharePointFiles = po.sharePointFiles ?? [];
   const copiedAssets = new Set(sharePointFiles.map((f) => f.mondayAssetId).filter(Boolean));
   const archiveErrorByAsset = new Map((po.archiveErrors ?? []).map((e) => [e.assetId, e.message]));
+  const gaveUp = new Set(po.archiveGaveUp ?? []);
+  // Monday files not in SharePoint yet: waiting to be copied, or given up on
+  // (deleted on Monday, or failed 3 times). Only a given-up file still opens
+  // from Monday, as the last way to reach it.
   const pendingMondayFiles = (po.mondayFiles ?? [])
     .filter((f) => !copiedAssets.has(f.assetId))
-    .map((f) => ({ ...f, error: archiveErrorByAsset.get(f.assetId) ?? null }));
+    .map((f) => ({ ...f, error: archiveErrorByAsset.get(f.assetId) ?? null, gaveUp: gaveUp.has(f.assetId) }));
+  const waitingCount = pendingMondayFiles.filter((f) => !f.gaveUp).length;
 
   return (
     <AppShell
@@ -298,9 +305,17 @@ export default async function PurchaseOrderDetailPage({
             )}
           </div>
           <p className="text-[0.8rem] text-ink-faint mb-3">
-            Every PO file, whether uploaded here or attached on Monday, is kept in SharePoint under
-            Purchase Orders/{po.poNumber}.
+            Every PO file, whether uploaded here or attached on Monday, is kept in SharePoint under{" "}
+            {poFolder(po.poNumber).join("/")}, and opens from there.
           </p>
+          {waitingCount > 0 && (
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-3 rounded-md bg-warn-bg px-3 py-2.5">
+              <span className="text-[0.82rem] text-warn">
+                {waitingCount} file{waitingCount === 1 ? " is" : "s are"} on Monday but not in SharePoint yet.
+              </span>
+              {canEdit && <CopyPoFilesButton poId={String(po._id)} />}
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             {sharePointFiles.map((f) => (
               <a
@@ -316,20 +331,29 @@ export default async function PurchaseOrderDetailPage({
                 </span>
               </a>
             ))}
-            {pendingMondayFiles.map((f) => (
-              <a
-                key={f.assetId}
-                href={`/api/monday/files/${f.assetId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-[0.85rem] text-brass no-underline py-1.5"
-              >
-                <FileSpreadsheet size={14} /> {f.name}
-                <span className="text-[0.75rem] text-ink-faint">
-                  {f.error ? `on Monday only. Couldn't copy: ${f.error}` : "on Monday, not copied to SharePoint yet"}
-                </span>
-              </a>
-            ))}
+            {pendingMondayFiles.map((f) =>
+              f.gaveUp ? (
+                <div key={f.assetId} className="flex items-center gap-2 text-[0.85rem] py-1.5 flex-wrap">
+                  <FileSpreadsheet size={14} className="text-ink-faint" /> <span className="text-ink-soft">{f.name}</span>
+                  <span className="text-[0.75rem] text-critical">Couldn&apos;t be copied to SharePoint: {f.error ?? "unknown error"}</span>
+                  <a
+                    href={`/api/monday/files/${f.assetId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[0.75rem] text-brass no-underline"
+                  >
+                    Try opening it on Monday
+                  </a>
+                </div>
+              ) : (
+                <div key={f.assetId} className="flex items-center gap-2 text-[0.85rem] py-1.5 flex-wrap">
+                  <FileSpreadsheet size={14} className="text-ink-faint" /> <span className="text-ink-soft">{f.name}</span>
+                  <span className="text-[0.75rem] text-ink-faint">
+                    {f.error ? `Waiting to be copied to SharePoint (last try: ${f.error})` : "Waiting to be copied to SharePoint"}
+                  </span>
+                </div>
+              )
+            )}
           </div>
         </Card>
       )}

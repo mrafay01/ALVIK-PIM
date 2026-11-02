@@ -1,3 +1,4 @@
+import type { ImageSubfolder } from "@/lib/enums";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import { getSessionRole, roleCan, ROLE_SETS } from "@/lib/authz";
@@ -114,7 +115,7 @@ export default async function ImagesPage({
       sharePointItemId: m.sharePointItemId,
       url: m.url,
       name: m.name ?? null,
-      subfolder: m.subfolder as "main" | "sides" | "models",
+      subfolder: m.subfolder as ImageSubfolder,
       linkStatus: (m.linkStatus as "ok" | "broken" | undefined) ?? null,
     })),
   }));

@@ -4,14 +4,16 @@ import QuotationRow from "@/models/QuotationRow";
 import Quotation from "@/models/Quotation";
 import { linkQuotationFileToPo } from "@/lib/purchase-orders/files";
 import logger from "@/lib/logger";
+import { formatPoNumber } from "@/lib/purchase-orders/poNumber";
 
 // Links a committed vendor quote to a PurchaseOrder so it shows up on the
 // Purchase Orders table. Quote commit only ever wrote Items; without this a
 // quote entered by file or by hand never appeared as a PO at all.
 //
 // Behaviour:
-//   - PO number = the quote's poNumber, normalized ("#22906" / "22906#" ->
-//     "22906") so it matches the Monday board's item name for the same PO.
+//   - PO number = the quote's poNumber, normalized to the bare number
+//     ("PO-22906" / "#22906" -> "22906") so it matches the Monday board's
+//     item name for the same PO.
 //     A quote with no PO number gets a stable generated one, "Q-<last 6 of
 //     the quotation id>".
 //   - If a PO with that number already exists (e.g. from the Monday pull),
@@ -20,10 +22,9 @@ import logger from "@/lib/logger";
 //     totalCost}; an item already on the PO is not added twice, so this is
 //     safe to re-run (the backfill migration relies on that).
 
+// One rule for every PO number in the app (see lib/purchase-orders/poNumber).
 export function normalizePoNumber(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const s = raw.trim().replace(/^#+|#+$/g, "").trim();
-  return s || null;
+  return formatPoNumber(raw);
 }
 
 function num(v: unknown): number | undefined {

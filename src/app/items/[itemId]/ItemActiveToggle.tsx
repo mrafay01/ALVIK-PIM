@@ -19,12 +19,14 @@ export function ItemActiveToggle({
 }) {
   const { refresh, refreshing } = useRefreshAfterSave();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!canEdit) return null;
   const working = busy || refreshing;
 
   async function toggle() {
     setBusy(true);
+    setError(null);
     try {
       const res = await fetch(`/api/items/${itemId}`, {
         method: "PATCH",
@@ -32,17 +34,23 @@ export function ItemActiveToggle({
         body: JSON.stringify({ active: !active }),
       });
       if (res.ok) refresh();
+      else setError((await res.json().catch(() => ({}))).error ?? "Couldn't change it");
+    } catch {
+      setError("Couldn't reach the server");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Button variant={active ? "secondary" : "primary"} size="sm" loading={working} onClick={toggle}>
-      <span className="flex items-center gap-1.5">
-        {!working && (active ? <PowerOff size={14} /> : <Power size={14} />)}
-        {working ? (active ? "Deactivating…" : "Activating…") : active ? "Deactivate" : "Activate"}
-      </span>
-    </Button>
+    <span className="inline-flex items-center gap-2">
+      <Button variant={active ? "secondary" : "primary"} size="sm" loading={working} onClick={toggle}>
+        <span className="flex items-center gap-1.5">
+          {!working && (active ? <PowerOff size={14} /> : <Power size={14} />)}
+          {working ? (active ? "Deactivating…" : "Activating…") : active ? "Deactivate" : "Activate"}
+        </span>
+      </Button>
+      {error && <span className="text-[0.75rem] text-critical">{error}</span>}
+    </span>
   );
 }

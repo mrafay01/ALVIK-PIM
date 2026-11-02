@@ -184,15 +184,24 @@ export function ItemEditForm({
       // sent as its own follow-up PATCH using the same Object.assign(specs)
       // merge the route already does for every other specs.* write.
       if (Object.keys(weight).length > 0) {
-        await fetch(`/api/items/${itemId}`, {
+        const wRes = await fetch(`/api/items/${itemId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ specs: { weight } }),
-        }).catch(() => null);
+        });
+        if (!wRes.ok) {
+          const wData = await wRes.json().catch(() => ({}));
+          // The rest was saved; say plainly that the weights weren't.
+          setError(`Saved, except the weights: ${wData.error ?? "they couldn't be saved"}. Try saving again.`);
+          refresh();
+          return;
+        }
       }
 
       setSaved(true);
       refresh();
+    } catch {
+      setError("Couldn't reach the server. Try again.");
     } finally {
       setSaving(false);
     }

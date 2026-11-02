@@ -3,6 +3,18 @@ import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import SyncLog from "@/models/SyncLog";
 import { buildPullPlan, commitSelectedPullRows } from "@/lib/monday/pull";
+import { MondayApiError } from "@/lib/monday/client";
+import logger from "@/lib/logger";
+
+// Monday unreachable or refusing the request: a clear message, not a bare 500.
+function mondayFailed(what: string, err: unknown) {
+  logger.error(`Monday ${what} failed`, { error: err instanceof Error ? err.message : String(err) });
+  const detail = err instanceof MondayApiError ? ` Monday said: ${err.message.slice(0, 200)}` : "";
+  return NextResponse.json(
+    { error: `Couldn't ${what === "preview" ? "read the Monday board" : "finish the import"}. Try again in a moment.${detail}` },
+    { status: 502 }
+  );
+}
 
 // Reading the whole board plus the database writes can take a while on a
 // large board.
@@ -15,8 +27,11 @@ export async function GET() {
   if (isAuthFail(gate)) return gate.response;
 
   await connectDB();
-  const plan = await buildPullPlan();
-  return NextResponse.json(plan);
+  try {
+    return NextResponse.json(await buildPullPlan());
+  } catch (err) {
+    return mondayFailed("preview", err);
+  }
 }
 
 // POST: applies a plan the caller already reviewed via GET. Expects the
@@ -38,7 +53,21 @@ export async function POST(req: NextRequest) {
   await connectDB();
 
   const startedAt = new Date();
-  const result = await commitSelectedPullRows(ids as string[]);
+  let result;
+  try {
+    result = await commitSelectedPullRows(ids as string[]);
+  } catch (err) {
+    // Recorded like any other run, so a failed import is traceable too.
+    await SyncLog.create({
+      runType: "monday_pull",
+      startedAt,
+      finishedAt: new Date(),
+      rowsProcessed: ids.length,
+      errored: ids.length,
+      errorDetail: [{ message: err instanceof Error ? err.message.slice(0, 500) : String(err) }],
+    }).catch(() => undefined);
+    return mondayFailed("import", err);
+  }
 
   await SyncLog.create({
     runType: "monday_pull",

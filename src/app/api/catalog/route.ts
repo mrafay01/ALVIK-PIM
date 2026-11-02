@@ -160,12 +160,18 @@ export async function POST(req: NextRequest) {
   // Reject if any resulting SKU is a duplicate — within this request or
   // already in the DB.
   const numbers = rows.map((r) => r.itemNumber);
-  const dupeInRequest = numbers.find((n, i) => numbers.indexOf(n) !== i);
+  // Case-insensitive: SharePoint folder names ignore case, so "A1234" and
+  // "a1234" would share one Images folder.
+  const lower = numbers.map((n) => n.toLowerCase());
+  const dupeInRequest = numbers.find((_, i) => lower.indexOf(lower[i]) !== i);
   if (dupeInRequest) {
     return NextResponse.json({ error: `Duplicate SKU in this request: ${dupeInRequest}` }, { status: 400 });
   }
   await connectDB();
-  const clash = await Item.findOne({ itemNumber: { $in: numbers } }).select("itemNumber").lean();
+  const clash = await Item.findOne({ itemNumber: { $in: numbers } })
+    .collation({ locale: "en", strength: 2 })
+    .select("itemNumber")
+    .lean();
   if (clash) {
     return NextResponse.json({ error: `SKU already exists: ${clash.itemNumber}` }, { status: 409 });
   }
@@ -270,11 +276,11 @@ export async function POST(req: NextRequest) {
   try {
     inserted = await Item.insertMany(docs);
   } catch (err) {
-    // Someone created one of these SKUs between the clash check above and
-    // this insert. Remove whatever part of the family did get in, so the
-    // user can fix the SKU and resubmit cleanly.
+    // Whatever part of the family did get in is removed, so a failed save
+    // never leaves half a family behind. A duplicate means someone created
+    // one of these SKUs between the clash check above and this insert.
+    await Item.deleteMany({ variationGroupId }).catch(() => undefined);
     if ((err as { code?: number }).code === 11000) {
-      await Item.deleteMany({ variationGroupId });
       return NextResponse.json(
         { error: "One of these SKUs was just created by someone else. Check the SKUs and try again" },
         { status: 409 }

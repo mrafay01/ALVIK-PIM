@@ -8,6 +8,21 @@ import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { validateItemMeasurements, formatValidationIssues } from "@/lib/measurements/validate";
 import { isObjectId } from "@/lib/ids";
 import { refreshCatalogFacets } from "@/lib/catalog/facets";
+import { AUTHORITATIVE_FIELDS, getByPath, valuesConflict } from "@/lib/catalog/authoritativeFields";
+import CatalogChange from "@/models/CatalogChange";
+import logger from "@/lib/logger";
+
+function isEmptyValue(v: unknown): boolean {
+  return v === null || v === undefined || (typeof v === "string" && v.trim() === "");
+}
+
+// A manual edit counts as a change when a value is set, cleared or
+// different (weights compared at 2 decimals, like PI reconciliation).
+function editedValueChanged(kind: "weight" | "number" | "text", before: unknown, after: unknown): boolean {
+  if (isEmptyValue(before) && isEmptyValue(after)) return false;
+  if (isEmptyValue(before) !== isEmptyValue(after)) return true;
+  return valuesConflict(kind, before, after);
+}
 
 // PATCH: move an item through the pilot lifecycle — review decision,
 // sample SKU assignment, or any other status/field update. One endpoint
@@ -31,22 +46,34 @@ export async function PATCH(
 
   const item = await Item.findById(itemId);
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
+  // Authoritative values before this edit, for the catalog's change history.
+  const before = item.toObject();
 
   if (body.reviewDecision) {
     const { decision, note } = body.reviewDecision;
+    // A review decision is a lifecycle move like any other: it can't, for
+    // example, reject an item that's already live.
+    const target = decision === "approved" ? "approved" : "rejected";
+    const allowed = ITEM_TRANSITIONS[item.status as string] ?? [];
+    if (item.status !== target && !allowed.includes(target)) {
+      return NextResponse.json({ error: `An item that is "${item.status}" can't be ${target} now` }, { status: 400 });
+    }
     item.reviewDecision = {
       decision,
       note: note ?? "",
       reviewerId: session.user?.id ? new Types.ObjectId(session.user.id) : undefined,
       decidedAt: new Date(),
     };
-    item.status = decision === "approved" ? "approved" : "rejected";
-    if (decision === "rejected") item.rejectionReason = note ?? null;
+    item.status = target;
+    if (decision === "rejected") item.rejectionReason = note || undefined;
+    else item.rejectionReason = undefined;
   }
 
   if (body.sampleSku) {
     item.sampleSku = body.sampleSku;
-    item.status = "sample_ordered";
+    // Assigning a sample SKU moves the item to "sample ordered" only from a
+    // status where that's the next step; otherwise just the SKU is set.
+    if ((ITEM_TRANSITIONS[item.status as string] ?? []).includes("sample_ordered")) item.status = "sample_ordered";
   }
 
   if (body.status) {
@@ -62,7 +89,16 @@ export async function PATCH(
     item.status = body.status;
   }
 
-  if (body.itemNumber) {
+  if (body.itemNumber && body.itemNumber !== item.itemNumber) {
+    // Case-insensitive, like the catalog's new-item check: SharePoint folder
+    // names ignore case, so "A1234" and "a1234" would share image folders.
+    const clash = await Item.findOne({ itemNumber: body.itemNumber, _id: { $ne: item._id } })
+      .collation({ locale: "en", strength: 2 })
+      .select("itemNumber")
+      .lean();
+    if (clash) {
+      return NextResponse.json({ error: `Item number "${clash.itemNumber}" is already used by another item` }, { status: 409 });
+    }
     item.itemNumber = body.itemNumber;
   }
 
@@ -139,6 +175,26 @@ export async function PATCH(
     }
     throw err;
   }
-  if (item.inCatalog) refreshCatalogFacets();
+  // The catalog is the source of truth: every change to an authoritative
+  // field of a catalog item is logged (Change history on the item page).
+  if (item.inCatalog) {
+    const userId = session.user?.id ? new Types.ObjectId(session.user.id) : null;
+    const changes = AUTHORITATIVE_FIELDS.flatMap((f) => {
+      const oldValue = getByPath(before, f.path);
+      const newValue = item.get(f.path);
+      if (!editedValueChanged(f.kind, oldValue, newValue)) return [];
+      return [{ itemId: item._id, field: f.path, fieldLabel: f.label, oldValue: oldValue ?? null, newValue: newValue ?? null, source: "manual_edit" as const, sourceRef: { userId } }];
+    });
+    if (changes.length > 0) {
+      // The edit itself is saved; a failed log write is reported, not fatal.
+      await CatalogChange.insertMany(changes).catch((err) =>
+        logger.error("item edit: writing the change history failed", {
+          itemId: String(item._id),
+          error: err instanceof Error ? err.message : String(err),
+        })
+      );
+    }
+    refreshCatalogFacets();
+  }
   return NextResponse.json({ item });
 }

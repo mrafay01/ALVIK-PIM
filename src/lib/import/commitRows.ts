@@ -23,6 +23,8 @@ function buildUpdate(coerced: Record<string, unknown>) {
 
   for (const [path, value] of Object.entries(coerced)) {
     if (path === "itemNumber" || value === null || value === undefined) continue;
+    // Only the Master File's own columns are ever written onto an item.
+    if (!isMasterFileField(path)) continue;
     if (path in PRICING_FIELD_MAP) {
       pricingEntry[PRICING_FIELD_MAP[path]] = value;
       continue;
@@ -41,7 +43,7 @@ function buildUpdate(coerced: Record<string, unknown>) {
 }
 
 import ImportBatch from "@/models/ImportBatch";
-import { coerceMasterFileValue } from "@/lib/import/parseMasterFile";
+import { coerceMasterFileValue, isMasterFileField } from "@/lib/import/parseMasterFile";
 
 export type CommitResult = {
   committed: number;

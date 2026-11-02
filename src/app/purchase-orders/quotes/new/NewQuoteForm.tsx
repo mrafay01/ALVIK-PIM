@@ -144,7 +144,7 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
           items,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? "Could not save the quote");
         return;
@@ -152,6 +152,8 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
       // Keep the button busy while the next page loads.
       navigating = true;
       router.push(`/purchase-orders/quotes/${data.quotationId}`);
+    } catch {
+      setError("Couldn't reach the server. Try again.");
     } finally {
       if (!navigating) setSubmitting(false);
     }
@@ -190,10 +192,11 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
         <p className="text-[0.8rem] text-ink-soft mt-2 mb-0">
           {formatPoNumber(poNumber) ? (
             <>
-              This will be <strong className="text-ink font-mono">{formatPoNumber(poNumber)}</strong>.
+              This will be <strong className="text-ink font-mono">PO-{formatPoNumber(poNumber)}</strong>, and joins
+              the Monday PO with the same number if there is one.
             </>
           ) : (
-            "Saved as PO-<number>, the same as an uploaded file named <number>.xlsx."
+            "Type the PO number, e.g. 22906 (the same as an uploaded file named 22906.xlsx)."
           )}
         </p>
 

@@ -134,6 +134,11 @@ const PurchaseOrderSchema = new Schema(
     // exist on Monday), so the archiver stops retrying them.
     archiveErrors: { type: [ArchiveErrorSchema], default: [] },
     archiveGaveUp: { type: [String], default: [] },
+    // Set only while one copy run is working on this PO's Monday files, so
+    // two runs (two admins, or the screen and the background worker) never
+    // copy the same file twice. Removed when the run finishes; a lock older
+    // than ARCHIVE_LOCK_MS (lib/purchase-orders/files.ts) counts as abandoned.
+    archiveLockedAt: Date,
     // The board's Status-column label verbatim, stored on every pull
     // regardless of whether it maps to a PoStatus — the app's pipeline
     // `status` field above is a strict linear enum (PoActions.tsx /

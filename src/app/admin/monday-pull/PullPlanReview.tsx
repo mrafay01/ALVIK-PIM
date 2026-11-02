@@ -71,8 +71,11 @@ export function PullPlanReview({
 }: {
   rows: PullPlanRow[];
   committing: boolean;
-  onApply: (mondayItemIds: string[]) => void;
+  onApply: (mondayItemIds: string[], saveFiles: boolean) => void;
 }) {
+  // Copy each imported PO's files from Monday into its SharePoint folder
+  // right after the import. On by default; the copy can also be run later.
+  const [saveFiles, setSaveFiles] = useState(true);
   const [q, setQ] = useState("");
   const [action, setAction] = useState<"" | PullPlanRow["action"]>("");
   const [status, setStatus] = useState("");
@@ -122,6 +125,7 @@ export function PullPlanReview({
   const selectedRows = rows.filter((r) => selected.has(r.mondayItemId));
   const selUpdate = selectedRows.filter((r) => r.action === "update").length;
   const selCreate = selectedRows.filter((r) => r.action === "create").length;
+  const selFiles = selectedRows.reduce((n, r) => n + (r.fileCount ?? 0), 0);
 
   function resetPageAnd<T>(set: (v: T) => void) {
     return (v: T) => {
@@ -168,17 +172,31 @@ export function PullPlanReview({
               imported (no vendor set)
             </span>
           </div>
-          <Button
-            variant="primary"
-            disabled={selectedRows.length === 0}
-            loading={committing}
-            onClick={() => onApply(selectedRows.map((r) => r.mondayItemId))}
-          >
-            <span className="flex items-center gap-1.5">
-              {!committing && <ArrowRight size={15} />}
-              {committing ? "Importing…" : `Import ${selectedRows.length} selected`}
-            </span>
-          </Button>
+          <div className="flex items-center gap-4 flex-wrap">
+            <label className="flex items-center gap-2 text-[0.85rem] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={saveFiles}
+                onChange={(e) => setSaveFiles(e.target.checked)}
+                disabled={committing}
+              />
+              <span>
+                Also save PO files to SharePoint
+                <span className="text-ink-faint"> ({selFiles} file{selFiles === 1 ? "" : "s"})</span>
+              </span>
+            </label>
+            <Button
+              variant="primary"
+              disabled={selectedRows.length === 0}
+              loading={committing}
+              onClick={() => onApply(selectedRows.map((r) => r.mondayItemId), saveFiles)}
+            >
+              <span className="flex items-center gap-1.5">
+                {!committing && <ArrowRight size={15} />}
+                {committing ? "Importing…" : `Import ${selectedRows.length} selected`}
+              </span>
+            </Button>
+          </div>
         </div>
       </Card>
 

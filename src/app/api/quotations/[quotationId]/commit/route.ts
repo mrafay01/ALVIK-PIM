@@ -13,9 +13,9 @@ import { attachQuotationToPurchaseOrder } from "@/lib/purchase-orders/fromQuotat
 import logger from "@/lib/logger";
 import { isObjectId } from "@/lib/ids";
 import { refreshCatalogFacets } from "@/lib/catalog/facets";
+import { commitLockFree } from "@/lib/quote-import/commitLock";
 
 const QUOTE_ROLES = ROLE_SETS.quotes;
-const COMMIT_LOCK_TTL_MS = 5 * 60 * 1000;
 
 // Fields a quote row never writes. Left out of the merge's $set so a
 // photo upload, conflict resolution or catalog decision that lands while
@@ -66,13 +66,7 @@ export async function POST(
   // One commit per quote at a time — see Quotation.commitLockedAt.
   const now = new Date();
   const quotation = await Quotation.findOneAndUpdate(
-    {
-      _id: quotationId,
-      $or: [
-        { commitLockedAt: null },
-        { commitLockedAt: { $lt: new Date(now.getTime() - COMMIT_LOCK_TTL_MS) } },
-      ],
-    },
+    { _id: quotationId, ...commitLockFree(now) },
     { $set: { commitLockedAt: now } },
     { new: true, timestamps: false }
   );

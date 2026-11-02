@@ -55,6 +55,8 @@ export function ConflictsList({ groups }: { groups: Group[] }) {
       setCustoming(null);
       setCustomDraft("");
       refresh();
+    } catch {
+      setError("Couldn't reach the server. Try again.");
     } finally {
       setBusy(null);
     }

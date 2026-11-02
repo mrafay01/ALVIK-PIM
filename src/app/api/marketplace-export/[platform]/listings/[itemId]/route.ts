@@ -43,11 +43,21 @@ export async function PATCH(
     update.bulletFeatures = bulletFeatures.map((text) => ({ text }));
   }
 
-  const listing = await MarketplaceListing.findOneAndUpdate(
-    { itemId, platform },
-    { $set: update },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+  // Two quick first edits can both try to create the listing; the loser
+  // hits the unique (item, platform) index and simply updates the winner's.
+  const upsert = () =>
+    MarketplaceListing.findOneAndUpdate(
+      { itemId, platform },
+      { $set: update },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  let listing;
+  try {
+    listing = await upsert();
+  } catch (err) {
+    if ((err as { code?: number }).code !== 11000) throw err;
+    listing = await upsert();
+  }
 
   return NextResponse.json({ listing });
 }

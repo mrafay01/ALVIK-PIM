@@ -19,6 +19,10 @@ import logger from "@/lib/logger";
 // equality. Public callers get 401 and never reach the queue.
 
 const MAX_JOBS_PER_TICK = 10;
+// Stay inside the serverless limit: no new job is started after this much
+// of the tick has passed (a job already running finishes its own slice).
+export const maxDuration = 60;
+const CLAIM_WINDOW_MS = 15_000;
 
 function constantTimeEquals(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -46,7 +50,8 @@ export async function POST(req: NextRequest) {
   const workerId = `${process.env.VERCEL_REGION ?? "local"}:${crypto.randomBytes(4).toString("hex")}`;
 
   const executed: { jobId: string; kind: string; status: "completed" | "failed" }[] = [];
-  for (let i = 0; i < MAX_JOBS_PER_TICK; i++) {
+  const startedAt = Date.now();
+  for (let i = 0; i < MAX_JOBS_PER_TICK && Date.now() - startedAt < CLAIM_WINDOW_MS; i++) {
     const claimed = await claimNextJob(workerId);
     if (!claimed) break;
     try {

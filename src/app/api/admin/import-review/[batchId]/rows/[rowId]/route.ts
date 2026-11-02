@@ -7,6 +7,7 @@ import ImportBatch from "@/models/ImportBatch";
 import ImportBatchRow from "@/models/ImportBatchRow";
 import { isObjectId } from "@/lib/ids";
 import { fixRowField } from "@/lib/import/commitRows";
+import { isMasterFileField } from "@/lib/import/parseMasterFile";
 
 // PATCH: record a reviewer's decision on one staged row — approve it
 // (optionally with corrected field values), reject it, or edit its coerced
@@ -25,6 +26,8 @@ export async function PATCH(
   const parsed = ImportRowPatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
   const { reviewStatus, coercedOverrides, reviewNote } = parsed.data;
+  const unknownField = Object.keys(coercedOverrides ?? {}).find((f) => !isMasterFileField(f));
+  if (unknownField) return NextResponse.json({ error: `"${unknownField}" isn't a Master File column` }, { status: 400 });
 
   await connectDB();
   if (!(await ImportBatch.exists({ _id: batchId }))) {

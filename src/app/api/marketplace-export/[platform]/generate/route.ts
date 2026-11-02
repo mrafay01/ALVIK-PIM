@@ -12,6 +12,7 @@ import { BELK_COLUMNS, mapItemToBelkRow } from "@/lib/marketplace-export/belk";
 import { KOHLS_FULL_COLUMNS, mapItemToKohlsRow } from "@/lib/marketplace-export/kohls";
 import { buildCsv } from "@/lib/marketplace-export/writeCsv";
 import { buildTwoHeaderRowXlsx, buildSingleHeaderRowXlsx } from "@/lib/marketplace-export/writeXlsx";
+import { EXPORT_ELIGIBLE } from "@/lib/marketplace-export/eligibility";
 
 function isExportPlatform(p: string): p is (typeof MARKETPLACE_EXPORT_PLATFORMS)[number] {
   return (MARKETPLACE_EXPORT_PLATFORMS as readonly string[]).includes(p);
@@ -52,12 +53,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
   const startedAt = new Date();
 
   const [items, listings] = await Promise.all([
-    Item.find({ _id: { $in: itemIds } })
+    // Only items the review page itself would offer (see eligibility.ts);
+    // any other id in the request is skipped and reported.
+    Item.find({ _id: { $in: itemIds }, ...EXPORT_ELIGIBLE })
       .select("itemNumber category specs pricingHistory active")
       .lean(),
     MarketplaceListing.find({ platform, itemId: { $in: itemIds } }).lean(),
   ]);
   const listingByItemId = new Map(listings.map((l) => [String(l.itemId), l]));
+  const found = new Set(items.map((i) => String(i._id)));
+  const skippedNotEligible = [...new Set(itemIds as string[])].filter((id) => !found.has(id));
 
   const skippedNoSku: string[] = [];
   const skippedInactive: string[] = [];
@@ -114,10 +119,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
     runType: "marketplace_export",
     startedAt,
     finishedAt: new Date(),
-    rowsProcessed: items.length,
+    rowsProcessed: items.length + skippedNotEligible.length,
     changed: resolvedRows.length,
     unchanged: 0,
-    skipped: skippedNoSku.length + skippedInactive.length,
+    skipped: skippedNoSku.length + skippedInactive.length + skippedNotEligible.length,
     errored: 0,
     errorDetail: [
       ...skippedNoSku.map((itemId) => ({
@@ -128,8 +133,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
         itemId,
         message: "Skipped — item is marked inactive",
       })),
+      ...skippedNotEligible.map((itemId) => ({
+        itemId,
+        message: "Skipped — item isn't ready to export (status, SKU or active)",
+      })),
     ],
   });
+
+  if (resolvedRows.length === 0) {
+    return NextResponse.json({ error: "None of the selected items can be exported." }, { status: 400 });
+  }
 
   return new NextResponse(new Uint8Array(fileBuffer), {
     status: 200,

@@ -5,6 +5,7 @@ import { requireRole, isAuthFail } from "@/lib/authz";
 import Item from "@/models/Item";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { isObjectId } from "@/lib/ids";
+import { refreshCatalogFacets } from "@/lib/catalog/facets";
 
 const CATALOG_ROLES = ["marketplace_listing"] as const;
 
@@ -42,5 +43,6 @@ export async function POST(
   if (session.user?.id) item.lastEditedBy = new Types.ObjectId(session.user.id);
   await item.save();
 
+  refreshCatalogFacets();
   return NextResponse.json({ submitted: true });
 }

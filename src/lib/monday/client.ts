@@ -22,17 +22,32 @@ export async function mondayRequest<T>(
   const token = process.env.MONDAY_API_TOKEN;
   if (!token) throw new Error("MONDAY_API_TOKEN is not set");
 
-  const res = await fetch(MONDAY_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: token,
-      "API-Version": "2024-10",
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(MONDAY_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: token,
+        "API-Version": "2024-10",
+      },
+      body: JSON.stringify({ query, variables }),
+      // A stalled Monday call must not hold the request until the platform kills it.
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (err) {
+    const timedOut = err instanceof Error && err.name === "TimeoutError";
+    throw new MondayApiError(timedOut ? "Monday didn't answer in time" : "Couldn't reach Monday", []);
+  }
 
-  const json = (await res.json()) as MondayResponse<T>;
+  // Rate limits and outages can answer with HTML or plain text, not JSON.
+  const json = (await res.json().catch(() => null)) as MondayResponse<T> | null;
+  if (!json) {
+    throw new MondayApiError(
+      res.status === 429 ? "Monday's rate limit was reached; try again in a minute" : `Monday answered with an error (${res.status})`,
+      []
+    );
+  }
   if (json.errors?.length) {
     throw new MondayApiError(json.errors[0].message, json.errors);
   }

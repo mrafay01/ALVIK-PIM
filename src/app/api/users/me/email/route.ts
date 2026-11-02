@@ -90,7 +90,15 @@ export async function PATCH(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   user.email = newEmail;
-  await user.save();
+  try {
+    await user.save();
+  } catch (err) {
+    // Lost a race for the address: the unique index refuses it.
+    if ((err as { code?: number }).code === 11000) {
+      return NextResponse.json({ error: "That email was taken by another account in the meantime" }, { status: 409 });
+    }
+    throw err;
+  }
 
   return NextResponse.json({ ok: true, email: user.email });
 }

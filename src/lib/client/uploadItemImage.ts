@@ -1,12 +1,14 @@
 "use client";
 
-export type UploadKind = "main" | "sides" | "models" | "auto";
+import type { ImageSubfolder } from "@/lib/enums";
+
+export type UploadKind = ImageSubfolder | "auto";
 
 export type ItemMediaEntry = {
   sharePointItemId: string;
   url: string;
   name: string | null;
-  subfolder: "main" | "sides" | "models";
+  subfolder: ImageSubfolder;
   linkStatus: "ok" | "broken" | null;
 };
 

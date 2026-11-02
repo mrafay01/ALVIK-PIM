@@ -5,6 +5,7 @@ import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { badRequest } from "@/lib/schemas";
 import Item from "@/models/Item";
 import { isObjectId } from "@/lib/ids";
+import { IMAGE_SUBFOLDERS } from "@/lib/enums";
 import { getSharePointContext, ensureItemFolders, createUploadSession, inferSubfolder } from "@/lib/sharepoint/client";
 import { safeSharePointName, signUploadTicket } from "@/lib/purchase-orders/files";
 import {
@@ -20,8 +21,8 @@ const BodySchema = z.object({
   fileName: z.string().trim().min(1).max(200),
   size: z.number().int().positive(),
   // "auto" keeps the file's own name and routes it by its suffix
-  // ({key}.jpg / -S{n} / -M{n}); the others rename it to the convention.
-  kind: z.enum(["main", "sides", "models", "auto"]),
+  // ({key}.jpg / -S{n} / -M{n} / -LS{n}); the others rename it to the convention.
+  kind: z.enum([...IMAGE_SUBFOLDERS, "auto"]),
 });
 
 // POST: start a browser -> SharePoint upload of one image for this item.
@@ -73,10 +74,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ite
   const folder = ["Images", key, subfolder];
   try {
     const ctx = await getSharePointContext();
-    await ensureItemFolders(ctx, key);
+    await ensureItemFolders(ctx, key, subfolder);
     // Main (and an exact re-upload of a named file) replaces the old file;
-    // a numbered side/model shot never overwrites another.
-    const session = await createUploadSession(ctx, folder, name, kind === "sides" || kind === "models" ? "rename" : "replace");
+    // a numbered side/model/lifestyle shot never overwrites another.
+    const session = await createUploadSession(ctx, folder, name, kind === "main" || kind === "auto" ? "replace" : "rename");
     return NextResponse.json({ uploadUrl: session.uploadUrl, ticket: signUploadTicket(userId, folder, name), fileName: name });
   } catch (err) {
     logger.error("image upload: starting SharePoint upload failed", { error: err instanceof Error ? err.message : String(err) });

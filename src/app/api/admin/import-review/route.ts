@@ -32,8 +32,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const formData = await req.formData();
-  const file = formData.get("file");
+  // Not a multipart upload (or a broken one): a clear 400, not a 500.
+  const formData = await req.formData().catch(() => null);
+  const file = formData?.get("file");
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
   }
@@ -123,8 +124,16 @@ export async function POST(req: NextRequest) {
   const flaggedCount = stagedRows.filter((r) => r.flags.length > 0).length;
 
   // insertMany batches its writes under the hood — no single document risks
-  // the 16MB ceiling regardless of how many rows the file has.
-  await ImportBatchRow.insertMany(stagedRows);
+  // the 16MB ceiling regardless of how many rows the file has. If it fails
+  // part-way, the half-staged import is removed rather than left looking
+  // like a normal one waiting for review.
+  try {
+    await ImportBatchRow.insertMany(stagedRows);
+  } catch (err) {
+    await ImportBatchRow.deleteMany({ batchId: batch._id }).catch(() => undefined);
+    await ImportBatch.deleteOne({ _id: batch._id }).catch(() => undefined);
+    throw err;
+  }
 
   batch.flaggedRows = flaggedCount;
   await batch.save();

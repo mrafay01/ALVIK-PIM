@@ -55,8 +55,10 @@ export async function POST(req: NextRequest) {
 
   do {
     const items = await Item.find(explicit ? { _id: { $in: explicit } } : dueFilter())
+      .select("media.sharePointItemId")
       .sort({ updatedAt: -1 })
-      .limit(explicit ? 100 : 25);
+      .limit(explicit ? 100 : 25)
+      .lean();
     if (items.length === 0) break;
 
     const filesBefore = checkedFiles;
@@ -65,18 +67,41 @@ export async function POST(req: NextRequest) {
     const now = new Date();
 
     for (const it of items) {
-      for (const m of it.media) {
+      // Each image's result is written in place by its SharePoint id, never
+      // by saving the whole image list back: an image uploaded while this
+      // check was waiting on SharePoint would otherwise be wiped off the item.
+      // A status check isn't an edit, so updatedAt is left alone.
+      const ops = (it.media ?? []).flatMap((m) => {
         const ok = exists.get(m.sharePointItemId);
-        if (ok === undefined) continue; // check itself failed; try again later
-        m.linkStatus = ok ? "ok" : "broken";
-        m.linkCheckedAt = now;
+        if (ok === undefined) return []; // check itself failed; try again later
         checkedFiles++;
         if (!ok) broken++;
+        return [
+          {
+            updateOne: {
+              filter: { _id: it._id },
+              update: { $set: { "media.$[m].linkStatus": ok ? "ok" : "broken", "media.$[m].linkCheckedAt": now } },
+              arrayFilters: [{ "m.sharePointItemId": m.sharePointItemId }],
+              timestamps: false,
+            },
+          },
+        ];
+      });
+      if (ops.length === 0) continue;
+      await Item.bulkWrite(ops as never, { ordered: false });
+
+      // Completeness from the item as it is now, including any new upload.
+      const fresh = await Item.findById(it._id)
+        .select("itemNumber category specs pricingHistory media imageCompleteness")
+        .lean();
+      if (fresh) {
+        const imageCompleteness = imageCompletenessOf(fresh.media ?? []);
+        await Item.updateOne(
+          { _id: it._id },
+          { $set: { imageCompleteness, masterRecordComplete: isMasterRecordComplete({ ...fresh, imageCompleteness }) } },
+          { timestamps: false }
+        );
       }
-      it.imageCompleteness = imageCompletenessOf(it.media);
-      it.masterRecordComplete = isMasterRecordComplete(it);
-      // A status check isn't an edit: leave updatedAt alone.
-      await it.save({ timestamps: false });
       checkedItems++;
     }
     // Nothing could be checked this round (SharePoint not answering):

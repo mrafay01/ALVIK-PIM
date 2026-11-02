@@ -61,7 +61,20 @@ export async function POST(
     newValue = existing.incomingValue;
   } else {
     nextStatus = "custom";
-    newValue = parsed.data.decision === "custom" ? parsed.data.customValue : null;
+    const raw = parsed.data.decision === "custom" ? parsed.data.customValue : null;
+    // The typed value has to fit the field: a weight is a number >= 0,
+    // anything else non-empty text. Checked before the conflict is closed.
+    if (authField.kind === "weight" || authField.kind === "number") {
+      const n = typeof raw === "number" ? raw : Number(String(raw ?? "").trim());
+      if (String(raw ?? "").trim() === "" || !Number.isFinite(n) || n < 0) {
+        return NextResponse.json({ error: `Enter a number for ${authField.label}` }, { status: 400 });
+      }
+      newValue = n;
+    } else {
+      const text = String(raw ?? "").trim();
+      if (!text) return NextResponse.json({ error: `Enter a value for ${authField.label}` }, { status: 400 });
+      newValue = text;
+    }
   }
 
   const resolvedBy = gate.session.user?.id ? new Types.ObjectId(gate.session.user.id) : undefined;
@@ -94,7 +107,16 @@ export async function POST(
       const oldValue = getByPath(item.toObject({ depopulate: true }), conflict.field);
       item.set(conflict.field, newValue);
       if (resolvedBy) item.lastEditedBy = resolvedBy;
-      await item.save();
+      try {
+        await item.save();
+      } catch (err) {
+        // The item wasn't changed, so the conflict isn't resolved either.
+        await CatalogConflict.updateOne(
+          { _id: conflict._id, status: nextStatus },
+          { $set: { status: "pending" }, $unset: { resolvedAt: "", resolvedBy: "", customValue: "" } }
+        );
+        throw err;
+      }
 
       await CatalogChange.create({
         itemId: conflict.itemId,

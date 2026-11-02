@@ -328,6 +328,13 @@ const MISSING_SKU_MESSAGE = "Missing SKU; row cannot be imported without one";
 // Re-checks one corrected value (typed on the review or Flagged Items
 // screen) with exactly the rules the import used, so a fix clears the
 // row's flag only when the new value is actually valid.
+// Whether a staged field path is one of the Master File's own columns. Only
+// these may be fixed by hand or written onto an item at commit, so a crafted
+// edit can't set fields like inCatalog or catalogApproval.
+export function isMasterFileField(path: string): boolean {
+  return COLUMNS.some((c) => c.path === path);
+}
+
 export function coerceMasterFileValue(path: string, raw: unknown): { value: unknown; flags: FieldFlag[] } {
   const flags: FieldFlag[] = [];
   const col = COLUMNS.find((c) => c.path === path);

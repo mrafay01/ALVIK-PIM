@@ -10,9 +10,10 @@ import { getSharePointContext, getDriveItem } from "@/lib/sharepoint/client";
 import { verifyUploadTicket, itemMatchesTicket } from "@/lib/purchase-orders/files";
 import { imageCompletenessOf } from "@/lib/items/images";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
+import type { ImageSubfolder } from "@/lib/enums";
 
 const BodySchema = z.object({ ticket: z.string().max(2000), driveItemId: z.string().min(1).max(200) });
-const KIND_FOR: Record<string, "main" | "sides" | "models"> = { Main: "main", Sides: "sides", Models: "models" };
+const KIND_FOR: Record<string, ImageSubfolder> = { Main: "main", Sides: "sides", Models: "models", Lifestyle: "lifestyle" };
 
 // POST: record an image the browser just uploaded to SharePoint (see
 // ./upload-session) on the item, and recompute image completeness.

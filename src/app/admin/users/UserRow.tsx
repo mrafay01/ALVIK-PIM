@@ -108,7 +108,8 @@ export function UserRow({
       <td className={`${TD_CLASS} !py-2`}>
         <div className="flex flex-col gap-2 items-end">
           <div className="flex items-center gap-2">
-            {!resetOpen && (
+            {/* Your own password is changed from Settings, not here. */}
+            {!resetOpen && !isSelf && (
               <Button size="sm" variant="ghost" onClick={() => setResetOpen(true)} disabled={working}>
                 <span className="inline-flex items-center gap-1">
                   <KeyRound size={13} /> Reset password
