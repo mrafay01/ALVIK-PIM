@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Types } from "mongoose";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
@@ -96,13 +97,24 @@ export default async function PurchaseOrdersPage({
   const rows = (listResult[0]?.rows ?? []) as PoListRow[];
   const total: number = listResult[0]?.count?.[0]?.n ?? 0;
   const filteredValue: number = listResult[0]?.value?.[0]?.total ?? 0;
-  const counts = (viewCountsResult[0] ?? {}) as Record<string, { n: number }[]>;
+  const { openValue: openValueFacet, ...counts } = (viewCountsResult[0] ?? {}) as Record<string, { n: number }[]>;
+  const openValue = openValueFacet?.[0]?.n ?? 0;
   const viewCounts: Partial<Record<PoView, number>> = Object.fromEntries(
     Object.entries(counts).map(([k, v]) => [k, v[0]?.n ?? 0])
   );
 
   const query = poListStateToQuery(state);
   const isFiltered = Object.keys(query).some((k) => k !== "sort" && k !== "dir");
+
+  // A page past the end (an old bookmark, or the last row filtered away):
+  // go to the last page that has rows instead of an empty table.
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (page > lastPage && total > 0) {
+    const params = new URLSearchParams(Object.entries(query).filter((e): e is [string, string] => !!e[1]));
+    if (lastPage > 1) params.set("page", String(lastPage));
+    const qs = params.toString();
+    redirect(qs ? `/purchase-orders?${qs}` : "/purchase-orders");
+  }
 
   return (
     <AppShell activeHref="/purchase-orders" eyebrow="Vendor pipeline" title="Purchase Orders">
@@ -122,8 +134,8 @@ export default async function PurchaseOrdersPage({
         <StatCard label="Needs attention" value={viewCounts.attention ?? 0} icon={TriangleAlert} tone="warn" />
         <StatCard label="Overdue" value={viewCounts.overdue ?? 0} icon={CalendarClock} tone="warn" />
         <StatCard
-          label={isFiltered ? "Value (matching)" : "Pipeline value"}
-          value={`$${filteredValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+          label={isFiltered ? "Value (matching)" : "Open pipeline value"}
+          value={`$${(isFiltered ? filteredValue : openValue).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
           icon={DollarSign}
           tone="neutral"
         />

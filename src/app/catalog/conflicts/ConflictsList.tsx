@@ -13,6 +13,8 @@ type Conflict = {
   field: string;
   fieldLabel: string;
   catalogValue: unknown;
+  // The item's value now (catalogValue is what it was when the PI came in).
+  currentValue: unknown;
   incomingValue: unknown;
   quotationId: { _id: string; sourceFileName?: string; poNumber?: string } | null;
 };
@@ -21,6 +23,7 @@ type Group = {
   itemId: string;
   itemNumber: string;
   title: string | null;
+  missing: boolean;
   conflicts: Conflict[];
 };
 
@@ -74,24 +77,30 @@ export function ConflictsList({ groups }: { groups: Group[] }) {
           <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 min-w-0">
               <TriangleAlert size={16} className="text-warn shrink-0" />
-              <Link
-                href={`/items/${group.itemId}`}
-                className="font-mono font-semibold text-[0.9rem] text-navy-deep no-underline"
-              >
-                {group.itemNumber}
-              </Link>
+              {group.missing ? (
+                <span className="font-semibold text-[0.9rem] text-ink-soft">{group.itemNumber}</span>
+              ) : (
+                <Link
+                  href={`/items/${group.itemId}`}
+                  className="font-mono font-semibold text-[0.9rem] text-navy-deep no-underline"
+                >
+                  {group.itemNumber}
+                </Link>
+              )}
               <span className="text-ink-soft text-[0.86rem] truncate">
                 {group.title ?? "—"}
               </span>
             </div>
             <span className="text-[0.78rem] text-ink-faint">
-              {group.conflicts.length} field{group.conflicts.length === 1 ? "" : "s"} to decide
+              {group.missing
+                ? "This item was deleted, so there's nothing to update. Close these conflicts."
+                : `${group.conflicts.length} field${group.conflicts.length === 1 ? "" : "s"} to decide`}
             </span>
           </div>
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                {["Field", "Catalog (stored)", "Incoming (PI)", "From", "Decide"].map((h) => (
+                {["Field", "Catalog (now)", "Incoming (PI)", "From", "Decide"].map((h) => (
                   <th
                     key={h}
                     className="text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap"
@@ -110,7 +119,15 @@ export function ConflictsList({ groups }: { groups: Group[] }) {
                   <tr key={c._id} className="border-b border-border last:border-b-0 align-top">
                     <td className="px-4 py-3 text-[0.86rem] font-semibold">{c.fieldLabel}</td>
                     <td className="px-4 py-3 font-mono text-[0.84rem]">
-                      {formatValue(c.catalogValue)}
+                      {group.missing ? "—" : formatValue(c.currentValue)}
+                      {!group.missing && formatValue(c.currentValue) !== formatValue(c.catalogValue) && (
+                        <div className="font-body text-[0.74rem] text-ink-faint mt-0.5">
+                          was {formatValue(c.catalogValue)} when the PI came in
+                        </div>
+                      )}
+                      {!group.missing && formatValue(c.currentValue) === formatValue(c.incomingValue) && (
+                        <div className="font-body text-[0.74rem] text-good mt-0.5">Already matches the PI</div>
+                      )}
                     </td>
                     <td className="px-4 py-3 font-mono text-[0.84rem] text-warn">
                       {formatValue(c.incomingValue)}
@@ -130,7 +147,16 @@ export function ConflictsList({ groups }: { groups: Group[] }) {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {isCustoming ? (
+                      {group.missing ? (
+                        <Button
+                          size="sm"
+                          disabled={isBusy}
+                          loading={spinning("keep")}
+                          onClick={() => resolve(c._id, { decision: "keep" })}
+                        >
+                          Close
+                        </Button>
+                      ) : isCustoming ? (
                         <div className="flex items-center gap-2">
                           <Input
                             value={customDraft}

@@ -36,10 +36,13 @@ export function PoChecklist({
   poId,
   checklist,
   canEdit,
+  lockDone = false,
 }: {
   poId: string;
   checklist: Record<string, string>;
   canEdit: boolean;
+  /** Ready to ship or later: a completed item can't be changed back. */
+  lockDone?: boolean;
 }) {
   const { refresh, refreshing } = useRefreshAfterSave();
   const [values, setValues] = useState<Record<string, string>>(checklist ?? {});
@@ -67,7 +70,9 @@ export function PoChecklist({
       refresh();
     } catch (err) {
       setValues((v) => ({ ...v, [field]: prev }));
-      setError(err instanceof Error ? err.message : "Couldn't save that change.");
+      setError(
+        err instanceof TypeError ? "Couldn't reach the server. Try again." : err instanceof Error ? err.message : "Couldn't save that change."
+      );
     } finally {
       setSaving(null);
     }
@@ -91,7 +96,7 @@ export function PoChecklist({
                 {checklistLabel(field)}
                 {busyField === field && <Loader2 size={12} className="animate-spin text-ink-faint" aria-label="Saving" />}
               </span>
-              {canEdit ? (
+              {canEdit && !(lockDone && isChecklistFieldDone(field, checklist[field])) ? (
                 <select
                   value={value}
                   disabled={busyField === field}

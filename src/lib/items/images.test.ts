@@ -73,3 +73,32 @@ describe("review row filters", () => {
     expect(rx.test("A1x2")).toBe(false); // the "." is literal
   });
 });
+
+describe("mediaFolderKey", () => {
+  // Imported lazily so this block stands alone at the end of the file.
+  const { mediaFolderKey, itemMediaKey } = jest.requireActual("./images") as typeof import("./images");
+
+  it("leaves ordinary SKUs as they are", () => {
+    expect(mediaFolderKey("A1234-GP")).toBe("A1234-GP");
+    expect(mediaFolderKey("R1234-GP-6")).toBe("R1234-GP-6");
+  });
+
+  it("replaces characters a SharePoint name can't hold (real catalog SKUs)", () => {
+    expect(mediaFolderKey("CR-5006/1")).toBe("CR-5006_1");
+    expect(mediaFolderKey('A88432-GP-7"')).toBe("A88432-GP-7_");
+    expect(mediaFolderKey("BR1458-6''")).toBe("BR1458-6''");
+    expect(mediaFolderKey("A#1%2?3*4:5<6>7|8\\9")).toBe("A_1_2_3_4_5_6_7_8_9");
+  });
+
+  it("drops trailing dots and spaces, and gives null for nothing", () => {
+    expect(mediaFolderKey("  A1234. ")).toBe("A1234");
+    expect(mediaFolderKey("")).toBeNull();
+    expect(mediaFolderKey(null)).toBeNull();
+  });
+
+  it("uses the item number, else the sample SKU", () => {
+    expect(itemMediaKey({ itemNumber: "E-50032/4", sampleSku: "SAM-1" })).toBe("E-50032_4");
+    expect(itemMediaKey({ itemNumber: null, sampleSku: "SAM-1" })).toBe("SAM-1");
+    expect(itemMediaKey({})).toBeNull();
+  });
+});

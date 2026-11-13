@@ -9,6 +9,7 @@ import { PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { isObjectId } from "@/lib/ids";
 import { onReviewPage, searchFilter } from "@/lib/import/reviewQuery";
 import { masterFileFieldLabel } from "@/lib/import/parseMasterFile";
+import { existingItemsBySku } from "@/lib/import/existingSkus";
 
 // Review step of a Master File import. Rows waiting here are either
 // committed to the catalog or sent to Flagged Items to be fixed later;
@@ -46,13 +47,26 @@ export default async function BatchReviewPage({
   // A file with nothing left to review has no page of its own any more;
   // Recent imports keeps just its name and counts.
   if (total === 0 && !q) redirect("/catalog/import?done=1");
+  // A page past the end (rows committed or sent away since): the last page.
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (page > lastPage && total > 0) {
+    const sp2 = new URLSearchParams();
+    if (q) sp2.set("q", q);
+    if (lastPage > 1) sp2.set("page", String(lastPage));
+    redirect(`/catalog/import/${batchId}${sp2.size ? `?${sp2}` : ""}`);
+  }
 
-  const shaped = rows.map((r) => ({
-    _id: String(r._id),
-    rowNumber: r.rowNumber,
-    coerced: r.coerced as Record<string, unknown>,
-    issues: (r.flags ?? []).map((f) => ({ label: masterFileFieldLabel(f.field), message: f.message })),
-  }));
+  const existing = await existingItemsBySku(rows.map((r) => (r.coerced as Record<string, unknown>)?.itemNumber));
+  const shaped = rows.map((r) => {
+    const sku = (r.coerced as Record<string, unknown>)?.itemNumber;
+    return {
+      _id: String(r._id),
+      rowNumber: r.rowNumber,
+      coerced: r.coerced as Record<string, unknown>,
+      issues: (r.flags ?? []).map((f) => ({ label: masterFileFieldLabel(f.field), message: f.message })),
+      updates: typeof sku === "string" ? existing.get(sku.toLowerCase()) ?? null : null,
+    };
+  });
 
   return (
     <AppShell

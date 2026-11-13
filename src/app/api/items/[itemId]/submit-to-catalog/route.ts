@@ -6,6 +6,8 @@ import Item from "@/models/Item";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { isObjectId } from "@/lib/ids";
 import { refreshCatalogFacets } from "@/lib/catalog/facets";
+import { notifyAfterResponse } from "@/lib/notifications/notify";
+import { catalogSubmitted } from "@/lib/notifications/messages";
 
 const CATALOG_ROLES = ["catalog_manager"] as const;
 
@@ -44,5 +46,12 @@ export async function POST(
   await item.save();
 
   refreshCatalogFacets();
+  notifyAfterResponse(
+    catalogSubmitted({
+      item: { id: String(item._id), sku: item.itemNumber, title: item.title },
+      actorId: session.user?.id,
+      actorName: session.user?.name,
+    })
+  );
   return NextResponse.json({ submitted: true });
 }

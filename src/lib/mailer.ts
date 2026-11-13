@@ -23,8 +23,30 @@ function getTransport() {
     port: Number(port),
     secure: Number(port) === 465,
     auth: { user, pass },
+    // A stalled mail server must not hold a request or a background slice.
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 30_000,
   });
   return transport;
+}
+
+// True when every SMTP_* setting needed to send is present.
+export function isMailConfigured(): boolean {
+  return !!(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+// A notification email to one person (lib/notifications). Sent from the
+// app's own address under the name "CZC PIM".
+export async function sendEmail(input: { to: string; subject: string; html: string; text: string }): Promise<void> {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER || "";
+  await getTransport().sendMail({
+    from: { name: "CZC PIM", address: from.replace(/^.*<([^>]+)>.*$/, "$1") },
+    to: input.to,
+    subject: input.subject.replace(/[\r\n]+/g, " "),
+    text: input.text,
+    html: input.html,
+  });
 }
 
 export async function sendOtpEmail(to: string, code: string): Promise<void> {

@@ -105,9 +105,12 @@ export function VariationsStep({
   // server re-checks against the live DB too, but catching an obvious
   // in-form collision before submit is a better experience than a round
   // trip just to find out "SKU already exists."
+  // Same rule as the server: capitals ignored (SharePoint folders don't
+  // tell "A1234" from "a1234"), and a variation can't reuse the main SKU.
   const resolvedSkus = variations.map((v) => resolvedVariationSku(base.sku, v));
+  const lowered = [base.sku.trim().toLowerCase(), ...resolvedSkus.map((s) => (s ?? "").toLowerCase())];
   const duplicateSkus = new Set(
-    resolvedSkus.filter((sku, i) => sku && resolvedSkus.indexOf(sku) !== i)
+    resolvedSkus.filter((sku, i) => sku && lowered.indexOf(sku.toLowerCase()) !== i + 1)
   );
 
   const filledCount = variations.filter((v) => v.suffix.trim()).length;

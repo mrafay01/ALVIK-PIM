@@ -8,7 +8,7 @@ import { PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { QuoteReviewTable } from "./QuoteReviewTable";
 import { QuoteHeaderActions } from "./QuoteHeaderActions";
 import PurchaseOrder from "@/models/PurchaseOrder";
-import { Types } from "mongoose";
+import { isObjectId } from "@/lib/ids";
 
 type Filter = "all" | "flagged" | "needs_review";
 
@@ -31,7 +31,7 @@ export default async function QuoteReviewPage({
     filterParam === "flagged" || filterParam === "needs_review" ? filterParam : "all";
   const page = parsePage(pageParam);
 
-  if (!Types.ObjectId.isValid(quotationId)) notFound();
+  if (!isObjectId(quotationId)) notFound();
   await connectDB();
   void Vendor;
   const quotation = await Quotation.findById(quotationId).populate("vendorId", "name").lean();

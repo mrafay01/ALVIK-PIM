@@ -25,9 +25,12 @@ export function PoActions({
   isAdmin,
   mondayItemId,
   lastPushedToMondayAt,
+  history,
 }: {
   poId: string;
   status: string;
+  /** The PO's stage history, oldest first (for "move back"). */
+  history: { status: string }[];
   /** Monday's "Received"/"Canceled" label when the board has closed this PO. */
   closedLabel: string | null;
   vendorReplySent: boolean;
@@ -51,7 +54,7 @@ export function PoActions({
   const [notice, setNotice] = useState<string | null>(null);
 
   const nextOptions = nextPoStatuses(status);
-  const previous = previousPoStatus(status);
+  const previous = previousPoStatus(status, history);
   const missing = incompleteChecklistFields(checklist);
 
   async function patchPo(key: string, body: Record<string, unknown>, done?: string) {
@@ -81,7 +84,9 @@ export function PoActions({
   async function syncToMonday() {
     if (
       !mondayItemId &&
-      !window.confirm("This PO isn't on the Monday board yet. Syncing will create a new item on the board. Continue?")
+      !window.confirm(
+        "This PO isn't linked to the Monday board yet. If the board already has an item with this PO number it will be linked to it; otherwise a new item is created. Continue?"
+      )
     ) {
       return;
     }
@@ -95,7 +100,13 @@ export function PoActions({
         setError(data.error ?? "Sync failed");
         return;
       }
-      setNotice(data.created ? "Created on the Monday board." : "Monday board updated.");
+      setNotice(
+        data.linked
+          ? "This PO was already on the Monday board, so it's now linked to that item and its details were updated. Its board status was left as it is; run a Monday import to bring it in."
+          : data.created
+            ? "Created on the Monday board."
+            : "Monday board updated."
+      );
       refresh();
     } catch {
       setError("Couldn't reach the server. Try again.");
@@ -173,17 +184,21 @@ export function PoActions({
 
         {/* Vendor + shipping flags */}
         <div className="flex flex-wrap gap-2 pt-3 border-t border-border">
-          {!vendorReplySent && (
-            <Button
-              disabled={!!busy}
-              loading={busy === "reply"}
-              onClick={() => patchPo("reply", { vendorReplySent: true }, "Marked vendor reply as sent.")}
-            >
-              <span className="flex items-center gap-1.5">
-                <MessageSquareCheck size={14} /> Mark vendor reply sent
-              </span>
-            </Button>
-          )}
+          <Button
+            disabled={!!busy}
+            loading={busy === "reply"}
+            onClick={() =>
+              patchPo(
+                "reply",
+                { vendorReplySent: !vendorReplySent },
+                vendorReplySent ? "Vendor reply mark removed." : "Marked vendor reply as sent."
+              )
+            }
+          >
+            <span className="flex items-center gap-1.5">
+              <MessageSquareCheck size={14} /> {vendorReplySent ? "Undo vendor reply sent" : "Mark vendor reply sent"}
+            </span>
+          </Button>
           <Button
             disabled={!!busy}
             loading={busy === "ship"}

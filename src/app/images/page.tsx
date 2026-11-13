@@ -6,6 +6,7 @@ import Item from "@/models/Item";
 import { Card } from "@/components/ui/Card";
 import { PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { ImagesTable, type ImageRow } from "./ImagesTable";
+import { itemMediaKey } from "@/lib/items/images";
 
 type Scope = "all" | "catalog" | "unverified";
 type Status = "all" | "missing" | "none" | "broken" | "complete";
@@ -110,6 +111,7 @@ export default async function ImagesPage({
   const rows: ImageRow[] = items.map((it) => ({
     _id: String(it._id),
     sku: it.itemNumber || it.sampleSku || "",
+    folderKey: itemMediaKey(it) ?? "",
     isSample: !it.itemNumber,
     title: it.title ?? null,
     inCatalog: !!it.inCatalog,

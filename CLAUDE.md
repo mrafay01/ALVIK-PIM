@@ -125,6 +125,12 @@ what's missing until `masterRecordComplete`; catalog_manager + admin) + admin ap
   (`api/admin/flagged-items/act`).
 - Fixes go through `fixRowField` → `coerceMasterFileValue` (the importer's own rules), so a flag clears
   only when the value is valid.
+- **SKUs match ignoring capitals** in the commit (`collation strength 2`, rows grouped by lower-case SKU) and
+  in the within-file duplicate flag; "a1234" merges into "A1234" instead of becoming a second item. A SKU
+  already in the catalog is **not** an issue (re-importing the Master File updates those items): the review
+  and Flagged Items pages show "Updates X" per row (`lib/import/existingSkus.ts`). A row matching an
+  Un-Verified item puts that item in the catalog; authoritative-field changes on catalog items are written
+  to Change history (`CatalogChange` source `import`).
 - **Committed and excluded rows are deleted**; the batch keeps running totals (`approvedRows` =
   committed, `rejectedRows` = excluded). Status: `updateBatchStatus` (needs_review / reviewed / committed).
 
@@ -168,12 +174,23 @@ what's missing until `masterRecordComplete`; catalog_manager + admin) + admin ap
   skips POs closed on Monday. Pull stamps `lastPushedToMondayAt` so pulled POs don't look changed.
 
 ### Purchase orders
-Status flow in `lib/purchase-orders/transitions.ts` (forward-only except admin "move back";
-`ready_to_ship` requires all six back-office checklist items). **"Open" PO** = `OPEN_PO_CONDITIONS`
-in `listQuery.ts` (not received, not closed on Monday) — reuse it anywhere you count open POs.
+Status flow in `lib/purchase-orders/transitions.ts` (forward-only except admin "move back", which goes to
+the stage the PO actually came from per `statusHistory`; mainline fallback). Ready to ship and later
+(`CHECKLIST_LOCKED_STATUSES`): entering needs all six checklist items, and a done item can't be un-done there
+(a pulled PO already there incomplete can still be completed). The PATCH saves with `po.$where = { status }`,
+so two people moving one PO get a 409, not a double move. A manual PO starts at `waiting_for_sample_po` only
+for sample orders. **"Open" PO** = `OPEN_PO_CONDITIONS` in `listQuery.ts` (not received, not closed on
+Monday) — reuse it anywhere you count open POs. Search matches "PO-22906" against the bare number.
+Monday push: the status column is sent when the board label maps **or** the stage changed in the app since
+the last pull (`stageChangedInAppSincePull`); a PO with no `mondayItemId` first looks for a board item with
+its name and links to it (status left alone) instead of creating a duplicate.
+Quote status is always recomputed from its rows by `recountQuotation` (`lib/quote-import/recount.ts`) after
+a row decision, bulk approve or commit; row edits and bulk approve are refused while a commit holds the lock.
 
 ### Images (and video clips)
-Folder `Images/{itemNumber or sampleSku}/{Main|Sides|Models|Lifestyle|Videos}`; names `{key}.jpg`, `{key}-S{n}`,
+Folder `Images/{key}/{Main|Sides|Models|Lifestyle|Videos}` where **key = `itemMediaKey(item)`** (`lib/items/images.ts`:
+the SKU with `" * : < > ? / \ | # %` replaced by `_`, so `CR-5006/1` → `CR-5006_1`; 14 real SKUs need it). Never build the
+folder from the raw SKU; names `{key}.jpg`, `{key}-S{n}`,
 `{key}-M{n}`, `{key}-LS{n}`, `{key}-V{n}.mp4` (`inferSubfolder` rejects names that don't start with the key).
 **Lifestyle and Videos are optional**: each folder is created only when its first file is uploaded, and
 neither counts in `imageCompleteness` (the type list is `IMAGE_SUBFOLDERS` in `lib/enums.ts`, subfolder
@@ -185,6 +202,26 @@ Upload screens (item page `MediaUpload`, Images page `UploadPanel`) share labels
 "auto" keeps the file's name) → `.../media/confirm`. `/images` checks links via Graph `$batch`
 (`api/images/check`) and records `media.linkStatus`; broken images don't count in `imageCompleteness`,
 which feeds `masterRecordComplete` (the publish gate: item number, category, metal, MSRP, all 3 image types).
+
+### Email notifications (`lib/notifications/`)
+- `events.ts` is the one list of email types: label, category, which roles can get it, which roles get it by
+  default. The key is also the user's preference key (`users.notificationPrefs`, a Map storing only the user's
+  own changes; missing = role default). Settings → Notifications shows a role only its own switches, plus
+  "Send me a test email" / "this week's summary" (`api/users/me/notifications/test`, 3/hour).
+- Send with `notifyAfterResponse(builder(...))` from a route (Next `after()`: never delays or fails the save)
+  or `await notify(...)` in a job. Wording lives in `messages.ts` (pure, tested). Recipients: active users of an
+  allowed role with it on, **minus the person who did it**. One email per person. `throttle` caps chunked runs
+  (Monday import: one email per 15 min). No SMTP → logged and skipped, never an error.
+- Hooks: PO stage change (`api/purchase-orders/[poId]` PATCH; warehouse gets `poIncoming` on the move into
+  In transit / Ready to ship), quote created (`api/quotations`), quote commit (committed / new items need
+  photos / catalog conflicts), media confirm (photos just became complete), submit-to-catalog, catalog approve,
+  Monday pull / single push / bulk push job failures. A new event = an entry in `events.ts` + a builder in
+  `messages.ts` + one call at the place it happens.
+- Security emails (`security.ts`, always on): password changed, reset by an admin, email changed (to the old
+  address), role changed, deactivated/reactivated.
+- Weekly summary: `GET /api/notifications/digest`, Vercel Cron in `vercel.json` (Mondays 08:00 UTC), auth
+  `Bearer CRON_SECRET` (or `JOBS_WORKER_TOKEN`), once per ISO week; lines per role in `digestEmail.ts`.
+- Email links use `NEXTAUTH_URL`: it must be the deployed address in production.
 
 ### Other pages
 Dashboard (`/`, `/dashboard`), Help & Support (`/help`, emails the developer via SMTP,
@@ -288,7 +325,7 @@ passes every check.
 `MONGODB_URI` (non-SRV string), `NEXTAUTH_SECRET` (also signs upload tickets), `NEXTAUTH_URL`,
 `MONDAY_API_TOKEN`, `MONDAY_API_URL`, `SHAREPOINT_TENANT_ID` / `CLIENT_ID` / `CLIENT_SECRET` /
 `SITE_URL` / `SITE_ID` / `IMAGES_LIBRARY_ID`, optional `SHAREPOINT_PO_FOLDER` (default "Purchase Orders"),
-`SMTP_*`, `OTP_2FA_ENABLED`, `NEXT_PUBLIC_OTP_2FA_ENABLED`, optional `SUPPORT_EMAIL`, `JOBS_WORKER_TOKEN`
+`SMTP_*`, `OTP_2FA_ENABLED`, `NEXT_PUBLIC_OTP_2FA_ENABLED`, optional `SUPPORT_EMAIL`, `CRON_SECRET` (weekly summary cron), `JOBS_WORKER_TOKEN`
 (for `/api/jobs/tick`), `SENTRY_*`, `DEPLOYMENT_TARGET`. **Never print or commit secret values.**
 
 SharePoint: app-only Graph access (client credentials, `Sites.Selected`) to the **CZCPIM** site only.
@@ -318,7 +355,7 @@ item descriptions (`items.marketplaceDescriptions`, item page + New catalog item
 
 Open decisions (see the blueprint's "Open — decisions needed"): whether photography/warehouse should see
 pricing, and a "send back" for catalog submissions. Known gaps: SKU change leaves images in the old
-folder; the Master File import doesn't refuse case-only duplicate SKUs; no button for bulk Monday push.
+folder; no button for bulk Monday push.
 
 Pending: run `npm run migrate` to apply `2026-10-22-unset-null-item-numbers`,
 `2026-10-23-slim-database` (removes `raw` rows, null fields, dead fields, 3 empty collections,
@@ -326,12 +363,14 @@ unused indexes) and `2026-11-04-recheck-metal-flags` (clears the metal flag on ~
 that `.925 Sterling Silver` is accepted; metals list: `lib/import/metals.ts`) and
 `2026-11-13-remove-marketplace-export` (drops `marketplacelistings`, deletes `marketplace_export` jobs/logs,
 drops the `{active, masterRecordComplete}` item index, renames role `marketplace_listing` → `catalog_manager`
-and signs those users out once). Deploy the code and run this migration together.
+and signs those users out once) and `2026-11-13-notification-prefs` (clears the old never-changed
+notification defaults so role defaults apply; without it 3 admins get every PO-stage email). Deploy the code
+and run these migrations together. For the weekly summary set `CRON_SECRET` in Vercel.
 
 Not built / open: receiving & warehouse screen (role has no screen yet; its `ReceivingLog` and
 `Shipment` models were removed 2026-10-23 as unused — recreate when built), shipment grouping, extracting
 photos embedded in PI files, sample-SKU → item-number folder rename trigger (`renameItemFolder` exists,
-unused), notification emails (prefs saved, unused), Master File upload > 4.5 MB on Vercel, in-app image
+unused), Master File upload > 4.5 MB on Vercel, in-app image
 viewing for users without SharePoint access, scheduler/cron for background jobs, nonce-based CSP,
 import of Joel's OneDrive folders (app has no access yet).
 

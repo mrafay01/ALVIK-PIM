@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Types } from "mongoose";
+import { isObjectId } from "@/lib/ids";
 import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import PurchaseOrder from "@/models/PurchaseOrder";
@@ -7,6 +7,8 @@ import { syncPurchaseOrderToMonday } from "@/lib/monday/sync";
 import { MondayApiError } from "@/lib/monday/client";
 import { isClosedOnMonday } from "@/lib/purchase-orders/transitions";
 import logger from "@/lib/logger";
+import { notifyAfterResponse } from "@/lib/notifications/notify";
+import { mondaySyncFailed } from "@/lib/notifications/messages";
 
 // POST: push a single PO to its Monday.com board item now — the "Sync to
 // Monday" button on the PO detail screen. Creates the board item the first
@@ -19,9 +21,7 @@ export async function POST(
   if (isAuthFail(gate)) return gate.response;
 
   const { poId } = await params;
-  if (!Types.ObjectId.isValid(poId)) {
-    return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
-  }
+  if (!isObjectId(poId)) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
   await connectDB();
 
   const po = await PurchaseOrder.findById(poId);
@@ -43,6 +43,15 @@ export async function POST(
       err instanceof MondayApiError
         ? `Monday rejected the update: ${err.message}`
         : "Couldn't reach Monday.com. Check the connection and try again.";
+    notifyAfterResponse(
+      mondaySyncFailed({
+        what: "push",
+        failed: 1,
+        messages: [`PO-${po.poNumber}: ${message}`],
+        actorId: gate.session.user?.id,
+        actorName: gate.session.user?.name,
+      })
+    );
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

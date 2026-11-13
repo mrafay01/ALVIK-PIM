@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rateLimit";
 import { issueOtp, redeemSessionTicket, getVerifiedTargetEmail, OtpDeliveryError, otpDeliveryFailed } from "@/lib/otp";
 import { ChangeEmailRequestSchema, ChangeEmailConfirmSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
+import { sendSecurityNoticeAfterResponse } from "@/lib/notifications/security";
 
 // POST: step 1 of a self-service email change. Verifies the caller's
 // current password and that the new address isn't already someone else's
@@ -89,6 +90,7 @@ export async function PATCH(req: NextRequest) {
   const user = await User.findById(userId);
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+  const oldEmail = user.email;
   user.email = newEmail;
   try {
     await user.save();
@@ -99,6 +101,9 @@ export async function PATCH(req: NextRequest) {
     }
     throw err;
   }
+  // Told at the OLD address: that's where someone whose email was taken
+  // over would notice it.
+  sendSecurityNoticeAfterResponse(oldEmail, { kind: "email_changed", newEmail });
 
   return NextResponse.json({ ok: true, email: user.email });
 }

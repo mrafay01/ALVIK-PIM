@@ -8,6 +8,7 @@ import { PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 import { ON_FLAGGED_PAGE, searchFilter } from "@/lib/import/reviewQuery";
 import { masterFileFieldLabel, masterFileFieldKind } from "@/lib/import/parseMasterFile";
 import { FlaggedTable, type FlaggedRow, type IssueOption } from "./FlaggedTable";
+import { existingItemsBySku } from "@/lib/import/existingSkus";
 
 // "Non-numeric value "abc"" -> "Non-numeric value": the issue without the
 // specific bad value, so rows with the same problem group together.
@@ -57,6 +58,16 @@ export default async function FlaggedItemsPage({
     ]),
   ]);
 
+  // A page past the end (rows committed or fixed since): the last page.
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (page > lastPage && total > 0) {
+    const sp2 = new URLSearchParams();
+    if (q) sp2.set("q", q);
+    if (issue) sp2.set("issue", issue);
+    if (lastPage > 1) sp2.set("page", String(lastPage));
+    redirect(`/catalog/flagged${sp2.size ? `?${sp2}` : ""}`);
+  }
+
   const issues: IssueOption[] = issueGroups.map((g) => ({
     field: g._id,
     label: masterFileFieldLabel(g._id),
@@ -65,9 +76,12 @@ export default async function FlaggedItemsPage({
     kind: masterFileFieldKind(g._id),
   }));
 
+  const existing = await existingItemsBySku(rows.map((r) => (r.coerced as Record<string, unknown>)?.itemNumber));
   const shaped: FlaggedRow[] = rows.map((r) => {
     const batch = r.batchId as unknown as { _id: unknown; sourceFileName?: string } | null;
+    const sku = (r.coerced as Record<string, unknown>)?.itemNumber;
     return {
+      updates: typeof sku === "string" ? existing.get(sku.toLowerCase()) ?? null : null,
       _id: String(r._id),
       batchId: String(batch?._id ?? r.batchId),
       fileName: batch?.sourceFileName ?? "—",

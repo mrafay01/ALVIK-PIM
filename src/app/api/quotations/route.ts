@@ -25,6 +25,8 @@ import {
 import { normalizePoNumber } from "@/lib/purchase-orders/fromQuotation";
 import { formatPoNumber, poNumberFromFileName } from "@/lib/purchase-orders/poNumber";
 import logger from "@/lib/logger";
+import { notifyAfterResponse } from "@/lib/notifications/notify";
+import { quoteNeedsReview } from "@/lib/notifications/messages";
 
 // Who may intake a quote — buyers/purchasing own the PO area this lives
 // under; catalog_manager already has item-create rights elsewhere.
@@ -228,6 +230,19 @@ export async function POST(req: NextRequest) {
       });
     }
   }
+
+  const vendor = await Vendor.findById(vendorId).select("name").lean();
+  notifyAfterResponse(
+    quoteNeedsReview({
+      quotationId: String(quotation._id),
+      poNumber,
+      vendorName: vendor?.name,
+      rows: staged.length,
+      flagged: flaggedCount,
+      actorId: session.user?.id,
+      actorName: session.user?.name,
+    })
+  );
 
   return NextResponse.json(
     { quotationId: quotation._id, totalRows: staged.length, flaggedRows: flaggedCount },

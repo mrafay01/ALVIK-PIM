@@ -8,7 +8,7 @@ import { isObjectId } from "@/lib/ids";
 import { IMAGE_SUBFOLDERS } from "@/lib/enums";
 import { getSharePointContext, ensureItemFolders, createUploadSession, inferSubfolder } from "@/lib/sharepoint/client";
 import { safeSharePointName, signUploadTicket } from "@/lib/purchase-orders/files";
-import { SUBFOLDER_FOR, conventionalImageName, extensionOf, mediaFileProblem } from "@/lib/items/images";
+import { SUBFOLDER_FOR, conventionalImageName, extensionOf, mediaFileProblem, itemMediaKey } from "@/lib/items/images";
 import logger from "@/lib/logger";
 
 const BodySchema = z.object({
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ite
   await connectDB();
   const item = await Item.findById(itemId).select("itemNumber sampleSku media").lean();
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
-  const key = item.itemNumber || item.sampleSku;
+  const key = itemMediaKey(item);
   if (!key) {
     return NextResponse.json({ error: "This item needs a sample SKU or item number before images can be added" }, { status: 400 });
   }

@@ -25,18 +25,50 @@ export function nextPoStatuses(from: string): PoStatus[] {
   return FORWARD[from as PoStatus] ?? [];
 }
 
+type HistoryEntry = { status?: string | null };
+
 // One step back, for correcting a mis-click. Administrators only — enforced
 // by the API; every move (forward or back) is recorded in statusHistory.
-export function previousPoStatus(from: string): PoStatus | null {
-  const i = PO_STATUSES.indexOf(from as PoStatus);
-  return i > 0 ? PO_STATUSES[i - 1] : null;
+// "Back" is the stage the PO was actually in before this one, read from its
+// history: a sample PO that went straight from Waiting for sample PO to Send
+// to vendor goes back there, not to Negotiating, which it never passed.
+// Without usable history (POs pulled from Monday have none), the stage
+// before it on the mainline; never a side lane it may not have been in.
+export function previousPoStatus(from: string, history: HistoryEntry[] = []): PoStatus | null {
+  const last = history.length - 1;
+  if (last >= 1 && history[last]?.status === from) {
+    const prev = history[last - 1]?.status;
+    if (prev && prev !== from && PO_STATUSES.includes(prev as PoStatus)) return prev as PoStatus;
+  }
+  for (const [stage, nexts] of Object.entries(FORWARD) as [PoStatus, PoStatus[]][]) {
+    if (MAINLINE.includes(stage) && nexts.includes(from as PoStatus)) return stage;
+  }
+  return null;
 }
 
-export function isValidPoTransition(from: string, to: string, opts: { allowBack?: boolean } = {}): boolean {
+// The main pipeline, without the two optional lanes before it.
+const MAINLINE: PoStatus[] = [
+  "send_to_vendor",
+  "pi_confirmed_pending",
+  "pi_confirmed",
+  "in_transit",
+  "ready_to_ship",
+  "shipment_received",
+];
+
+export function isValidPoTransition(
+  from: string,
+  to: string,
+  opts: { allowBack?: boolean; history?: HistoryEntry[] } = {}
+): boolean {
   if (from === to) return true;
   if (nextPoStatuses(from).includes(to as PoStatus)) return true;
-  return !!opts.allowBack && previousPoStatus(from) === to;
+  return !!opts.allowBack && previousPoStatus(from, opts.history) === to;
 }
+
+// Stages at which the whole back-office checklist must stay complete: a PO
+// can't reach Ready to ship without it, so it can't lose it there either.
+export const CHECKLIST_LOCKED_STATUSES: readonly PoStatus[] = ["ready_to_ship", "shipment_received"];
 
 // A PO that Monday marks as Received or Canceled is finished, even though
 // its stored pipeline stage is a stale default ("send_to_vendor") — the

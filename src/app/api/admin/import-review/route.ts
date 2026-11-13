@@ -3,7 +3,6 @@ import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import ImportBatch from "@/models/ImportBatch";
 import ImportBatchRow from "@/models/ImportBatchRow";
-import Item from "@/models/Item";
 import { parseMasterFileBuffer } from "@/lib/import/parseMasterFile";
 
 // POST: upload a Master File .xlsx, parse it, and stage every row for review.
@@ -67,25 +66,18 @@ export async function POST(req: NextRequest) {
 
   await connectDB();
 
-  // Duplicate-SKU detection, surfaced as a flag before anyone approves a
-  // row — silently overwriting an existing item, or importing the same SKU
-  // twice from one file, should be a visible decision, not a side effect
-  // of the commit step.
+  // The same SKU twice in one file is flagged before anyone commits it: the
+  // later row would overwrite the earlier one. Compared ignoring capitals,
+  // as the catalog and SharePoint folders treat "A1234" and "a1234" as one.
+  // (A SKU that's already in the catalog is not an issue: re-importing the
+  // Master File updates those items, which the review pages show per row.)
   const skuCounts = new Map<string, number>();
   for (const r of rows) {
     const sku = r.coerced.itemNumber as string | null;
     if (!sku) continue;
-    skuCounts.set(sku, (skuCounts.get(sku) ?? 0) + 1);
+    const k = sku.toLowerCase();
+    skuCounts.set(k, (skuCounts.get(k) ?? 0) + 1);
   }
-  const withinBatchDupes = new Set(
-    [...skuCounts.entries()].filter(([, count]) => count > 1).map(([sku]) => sku)
-  );
-
-  const candidateSkus = [...skuCounts.keys()];
-  const existingItems = candidateSkus.length
-    ? await Item.find({ itemNumber: { $in: candidateSkus } }).select("itemNumber").lean()
-    : [];
-  const existingSkus = new Set(existingItems.map((i) => i.itemNumber));
 
   const batch = await ImportBatch.create({
     sourceFileName: file.name,
@@ -98,17 +90,10 @@ export async function POST(req: NextRequest) {
   const stagedRows = rows.map((r) => {
     const sku = r.coerced.itemNumber as string | null;
     const flags = [...r.flags];
-    if (sku && withinBatchDupes.has(sku)) {
+    if (sku && (skuCounts.get(sku.toLowerCase()) ?? 0) > 1) {
       flags.push({
         field: "itemNumber",
-        message: `SKU "${sku}" appears more than once in this file; later approved rows will overwrite earlier ones`,
-        rawValue: sku,
-      });
-    }
-    if (sku && existingSkus.has(sku)) {
-      flags.push({
-        field: "itemNumber",
-        message: `SKU "${sku}" already exists in the database; approving this row will merge into the existing item, not create a new one`,
+        message: `SKU "${sku}" appears more than once in this file (capitals ignored); later rows will overwrite earlier ones`,
         rawValue: sku,
       });
     }

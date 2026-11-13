@@ -1,18 +1,6 @@
 import { Schema, model, models, type InferSchemaType, type Model } from "mongoose";
 import { ROLES } from "@/lib/enums";
 
-// Per-user notification preferences, edited from Settings > Notifications.
-// Every field defaults to on so existing users keep today's behavior (none
-// of this is wired to an actual notifier yet — these are the toggles a
-// future email/in-app notification job will read) without a migration.
-const NotificationPrefsSchema = new Schema(
-  {
-    poStatusChanges: { type: Boolean, default: true },
-    mondaySyncErrors: { type: Boolean, default: true },
-    weeklyDigest: { type: Boolean, default: false },
-  },
-  { _id: false }
-);
 
 const UserSchema = new Schema(
   {
@@ -21,7 +9,10 @@ const UserSchema = new Schema(
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ROLES, required: true },
     active: { type: Boolean, default: true },
-    notificationPrefs: { type: NotificationPrefsSchema, default: () => ({}) },
+    // Email notification choices, edited from Settings → Notifications:
+    // event key (lib/notifications/events.ts) → on/off. Only a user's own
+    // changes are stored; a missing key means their role's default.
+    notificationPrefs: { type: Map, of: Boolean, default: undefined },
     // Bumped by "Sign out of all other devices" (Settings > Security).
     // Stamped into every JWT at sign-in (see auth.ts's jwt callback); the
     // session callback rejects a token whose stamped version doesn't match

@@ -10,13 +10,31 @@ interface ColumnValuesResult {
   change_multiple_column_values?: { id: string };
 }
 
-function buildColumnValues(po: HydratedDocument<PurchaseOrderDoc>): Record<string, unknown> {
+// Has someone moved this PO's stage in the app since its board label was
+// last read? The Monday pull never writes statusHistory, so a history entry
+// newer than the last pull is an in-app change.
+export function stageChangedInAppSincePull(po: {
+  statusHistory?: { changedAt?: Date | null }[] | null;
+  lastPulledFromMondayAt?: Date | null;
+}): boolean {
+  const last = po.statusHistory?.[po.statusHistory.length - 1]?.changedAt;
+  if (!last) return false;
+  return !po.lastPulledFromMondayAt || new Date(last) > new Date(po.lastPulledFromMondayAt);
+}
+
+function buildColumnValues(
+  po: HydratedDocument<PurchaseOrderDoc>,
+  opts: { includeStatus?: boolean } = {}
+): Record<string, unknown> {
   const values: Record<string, unknown> = {};
   // Only write the Status column when the app's stage is actually the
   // truth. A PO whose board label has no pipeline mapping (Received,
   // Canceled, Stuck, On Hold…) carries a stale default stage here — pushing
   // it would overwrite e.g. "Received" on the board with "Send to vendor".
-  if (po.mondayStatusMapped !== false) {
+  // Once someone moves the stage in the app, the app is the truth again:
+  // otherwise a PO pulled while "Stuck" could never update the board.
+  const statusIsTruth = po.mondayStatusMapped !== false || stageChangedInAppSincePull(po);
+  if (opts.includeStatus !== false && statusIsTruth) {
     values[MONDAY_COLUMN_IDS.status] = {
       label: STATUS_TO_MONDAY_LABEL[po.status as keyof typeof STATUS_TO_MONDAY_LABEL],
     };
@@ -65,9 +83,46 @@ function toDateString(d: Date): string {
 // duplicates. Never called synchronously inside the request that changed
 // the PO's status — call this from a background job or a deliberate
 // "sync now" action, per the blueprint's async-trigger design.
+// The board item already named after this PO, if there is one (the board
+// names items by bare PO number, as the app stores them).
+async function findBoardItemByName(poNumber: string): Promise<string | null> {
+  const data = await mondayRequest<{ items_page_by_column_values?: { items?: { id: string; name: string }[] } }>(
+    `query ($boardId: ID!, $names: [String]!) {
+      items_page_by_column_values(board_id: $boardId, limit: 5, columns: [{ column_id: "name", column_values: $names }]) {
+        items { id name }
+      }
+    }`,
+    { boardId: MONDAY_BOARD_ID, names: [poNumber] }
+  );
+  const match = data.items_page_by_column_values?.items?.find((i) => i.name.trim() === poNumber);
+  return match?.id ?? null;
+}
+
 export async function syncPurchaseOrderToMonday(
   po: HydratedDocument<PurchaseOrderDoc>
-): Promise<{ mondayItemId: string; created: boolean }> {
+): Promise<{ mondayItemId: string; created: boolean; linked?: boolean }> {
+  // A PO made here (from a quote or an item) may already exist on the board,
+  // created there by the team and not imported yet. Link to that item
+  // instead of creating a second one with the same PO number. Its status is
+  // left alone: the app hasn't read it (it may well be "Received"), and the
+  // next Monday import brings it in.
+  if (!po.mondayItemId) {
+    const existingId = await findBoardItemByName(po.poNumber);
+    if (existingId) {
+      const values = buildColumnValues(po, { includeStatus: false });
+      await mondayRequest<ColumnValuesResult>(
+        `mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+          change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id }
+        }`,
+        { boardId: MONDAY_BOARD_ID, itemId: existingId, columnValues: JSON.stringify(values) }
+      );
+      po.mondayItemId = existingId;
+      markPushed(po, values);
+      await po.save({ timestamps: false });
+      return { mondayItemId: existingId, created: false, linked: true };
+    }
+  }
+
   const columnValues = buildColumnValues(po);
 
   if (!po.mondayItemId) {

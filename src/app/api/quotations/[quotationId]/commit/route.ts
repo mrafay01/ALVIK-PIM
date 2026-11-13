@@ -14,6 +14,10 @@ import logger from "@/lib/logger";
 import { isObjectId } from "@/lib/ids";
 import { refreshCatalogFacets } from "@/lib/catalog/facets";
 import { commitLockFree } from "@/lib/quote-import/commitLock";
+import Vendor from "@/models/Vendor";
+import { recountQuotation } from "@/lib/quote-import/recount";
+import { notifyAfterResponse } from "@/lib/notifications/notify";
+import { quoteCommitted, itemsNeedPhotos, catalogConflicts } from "@/lib/notifications/messages";
 
 const QUOTE_ROLES = ROLE_SETS.quotes;
 
@@ -78,7 +82,10 @@ export async function POST(
   }
 
   try {
-    const res = await commitQuotation(quotation, quotationId);
+    const res = await commitQuotation(quotation, quotationId, {
+      id: gate.session.user?.id ?? null,
+      name: gate.session.user?.name ?? null,
+    });
     refreshCatalogFacets();
     return res;
   } finally {
@@ -92,7 +99,8 @@ export async function POST(
 
 async function commitQuotation(
   quotation: HydratedDocument<QuotationDoc>,
-  quotationId: string
+  quotationId: string,
+  actor: { id: string | null; name: string | null }
 ) {
   const toCommit = await QuotationRow.find({
     quotationId,
@@ -136,6 +144,8 @@ async function commitQuotation(
   const ops: (InsertOp | UpdateOp)[] = [];
   const opKeys: string[] = [];
   const opTargets: Types.ObjectId[] = [];
+  // For new items: SKU and title, for the "new items need photos" email.
+  const newItemInfo = new Map<number, { sku?: string; title?: string }>();
   const rowTarget = new Map<string, Types.ObjectId>();
   // Conflicts to persist after the item write finishes — one entry per
   // divergent authoritative field. itemId is the TARGET item's _id,
@@ -227,6 +237,10 @@ async function commitQuotation(
         const entry = applyRowToItem(fresh, (row.coerced ?? {}) as Record<string, unknown>);
         if (entry) (fresh.pricingHistory as Record<string, unknown>[]).push(entry);
       }
+      newItemInfo.set(ops.length, {
+        sku: typeof fresh.itemNumber === "string" ? fresh.itemNumber : (fresh.vendorSku as string | undefined),
+        title: typeof fresh.title === "string" ? fresh.title : undefined,
+      });
       ops.push({ insertOne: { document: fresh } });
       opKeys.push(key);
       opTargets.push(freshId);
@@ -327,16 +341,39 @@ async function commitQuotation(
     }
   }
 
-  const remaining = await QuotationRow.countDocuments({
-    quotationId,
-    reviewStatus: { $ne: "rejected" },
-    committedItemId: null,
-  });
-  if (remaining === 0) {
-    await Quotation.updateOne(
-      { _id: quotationId },
-      { $set: { status: "committed" } }
+  await recountQuotation(quotationId);
+
+  if (rowTarget.size > 0) {
+    const vendor = quotation.vendorId ? await Vendor.findById(quotation.vendorId).select("name").lean() : null;
+    const base = { poNumber: quotation.poNumber, actorId: actor.id, actorName: actor.name };
+    notifyAfterResponse(
+      quoteCommitted({
+        ...base,
+        quotationId,
+        vendorName: vendor?.name,
+        poId: purchaseOrder?.poId ?? null,
+        created,
+        merged,
+        conflicts: writtenConflicts.length,
+      })
     );
+    const newItems = [...newItemInfo.entries()]
+      .filter(([i]) => !failedOps.has(i))
+      .map(([i, info]) => ({ id: String(opTargets[i]), sku: info.sku, title: info.title }));
+    if (newItems.length > 0) {
+      notifyAfterResponse(itemsNeedPhotos({ ...base, items: newItems, total: newItems.length }));
+    }
+    if (writtenConflicts.length > 0) {
+      const conflictIds = [...new Set(writtenConflicts.map((c) => String(c.itemId)))];
+      const conflictItems = await Item.find({ _id: { $in: conflictIds } }).select("itemNumber title").lean();
+      notifyAfterResponse(
+        catalogConflicts({
+          ...base,
+          count: writtenConflicts.length,
+          items: conflictItems.map((it) => ({ id: String(it._id), sku: it.itemNumber, title: it.title })),
+        })
+      );
+    }
   }
 
   return NextResponse.json({

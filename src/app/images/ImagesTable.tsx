@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ImageSubfolder } from "@/lib/enums";
 import { useRouter, usePathname } from "next/navigation";
 import { CheckCircle2, Circle, Link2Off, Search, Upload, ShieldCheck, X, ImagePlus, Film } from "lucide-react";
@@ -16,6 +17,8 @@ import { MEDIA_KIND_LABEL, MEDIA_UPLOAD_OPTIONS, acceptFor, exampleNameFor } fro
 export type ImageRow = {
   _id: string;
   sku: string;
+  // The SharePoint folder / file-name form of the SKU (lib/items/images mediaFolderKey).
+  folderKey: string;
   isSample: boolean;
   title: string | null;
   inCatalog: boolean;
@@ -47,19 +50,63 @@ function fileName(m: ItemMediaEntry): string {
   }
 }
 
+const POPOVER_WIDTH = 260;
+const POPOVER_GAP = 4;
+const VIEWPORT_MARGIN = 8;
+
 // One cell per image type: green with a count when the links work, red when
 // any is broken, grey "None" when there's nothing. Each image opens in
 // SharePoint from the popover list.
+//
+// The popover is rendered into <body> with fixed positioning: the table sits
+// in an overflow-x-auto box, which clips anything that sticks out of it, so a
+// popover inside the cell was cut off on the last rows. It opens below the
+// badge, or above it when there isn't room below, and follows the badge when
+// the page or the table scrolls.
 function KindCell({ media, kind }: { media: ItemMediaEntry[]; kind: Kind }) {
   const [open, setOpen] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const list = media.filter((m) => m.subfolder === kind);
 
-  // Close on a click anywhere outside this cell (button + popover), or Esc.
+  // Place the popover next to the badge, kept inside the window.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    function place() {
+      const btn = buttonRef.current?.getBoundingClientRect();
+      if (!btn) return;
+      const height = popRef.current?.offsetHeight ?? 0;
+      const below = btn.bottom + POPOVER_GAP;
+      const fitsBelow = below + height <= window.innerHeight - VIEWPORT_MARGIN;
+      const above = btn.top - POPOVER_GAP - height;
+      const top = fitsBelow || above < VIEWPORT_MARGIN ? below : above;
+      const maxLeft = window.innerWidth - POPOVER_WIDTH - VIEWPORT_MARGIN;
+      const left = Math.max(VIEWPORT_MARGIN, Math.min(btn.left, maxLeft));
+      setPos({ top, left });
+    }
+    place();
+    // A second pass once the popover has rendered and has a real height.
+    const frame = requestAnimationFrame(place);
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
+
+  // Close on a click anywhere outside the badge and the popover, or Esc.
   useEffect(() => {
     if (!open) return;
     function onPointerDown(e: PointerEvent) {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target) || popRef.current?.contains(target)) return;
+      setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -82,8 +129,9 @@ function KindCell({ media, kind }: { media: ItemMediaEntry[]; kind: Kind }) {
     );
   }
   return (
-    <div ref={boxRef} className="relative">
+    <div>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
@@ -96,8 +144,20 @@ function KindCell({ media, kind }: { media: ItemMediaEntry[]; kind: Kind }) {
         {ok > 0 && broken > 0 && " · "}
         {broken > 0 && `${broken} broken`}
       </button>
-      {open && (
-        <div className="absolute z-20 left-0 top-[calc(100%+4px)] w-[260px] rounded-md border border-border-strong bg-surface-raised shadow-lg p-2.5">
+      {open && createPortal(
+        <div
+          ref={popRef}
+          role="dialog"
+          aria-label={`${MEDIA_KIND_LABEL[kind]} files`}
+          style={{
+            position: "fixed",
+            top: pos?.top ?? 0,
+            left: pos?.left ?? 0,
+            width: POPOVER_WIDTH,
+            visibility: pos ? "visible" : "hidden",
+          }}
+          className="z-50 max-h-[60vh] overflow-y-auto rounded-md border border-border-strong bg-surface-raised shadow-lg p-2.5"
+        >
           {list.map((m) =>
             m.linkStatus === "broken" ? (
               <div key={m.sharePointItemId} className="flex items-center gap-1.5 text-[0.78rem] text-critical py-1">
@@ -122,7 +182,8 @@ function KindCell({ media, kind }: { media: ItemMediaEntry[]; kind: Kind }) {
               Broken means the file was deleted or moved in SharePoint. Upload it again to fix it.
             </p>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -157,7 +218,7 @@ function UploadPanel({ row, onDone }: { row: ImageRow; onDone: () => void }) {
     if (errs.length < list.length) onDone();
   }
 
-  const example = kind === "auto" ? "" : exampleNameFor(row.sku, kind);
+  const example = kind === "auto" ? "" : exampleNameFor(row.folderKey, kind);
 
   return (
     <div className="flex flex-col gap-2.5 px-4 py-3.5 bg-surface-sunken border-t border-border">
@@ -202,8 +263,8 @@ function UploadPanel({ row, onDone }: { row: ImageRow; onDone: () => void }) {
       </div>
       <p className="text-[0.76rem] text-ink-faint m-0">
         {kind === "auto"
-          ? `Files must already be named ${row.sku}.jpg / ${row.sku}-S1.jpg / ${row.sku}-M1.jpg / ${row.sku}-LS1.jpg / ${row.sku}-V1.mp4.`
-          : `Saved to SharePoint Images/${row.sku}/${kind === "videos" ? "Videos" : MEDIA_KIND_LABEL[kind]} as ${example}${
+          ? `Files must already be named ${row.folderKey}.jpg / ${row.folderKey}-S1.jpg / ${row.folderKey}-M1.jpg / ${row.folderKey}-LS1.jpg / ${row.folderKey}-V1.mp4.`
+          : `Saved to SharePoint Images/${row.folderKey}/${kind === "videos" ? "Videos" : MEDIA_KIND_LABEL[kind]} as ${example}${
               kind === "main" ? " (replaces the current main image)" : kind === "videos" ? ". Videos up to 1 GB" : ""
             }.`}
       </p>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import { getSessionRole, roleCan, ROLE_SETS } from "@/lib/authz";
@@ -39,14 +40,17 @@ function fmtEditedDate(d: Date | string | null | undefined): string {
   return new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+// Every sort ends on _id, so rows that tie (same title, same update time)
+// keep one fixed order and paging never repeats or skips one. Items with
+// no price sort last both ways (_noPrice), not first.
 const SORT_STAGES: Record<string, Record<string, 1 | -1>> = {
-  sku: { itemNumber: 1 },
-  sku_desc: { itemNumber: -1 },
-  title: { title: 1, itemNumber: 1 },
-  brand: { brand: 1, itemNumber: 1 },
-  msrp_asc: { latestMsrp: 1, itemNumber: 1 },
-  msrp_desc: { latestMsrp: -1, itemNumber: 1 },
-  newest: { updatedAt: -1 },
+  sku: { itemNumber: 1, _id: 1 },
+  sku_desc: { itemNumber: -1, _id: 1 },
+  title: { title: 1, itemNumber: 1, _id: 1 },
+  brand: { brand: 1, itemNumber: 1, _id: 1 },
+  msrp_asc: { _noPrice: 1, latestMsrp: 1, itemNumber: 1, _id: 1 },
+  msrp_desc: { _noPrice: 1, latestMsrp: -1, itemNumber: 1, _id: 1 },
+  newest: { updatedAt: -1, _id: 1 },
 };
 
 type SearchParams = {
@@ -117,6 +121,7 @@ export default async function CatalogPage({
         latestMsrp: LATEST_MSRP,
       },
     },
+    { $addFields: { _noPrice: { $cond: [{ $eq: ["$latestMsrp", null] }, 1, 0] } } },
   ];
   if (priceMatch) pipeline.push({ $match: priceMatch });
   pipeline.push({
@@ -185,6 +190,27 @@ export default async function CatalogPage({
     conflictCount?: number;
   }>;
   const total: number = facetResult[0]?.count?.[0]?.n ?? 0;
+
+  // A page past the end (old bookmark, rows filtered away): the last page.
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (page > lastPage && total > 0) {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries({
+      filter: tab === "all" ? undefined : tab,
+      q: q || undefined,
+      category: category || undefined,
+      brand: brand || undefined,
+      plating: plating || undefined,
+      minPrice: sp.minPrice || undefined,
+      maxPrice: sp.maxPrice || undefined,
+      sort: sort === "sku" ? undefined : sort,
+      page: lastPage > 1 ? String(lastPage) : undefined,
+    })) {
+      if (v) params.set(k, v);
+    }
+    const qs = params.toString();
+    redirect(qs ? `/catalog?${qs}` : "/catalog");
+  }
 
   const filterState = {
     q,

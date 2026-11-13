@@ -35,7 +35,7 @@ function num(raw: string | undefined): number | null {
 export function parseCatalogQuery(sp: CatalogFilterParams): CatalogListQuery {
   return {
     tab: TABS.includes(sp.filter as CatalogTab) ? (sp.filter as CatalogTab) : "all",
-    q: (sp.q ?? "").trim(),
+    q: (sp.q ?? "").trim().slice(0, 100),
     category: (sp.category ?? "").trim(),
     brand: (sp.brand ?? "").trim(),
     plating: (sp.plating ?? "").trim(),
@@ -53,7 +53,9 @@ function escapeRegex(s: string): string {
 // than one member, for the variations tab (lib/catalog/facets.ts).
 export function catalogMatch(query: CatalogListQuery, familySkus: string[]): Record<string, unknown> {
   const match: Record<string, unknown> = { inCatalog: true };
-  if (query.tab === "incomplete") match.masterRecordComplete = false;
+  // Same definition as the Incomplete card (lib/catalog/facets.ts): anything
+  // not marked complete, including an item that has no flag at all.
+  if (query.tab === "incomplete") match.masterRecordComplete = { $ne: true };
   if (query.tab === "pending") match["catalogApproval.status"] = "pending";
   if (query.tab === "variations") match.baseSku = { $in: familySkus };
   if (query.tab === "inactive") match.active = false;

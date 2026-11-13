@@ -4,6 +4,8 @@ import PurchaseOrder from "@/models/PurchaseOrder";
 import { syncPurchaseOrderToMonday, syncAllPurchaseOrders } from "@/lib/monday/sync";
 import { archiveMondayFiles } from "@/lib/purchase-orders/files";
 import { enqueue } from "@/lib/jobs/queue";
+import { notify } from "@/lib/notifications/notify";
+import { mondaySyncFailed } from "@/lib/notifications/messages";
 
 // Per-kind handler table. Every job the queue knows about has exactly
 // one handler here; adding a new kind means adding its JOB_KINDS entry
@@ -40,6 +42,19 @@ const HANDLERS: Record<JobKind, Handler> = {
       errored: result.errored,
       errorDetail: result.errors.map((e) => ({ message: `PO ${e.poId}: ${e.message}` })),
     });
+    if (result.errored > 0) {
+      // Awaited: a background job has no response to send first.
+      await notify({
+        ...mondaySyncFailed({
+          what: "push",
+          failed: result.errored,
+          total: result.processed,
+          messages: result.errors.map((e) => `PO ${e.poId}: ${e.message}`),
+        }),
+        // The push re-queues itself in slices; one email per hour of slices.
+        throttle: { key: "monday-push-failed", windowMs: 60 * 60 * 1000 },
+      });
+    }
     return result;
   },
 

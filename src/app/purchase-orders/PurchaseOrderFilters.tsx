@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Search, X, SlidersHorizontal, ArrowDownUp } from "lucide-react";
 import { Select as BaseSelect } from "@/components/ui/Field";
@@ -69,6 +69,19 @@ export function PurchaseOrderFilters({
   const router = useRouter();
   const pathname = usePathname();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [q, setQ] = useState(state.q);
+
+  // Follow the URL when it changes from outside the box (Clear, back/forward),
+  // but never while someone is typing in it: an older search arriving late
+  // would otherwise wipe the letters typed since.
+  useEffect(() => {
+    if (document.activeElement !== searchRef.current) setQ(state.q);
+  }, [state.q]);
+
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }, []);
 
   const advancedActive =
     !!state.image || !!state.from || !!state.to || !!state.minTotal || !!state.maxTotal ||
@@ -76,6 +89,13 @@ export function PurchaseOrderFilters({
   const [showAdvanced, setShowAdvanced] = useState(advancedActive);
 
   function pushWith(next: Partial<PoListState>) {
+    // A search still waiting to run goes along with this change; on its own
+    // it would run later with the filters from before this change and undo it.
+    if (debounceRef.current && !("q" in next)) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+      next = { ...next, q: (searchRef.current?.value ?? q).trim() };
+    }
     const merged = { ...state, ...next };
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(poListStateToQuery(merged))) {
@@ -86,8 +106,20 @@ export function PurchaseOrderFilters({
   }
 
   function onSearchChange(value: string) {
+    setQ(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => pushWith({ q: value }), 350);
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      pushWith({ q: value.trim() });
+    }, 350);
+  }
+
+  function clearAll() {
+    // A search still waiting to run would bring the old text straight back.
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = null;
+    setQ("");
+    pushWith({ ...DEFAULT_PO_STATE, sort: state.sort, dir: state.dir });
   }
 
   const activeCount = (Object.keys(DEFAULT_PO_STATE) as (keyof PoListState)[]).filter(
@@ -131,8 +163,9 @@ export function PurchaseOrderFilters({
           <span className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none" />
             <input
+              ref={searchRef}
               type="search"
-              defaultValue={state.q}
+              value={q}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="PO #, vendor, tracking #, Monday status, tag…"
               className={`${INPUT} pl-8`}
@@ -246,7 +279,7 @@ export function PurchaseOrderFilters({
         {activeCount > 0 && (
           <button
             type="button"
-            onClick={() => pushWith({ ...DEFAULT_PO_STATE, sort: state.sort, dir: state.dir })}
+            onClick={clearAll}
             className="flex items-center gap-1 text-[0.8rem] text-ink-soft hover:text-critical px-2 py-2.5"
           >
             <X size={13} /> Clear {activeCount}
@@ -271,16 +304,32 @@ export function PurchaseOrderFilters({
           </label>
           <label className="flex flex-col gap-1.5 w-[150px]">
             <span className={LABEL}>From</span>
-            <input type="date" defaultValue={state.from} onChange={(e) => pushWith({ from: e.target.value })} className={INPUT} />
+            {/* Keyed on the URL value so Clear / back resets what's shown. */}
+            <input
+              key={`from-${state.from}`}
+              type="date"
+              defaultValue={state.from}
+              max={state.to || undefined}
+              onChange={(e) => pushWith({ from: e.target.value })}
+              className={INPUT}
+            />
           </label>
           <label className="flex flex-col gap-1.5 w-[150px]">
             <span className={LABEL}>To</span>
-            <input type="date" defaultValue={state.to} onChange={(e) => pushWith({ to: e.target.value })} className={INPUT} />
+            <input
+              key={`to-${state.to}`}
+              type="date"
+              defaultValue={state.to}
+              min={state.from || undefined}
+              onChange={(e) => pushWith({ to: e.target.value })}
+              className={INPUT}
+            />
           </label>
 
           <label className="flex flex-col gap-1.5 w-[110px]">
             <span className={LABEL}>Min total $</span>
             <input
+              key={`min-${state.minTotal}`}
               type="number"
               min="0"
               step="0.01"
@@ -292,6 +341,7 @@ export function PurchaseOrderFilters({
           <label className="flex flex-col gap-1.5 w-[110px]">
             <span className={LABEL}>Max total $</span>
             <input
+              key={`max-${state.maxTotal}`}
               type="number"
               min="0"
               step="0.01"

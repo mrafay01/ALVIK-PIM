@@ -8,6 +8,7 @@ import { issueOtp, redeemSessionTicket, OtpDeliveryError, otpDeliveryFailed } fr
 import { ChangePasswordRequestSchema, ChangePasswordConfirmSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
 import { readSessionToken, setFreshSessionCookie } from "@/lib/sessionCookie";
+import { sendSecurityNoticeAfterResponse } from "@/lib/notifications/security";
 
 // POST: step 1 of a self-service password change. Verifies the caller's
 // current password, then emails a 2FA code to their own account address —
@@ -76,6 +77,7 @@ export async function PATCH(req: NextRequest) {
   user.passwordHash = await bcrypt.hash(newPassword, 12);
   user.sessionVersion = (user.sessionVersion ?? 0) + 1;
   await user.save();
+  sendSecurityNoticeAfterResponse(user.email, { kind: "password_changed" });
 
   const res = NextResponse.json({ ok: true });
   if (token) await setFreshSessionCookie(res, token, user.sessionVersion);

@@ -6,6 +6,12 @@ import { previewPullSlice, commitSelectedPullRows } from "@/lib/monday/pull";
 import { PULL_IMPORT_CHUNK } from "@/lib/monday/pullLimits";
 import { MondayApiError } from "@/lib/monday/client";
 import logger from "@/lib/logger";
+import { notifyAfterResponse } from "@/lib/notifications/notify";
+import { mondaySyncFailed } from "@/lib/notifications/messages";
+
+// The import runs as many 500-item calls; one failure email per 15 minutes
+// covers a whole run.
+const MONDAY_IMPORT_THROTTLE = { key: "monday-import-failed", windowMs: 15 * 60 * 1000 };
 
 // Monday unreachable or refusing the request: a clear message, not a bare 500.
 function mondayFailed(what: string, err: unknown) {
@@ -80,6 +86,16 @@ export async function POST(req: NextRequest) {
       errored: ids.length,
       errorDetail: [{ message: err instanceof Error ? err.message.slice(0, 500) : String(err) }],
     }).catch(() => undefined);
+    notifyAfterResponse({
+      ...mondaySyncFailed({
+        what: "import",
+        failed: ids.length,
+        messages: [err instanceof Error ? err.message.slice(0, 300) : String(err)],
+        actorId: gate.session.user?.id,
+        actorName: gate.session.user?.name,
+      }),
+      throttle: MONDAY_IMPORT_THROTTLE,
+    });
     return mondayFailed("import", err);
   }
 
@@ -94,6 +110,20 @@ export async function POST(req: NextRequest) {
     errored: result.errored,
     errorDetail: result.errors.map((e) => ({ message: `Monday item ${e.mondayItemId}: ${e.message}` })),
   });
+
+  if (result.errored > 0) {
+    notifyAfterResponse({
+      ...mondaySyncFailed({
+        what: "import",
+        failed: result.errored,
+        total: result.processed,
+        messages: result.errors.map((e) => `Monday item ${e.mondayItemId}: ${e.message}`),
+        actorId: gate.session.user?.id,
+        actorName: gate.session.user?.name,
+      }),
+      throttle: MONDAY_IMPORT_THROTTLE,
+    });
+  }
 
   return NextResponse.json(result);
 }

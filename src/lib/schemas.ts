@@ -13,6 +13,7 @@ import {
   DESCRIPTION_PLATFORMS,
   ROLES,
 } from "@/lib/enums";
+import { NOTIFICATION_EVENT_KEYS, type NotificationEvent } from "@/lib/notifications/events";
 
 // Request-body validation for the API routes. Every mutating handler parses
 // its body through one of these before touching Mongoose, so unvalidated /
@@ -290,7 +291,7 @@ export const PoPatchSchema = z
   .object({
     backOfficeChecklist: backOfficeChecklistPatch.optional(),
     status: z.enum(PO_STATUSES).optional(),
-    vendorReplySent: z.literal(true).optional(),
+    vendorReplySent: z.boolean().optional(),
     joelShipConfirmed: z.boolean().optional(),
   })
   .refine((b) => Object.keys(b).length > 0, "empty update");
@@ -417,12 +418,10 @@ export const UserPatchSchema = z
 // preferences from Settings > Notifications. Distinct from UserPatchSchema
 // (admin-only, edits *other* users' role/active/password): this one is
 // scoped to the caller's own account and only ever touches this one field.
+// Keys are the email types in lib/notifications/events.ts; the route also
+// checks the caller's role can receive each one.
 export const NotificationPrefsPatchSchema = z
-  .object({
-    poStatusChanges: z.boolean().optional(),
-    mondaySyncErrors: z.boolean().optional(),
-    weeklyDigest: z.boolean().optional(),
-  })
+  .record(z.enum(NOTIFICATION_EVENT_KEYS as [NotificationEvent, ...NotificationEvent[]]), z.boolean())
   .refine((b) => Object.keys(b).length > 0, "empty update");
 
 // Each 2FA-gated account-security action below follows the same two-step

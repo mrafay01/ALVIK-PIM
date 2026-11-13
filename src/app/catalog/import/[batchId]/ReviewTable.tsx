@@ -15,6 +15,8 @@ type Row = {
   rowNumber: number;
   coerced: Record<string, unknown>;
   issues: { label: string; message: string }[];
+  // An item with this SKU already exists: committing updates it.
+  updates: { sku: string; inCatalog: boolean } | null;
 };
 
 type Counts = { total: number; flagged: number; unflagged: number; parked: number; committed: number; fileRows: number };
@@ -342,6 +344,13 @@ export function ReviewTable({
                                 </span>
                               </div>
                             ))}
+                          </div>
+                        )}
+                        {row.updates && (
+                          <div className="text-[0.76rem] text-ink-faint mt-1">
+                            {row.updates.inCatalog
+                              ? `Updates ${row.updates.sku} in the catalog`
+                              : `Updates un-verified item ${row.updates.sku} and adds it to the catalog`}
                           </div>
                         )}
                       </td>

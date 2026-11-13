@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Types } from "mongoose";
+import { Types, Error as MongooseError } from "mongoose";
 import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail } from "@/lib/authz";
 import { ConflictResolveSchema, badRequest } from "@/lib/schemas";
@@ -7,7 +7,7 @@ import CatalogConflict from "@/models/CatalogConflict";
 import CatalogChange from "@/models/CatalogChange";
 import Item from "@/models/Item";
 import type { ConflictStatus } from "@/models/CatalogConflict";
-import { AUTHORITATIVE_FIELD_BY_PATH, getByPath } from "@/lib/catalog/authoritativeFields";
+import { AUTHORITATIVE_FIELD_BY_PATH, getByPath, valuesConflict } from "@/lib/catalog/authoritativeFields";
 import { isObjectId } from "@/lib/ids";
 
 const CONFLICT_ROLES = ["catalog_manager"] as const;
@@ -103,8 +103,12 @@ export async function POST(
     // The item is loaded fresh so the change log records the value that
     // was actually replaced, not the conflict's possibly-stale snapshot.
     const item = await Item.findById(conflict.itemId);
-    if (item) {
-      const oldValue = getByPath(item.toObject({ depopulate: true }), conflict.field);
+    const oldValue = item ? getByPath(item.toObject({ depopulate: true }), conflict.field) : undefined;
+    // Nothing to write when the item already holds this value (it was
+    // changed since the PI came in): close the conflict without logging a
+    // "change" from a value to itself.
+    const alreadyThere = item && authField && !valuesConflict(authField.kind, oldValue, newValue) && oldValue != null;
+    if (item && !alreadyThere) {
       item.set(conflict.field, newValue);
       if (resolvedBy) item.lastEditedBy = resolvedBy;
       try {
@@ -115,6 +119,12 @@ export async function POST(
           { _id: conflict._id, status: nextStatus },
           { $set: { status: "pending" }, $unset: { resolvedAt: "", resolvedBy: "", customValue: "" } }
         );
+        if (err instanceof MongooseError.ValidationError) {
+          return NextResponse.json(
+            { error: `The item wouldn't accept that value for ${conflict.fieldLabel}. Try another value.` },
+            { status: 400 }
+          );
+        }
         throw err;
       }
 

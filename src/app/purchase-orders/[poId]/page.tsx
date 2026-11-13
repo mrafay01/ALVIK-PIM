@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Types } from "mongoose";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import { getSessionRole, roleCan, ROLE_SETS } from "@/lib/authz";
@@ -21,7 +20,9 @@ import {
 import { PO_STATUS_LABEL, PO_STATUS_TONE, isChecklistFieldDone } from "@/lib/statusDisplay";
 import { MONDAY_BOARD_ID } from "@/lib/monday/config";
 import { MONDAY_RECEIVED_LABELS } from "@/lib/purchase-orders/listState";
-import { isClosedOnMonday, CHECKLIST_DONE } from "@/lib/purchase-orders/transitions";
+import { isClosedOnMonday, CHECKLIST_DONE, CHECKLIST_LOCKED_STATUSES } from "@/lib/purchase-orders/transitions";
+import type { PoStatus } from "@/lib/enums";
+import { isObjectId } from "@/lib/ids";
 import { PoActions } from "./PoActions";
 import { PoChecklist } from "./PoChecklist";
 import { MondayUpdates } from "./MondayUpdates";
@@ -43,7 +44,7 @@ export default async function PurchaseOrderDetailPage({
   params: Promise<{ poId: string }>;
 }) {
   const { poId } = await params;
-  if (!Types.ObjectId.isValid(poId)) notFound();
+  if (!isObjectId(poId)) notFound();
   await connectDB();
 
   const [po, role] = await Promise.all([
@@ -62,6 +63,7 @@ export default async function PurchaseOrderDetailPage({
   const checklist = (po.backOfficeChecklist ?? {}) as Record<string, string>;
   const doneCount = Object.keys(CHECKLIST_DONE).filter((f) => isChecklistFieldDone(f, checklist[f])).length;
   const allDone = doneCount === Object.keys(CHECKLIST_DONE).length;
+  const checklistLocked = CHECKLIST_LOCKED_STATUSES.includes(po.status as PoStatus);
   const quotes = (po.quotationIds ?? []) as unknown as {
     _id: unknown;
     sourceFileName?: string | null;
@@ -256,14 +258,24 @@ export default async function PurchaseOrderDetailPage({
           </span>
         </div>
         <p className="text-[0.82rem] text-ink-soft mb-3">
-          A purchase order can&apos;t move to <strong>Ready to ship</strong> until all six are complete;
-          enforced by the server, not just this screen.
+          {checklistLocked ? (
+            <>
+              This PO is at <strong>{PO_STATUS_LABEL[po.status as keyof typeof PO_STATUS_LABEL]}</strong>, so a
+              completed item can&apos;t be changed back. Move the PO back a stage first if it needs to change.
+            </>
+          ) : (
+            <>
+              A purchase order can&apos;t move to <strong>Ready to ship</strong> until all six are complete;
+              enforced by the server, not just this screen.
+            </>
+          )}
         </p>
         <PoChecklist
           key={JSON.stringify(checklist)}
           poId={String(po._id)}
           checklist={checklist}
           canEdit={canEdit && !closedLabel}
+          lockDone={checklistLocked}
         />
       </Card>
 
@@ -398,6 +410,7 @@ export default async function PurchaseOrderDetailPage({
             isAdmin={role === "administrator"}
             mondayItemId={po.mondayItemId ?? null}
             lastPushedToMondayAt={po.lastPushedToMondayAt ? new Date(po.lastPushedToMondayAt).toISOString() : null}
+            history={po.statusHistory.map((h) => ({ status: String(h.status ?? "") }))}
           />
         </div>
       )}

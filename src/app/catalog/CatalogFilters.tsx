@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { Select } from "@/components/ui/Field";
@@ -40,8 +40,26 @@ export function CatalogFilters({
   const router = useRouter();
   const pathname = usePathname();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [q, setQ] = useState(state.q);
+
+  // Follow the URL when it changes from outside the box (Clear, back/forward),
+  // never while someone is typing: a late older search would wipe new letters.
+  useEffect(() => {
+    if (document.activeElement !== searchRef.current) setQ(state.q);
+  }, [state.q]);
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }, []);
 
   function pushWith(next: Partial<CatalogFilterState>) {
+    // A search still waiting to run goes along with this change; on its own it
+    // would run later with the filters from before and undo this one.
+    if (debounceRef.current && !("q" in next)) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+      next = { ...next, q: searchRef.current?.value ?? q };
+    }
     const merged = { ...state, ...next };
     const params = new URLSearchParams();
     if (merged.tab && merged.tab !== "all") params.set("filter", merged.tab);
@@ -58,8 +76,19 @@ export function CatalogFilters({
   }
 
   function onSearchChange(value: string) {
+    setQ(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => pushWith({ q: value }), 350);
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      pushWith({ q: value });
+    }, 350);
+  }
+
+  function clearAll() {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = null;
+    setQ("");
+    pushWith({ q: "", category: "", brand: "", plating: "", minPrice: "", maxPrice: "", sort: "sku" });
   }
 
   const hasActive =
@@ -75,8 +104,9 @@ export function CatalogFilters({
             className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none"
           />
           <input
+            ref={searchRef}
             type="search"
-            defaultValue={state.q}
+            value={q}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="SKU, title, brand, UPC…"
             className="font-body text-[0.89rem] pl-8 pr-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)]"
@@ -123,6 +153,7 @@ export function CatalogFilters({
       <label className="flex flex-col gap-1.5 w-[100px]">
         <span className="text-[0.72rem] font-semibold text-ink-faint uppercase tracking-wide">Min $</span>
         <input
+          key={`min-${state.minPrice}`}
           type="number"
           step="0.01"
           min="0"
@@ -134,6 +165,7 @@ export function CatalogFilters({
       <label className="flex flex-col gap-1.5 w-[100px]">
         <span className="text-[0.72rem] font-semibold text-ink-faint uppercase tracking-wide">Max $</span>
         <input
+          key={`max-${state.maxPrice}`}
           type="number"
           step="0.01"
           min="0"
@@ -157,9 +189,7 @@ export function CatalogFilters({
       {hasActive && (
         <button
           type="button"
-          onClick={() =>
-            pushWith({ q: "", category: "", brand: "", plating: "", minPrice: "", maxPrice: "", sort: "sku" })
-          }
+          onClick={clearAll}
           className="flex items-center gap-1 text-[0.8rem] text-ink-soft hover:text-critical px-2 py-2.5"
         >
           <X size={13} /> Clear

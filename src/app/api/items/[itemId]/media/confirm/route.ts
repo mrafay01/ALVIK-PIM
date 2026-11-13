@@ -8,9 +8,15 @@ import Item from "@/models/Item";
 import { isObjectId } from "@/lib/ids";
 import { getSharePointContext, getDriveItem } from "@/lib/sharepoint/client";
 import { verifyUploadTicket, itemMatchesTicket } from "@/lib/purchase-orders/files";
-import { imageCompletenessOf } from "@/lib/items/images";
+import { imageCompletenessOf, itemMediaKey } from "@/lib/items/images";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import type { ImageSubfolder } from "@/lib/enums";
+import { notifyAfterResponse } from "@/lib/notifications/notify";
+import { imagesComplete } from "@/lib/notifications/messages";
+
+function allRequiredImages(c: { main?: boolean | null; sides?: boolean | null; models?: boolean | null } | null | undefined) {
+  return !!(c?.main && c?.sides && c?.models);
+}
 
 const BodySchema = z.object({ ticket: z.string().max(2000), driveItemId: z.string().min(1).max(200) });
 const KIND_FOR: Record<string, ImageSubfolder> = {
@@ -40,7 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ite
   await connectDB();
   const item = await Item.findById(itemId);
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
-  const key = item.itemNumber || item.sampleSku;
+  const key = itemMediaKey(item);
   // The ticket must be for one of this item's own image folders.
   const [root, ticketKey, sub] = ticket.f.split("/");
   const kind = KIND_FOR[sub];
@@ -66,10 +72,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ite
     linkCheckedAt: new Date(),
   });
   if (!item.sharePointFolderPath) item.sharePointFolderPath = `/Images/${key}/`;
+  const wasComplete = allRequiredImages(item.imageCompleteness);
   item.imageCompleteness = imageCompletenessOf(item.media);
   item.masterRecordComplete = isMasterRecordComplete(item);
   if (userId) item.lastEditedBy = new Types.ObjectId(userId);
   await item.save();
+
+  // Only on the upload that completes the set, not on every later one.
+  if (!wasComplete && allRequiredImages(item.imageCompleteness)) {
+    notifyAfterResponse(
+      imagesComplete({
+        item: { id: String(item._id), sku: key, title: item.title },
+        inCatalog: item.inCatalog === true,
+        actorId: userId || null,
+        actorName: gate.session.user?.name,
+      })
+    );
+  }
 
   return NextResponse.json({
     imageCompleteness: item.imageCompleteness,

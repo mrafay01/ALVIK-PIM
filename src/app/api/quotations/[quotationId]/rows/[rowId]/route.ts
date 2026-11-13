@@ -7,6 +7,8 @@ import Quotation from "@/models/Quotation";
 import QuotationRow from "@/models/QuotationRow";
 import { isObjectId } from "@/lib/ids";
 import { coerceQuoteValue, type FieldFlag } from "@/lib/quote-import/parseQuoteFile";
+import { recountQuotation } from "@/lib/quote-import/recount";
+import { COMMIT_LOCK_TTL_MS } from "@/lib/quote-import/commitLock";
 
 const QUOTE_ROLES = ROLE_SETS.quotes;
 
@@ -28,8 +30,16 @@ export async function PATCH(
   const { reviewStatus, coercedOverrides, reviewNote } = parsed.data;
 
   await connectDB();
-  const quotation = await Quotation.findById(quotationId);
+  const quotation = await Quotation.findById(quotationId).select("commitLockedAt").lean();
   if (!quotation) return NextResponse.json({ error: "Quotation not found" }, { status: 404 });
+  // A commit reads the rows when it starts; an edit landing meanwhile would
+  // be silently left out of what it writes.
+  if (quotation.commitLockedAt && quotation.commitLockedAt.getTime() > Date.now() - COMMIT_LOCK_TTL_MS) {
+    return NextResponse.json(
+      { error: "This quote is being committed right now. Wait a moment, then refresh and try again." },
+      { status: 409 }
+    );
+  }
 
   const row = await QuotationRow.findOne({ _id: rowId, quotationId });
   if (!row) return NextResponse.json({ error: "Row not found" }, { status: 404 });
@@ -106,21 +116,7 @@ export async function PATCH(
   if (reviewNote !== undefined) row.reviewNote = reviewNote;
 
   await row.save();
-
-  const [approvedRows, rejectedRows, pendingRows, flaggedRows] = await Promise.all([
-    QuotationRow.countDocuments({ quotationId, reviewStatus: "approved" }),
-    QuotationRow.countDocuments({ quotationId, reviewStatus: "rejected" }),
-    QuotationRow.countDocuments({ quotationId, reviewStatus: "needs_review" }),
-    QuotationRow.countDocuments({ quotationId, "flags.0": { $exists: true } }),
-  ]);
-
-  quotation.approvedRows = approvedRows;
-  quotation.rejectedRows = rejectedRows;
-  quotation.flaggedRows = flaggedRows;
-  if (pendingRows === 0 && quotation.status === "needs_review") {
-    quotation.status = "reviewed";
-  }
-  await quotation.save();
+  await recountQuotation(quotationId);
 
   return NextResponse.json({ row });
 }

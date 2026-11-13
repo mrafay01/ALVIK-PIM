@@ -1,5 +1,6 @@
 import type { ImageSubfolder } from "@/lib/enums";
 import { notFound } from "next/navigation";
+import { itemMediaKey } from "@/lib/items/images";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import { getSessionRole, roleCan, ROLE_SETS } from "@/lib/authz";
@@ -372,7 +373,7 @@ export default async function ItemDetailPage({
         {/* ---------- Images ---------- */}
         <MediaUpload
           itemId={String(item._id)}
-          folderKey={item.itemNumber || item.sampleSku || null}
+          folderKey={itemMediaKey(item)}
           canUpload={canUploadMedia}
           initialMedia={(item.media ?? []).map((m) => ({
             sharePointItemId: m.sharePointItemId,

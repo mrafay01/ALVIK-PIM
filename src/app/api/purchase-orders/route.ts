@@ -33,6 +33,9 @@ export async function POST(req: NextRequest) {
   if (!vendorExists) return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
 
   const totalCost = qty && unitCost ? Number(qty) * Number(unitCost) : undefined;
+  // "Waiting for sample PO" is the sample orders' own lane; every other
+  // order starts on the mainline.
+  const startStatus = orderPurposeCategory === "sample" ? "waiting_for_sample_po" : "send_to_vendor";
 
   // Creating the PO and flipping the item's status are one logical unit —
   // wrap them in a transaction so a failure on the second write can't leave
@@ -52,12 +55,10 @@ export async function POST(req: NextRequest) {
             lineItems: [
               { itemId: item._id, qty: qty || undefined, unitCost: unitCost || undefined, totalCost },
             ],
-            status: "waiting_for_sample_po",
+            status: startStatus,
             orderDate: new Date(),
             poTotal: totalCost,
-            statusHistory: [
-              { status: "waiting_for_sample_po", changedBy: session.user?.id || undefined },
-            ],
+            statusHistory: [{ status: startStatus, changedAt: new Date(), changedBy: session.user?.id || undefined }],
           },
         ],
         { session: dbSession }

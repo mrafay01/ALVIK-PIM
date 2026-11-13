@@ -27,6 +27,26 @@ export const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 
 type MediaLike = { url?: string | null; name?: string | null; subfolder?: string | null; linkStatus?: string | null };
 
+// The name an item's SharePoint folder (and its file names) use, from its
+// SKU. SharePoint can't hold " * : < > ? / \ | in a name, and a "/" would
+// make a folder inside the folder; # and % are replaced too so links never
+// need them escaped. Real SKUs have some of these ("CR-5006/1",
+// 'A88432-GP-7"'), which made their images impossible to upload. Trailing
+// dots and spaces are dropped (SharePoint refuses them). Every upload,
+// confirm and screen goes through this one function, so they always agree.
+export function mediaFolderKey(sku: string | null | undefined): string | null {
+  const key = (sku ?? "")
+    .trim()
+    .replace(/["*:<>?/\\|#%]/g, "_")
+    .replace(/[\u0000-\u001f]/g, "")
+    .replace(/[. ]+$/, "");
+  return key || null;
+}
+
+export function itemMediaKey(item: { itemNumber?: string | null; sampleSku?: string | null }): string | null {
+  return mediaFolderKey(item.itemNumber || item.sampleSku);
+}
+
 export function extensionOf(fileName: string): string {
   const m = /\.[^.]+$/.exec(fileName);
   return m ? m[0].toLowerCase() : "";

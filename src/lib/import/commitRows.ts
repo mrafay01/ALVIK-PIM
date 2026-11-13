@@ -4,6 +4,8 @@ import Item from "@/models/Item";
 import { setDotPath } from "@/lib/import/setDotPath";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { splitSku } from "@/lib/catalog/sku";
+import CatalogChange from "@/models/CatalogChange";
+import { AUTHORITATIVE_FIELDS, getByPath, valuesConflict } from "@/lib/catalog/authoritativeFields";
 
 // The Master File's price columns: folded into one pricingHistory entry.
 const PRICING_PATHS = new Set(["pricing.msrp", "pricing.newMsrp", "pricing.ruePrice", "pricing.effectiveDate"]);
@@ -72,7 +74,10 @@ export type CommitResult = {
 // field). Used by the batch review page and the Flagged Items page, which
 // can span several batches. Rows already committed are skipped, so this is
 // safe to re-run. Each touched batch's counters and status are refreshed.
-export async function commitImportRows(filter: Record<string, unknown>): Promise<CommitResult> {
+export async function commitImportRows(
+  filter: Record<string, unknown>,
+  opts: { userId?: Types.ObjectId } = {}
+): Promise<CommitResult> {
   const toCommit = await ImportBatchRow.find({ ...filter, committedItemId: null }).select("batchId coerced").lean();
 
   const errors: { rowId: string; message: string }[] = [];
@@ -86,26 +91,31 @@ export async function commitImportRows(filter: Record<string, unknown>): Promise
   });
 
   // One query for every existing item this batch could touch, instead of
-  // one findOne per row.
+  // one findOne per row. SKUs match ignoring capitals: the unique index is
+  // case-sensitive, so without this "a1234" would become a second item next
+  // to "A1234", and the two would share one SharePoint images folder.
   const itemNumbers = validRows.map((r) => (r.coerced as Record<string, unknown>).itemNumber as string);
   const existingItems = itemNumbers.length
-    ? await Item.find({ itemNumber: { $in: itemNumbers } })
+    ? await Item.find({ itemNumber: { $in: itemNumbers } }).collation({ locale: "en", strength: 2 })
     : [];
-  const existingByItemNumber = new Map(existingItems.map((it) => [it.itemNumber, it]));
+  const existingByItemNumber = new Map(existingItems.map((it) => [String(it.itemNumber).toLowerCase(), it]));
 
-  // rowIds that resolve to the same itemNumber must all merge into the
-  // *same* item, whether it already exists or is being created fresh in
-  // this batch — itemNumber has a unique index, so two separate insertOne
-  // ops for the same new itemNumber would collide and silently drop the
-  // second row. Group rows by itemNumber first, then decide once per
-  // itemNumber whether it's an update or an insert.
+  // Rows that resolve to the same SKU (capitals ignored) must all merge into
+  // the *same* item, whether it already exists or is being created fresh in
+  // this batch — two separate insertOne ops for one new SKU would collide
+  // on the unique index, or worse, differ only in case and both succeed.
+  // Group rows by SKU first, then decide once per SKU whether it's an
+  // update or an insert. The key is lower-case; a new item keeps the first
+  // row's own spelling.
   const rowsByItemNumber = new Map<string, typeof validRows>();
   for (const row of validRows) {
-    const itemNumber = (row.coerced as Record<string, unknown>).itemNumber as string;
+    const itemNumber = ((row.coerced as Record<string, unknown>).itemNumber as string).toLowerCase();
     const group = rowsByItemNumber.get(itemNumber);
     if (group) group.push(row);
     else rowsByItemNumber.set(itemNumber, [row]);
   }
+  // Authoritative-field changes on catalog items, for Change history.
+  const changes: Record<string, unknown>[] = [];
 
   const itemOps: Array<
     | { insertOne: { document: Record<string, unknown> } }
@@ -120,8 +130,8 @@ export async function commitImportRows(filter: Record<string, unknown>): Promise
   let merged = 0;
   let created = 0;
 
-  for (const [itemNumber, groupRows] of rowsByItemNumber) {
-    const existing = existingByItemNumber.get(itemNumber);
+  for (const [skuKey, groupRows] of rowsByItemNumber) {
+    const existing = existingByItemNumber.get(skuKey);
 
     if (existing) {
       // Apply every row targeting this itemNumber in row order, so later
@@ -130,6 +140,8 @@ export async function commitImportRows(filter: Record<string, unknown>): Promise
       // the write itself touches just the imported paths.
       const set: Record<string, unknown> = {};
       const newPricing: Record<string, unknown>[] = [];
+      const wasInCatalog = existing.inCatalog === true;
+      const before = existing.toObject({ depopulate: true }) as Record<string, unknown>;
       for (const row of groupRows) {
         const { flat, pricingEntry, hasPricingData } = buildUpdate((row.coerced ?? {}) as Record<string, unknown>);
         for (const [path, value] of Object.entries(flat)) {
@@ -147,6 +159,33 @@ export async function commitImportRows(filter: Record<string, unknown>): Promise
         set.baseSku = s.baseSku;
         set.variantSuffix = s.variantSuffix;
       }
+      // The Master File is the catalog's source of truth: an item it lists
+      // is a catalog item. One that was still an Un-Verified item (from a
+      // quote or Monday) joins the catalog now; without this the row was
+      // "committed" but the item never appeared in the Catalog.
+      if (!wasInCatalog) {
+        set.inCatalog = true;
+        set.catalogApproval = { status: "approved", approvedAt: new Date() };
+      }
+      // Weights, sizes and vendor SKU the import changes on a catalog item
+      // go into its Change history, like a manual edit or a resolved conflict.
+      if (wasInCatalog) {
+        for (const f of AUTHORITATIVE_FIELDS) {
+          if (!(f.path in set)) continue;
+          const oldValue = getByPath(before, f.path);
+          if (valuesConflict(f.kind, oldValue, set[f.path]) || (oldValue == null && set[f.path] != null)) {
+            changes.push({
+              itemId: existing._id,
+              field: f.path,
+              fieldLabel: f.label,
+              oldValue: oldValue ?? null,
+              newValue: set[f.path],
+              source: "import",
+              sourceRef: { userId: opts.userId ?? null },
+            });
+          }
+        }
+      }
       set.masterRecordComplete = isMasterRecordComplete(existing);
       merged += 1;
 
@@ -159,11 +198,13 @@ export async function commitImportRows(filter: Record<string, unknown>): Promise
           },
         },
       });
-      opItemNumbers.push(itemNumber);
+      opItemNumbers.push(skuKey);
       opTargets.push(existing._id);
     } else {
       // Brand-new item: fold every row in this group into one document
-      // before inserting, same merge order as above.
+      // before inserting, same merge order as above. Keeps the first row's
+      // own spelling of the SKU (the group key is lower-case).
+      const itemNumber = ((groupRows[0].coerced ?? {}) as Record<string, unknown>).itemNumber as string;
       const { baseSku, variantSuffix } = splitSku(itemNumber);
       const now = new Date();
       const newId = new Types.ObjectId();
@@ -189,7 +230,7 @@ export async function commitImportRows(filter: Record<string, unknown>): Promise
         doc as unknown as Parameters<typeof isMasterRecordComplete>[0]
       );
       itemOps.push({ insertOne: { document: doc } });
-      opItemNumbers.push(itemNumber);
+      opItemNumbers.push(skuKey);
       opTargets.push(newId);
       created += 1;
     }
@@ -225,6 +266,13 @@ export async function commitImportRows(filter: Record<string, unknown>): Promise
     }
     rowsByItemNumber.get(opItemNumbers[i])?.forEach((row) => rowCommitTarget.set(row._id.toString(), opTargets[i]));
   });
+
+  // Change history only for the items whose write went through.
+  const written = new Set(opTargets.filter((_, i) => !failedOps.has(i)).map(String));
+  const logged = changes.filter((c) => written.has(String(c.itemId)));
+  if (logged.length > 0) {
+    await CatalogChange.insertMany(logged, { ordered: false }).catch(() => undefined);
+  }
 
   // A committed row has done its job: its values now live on the item.
   // Delete it rather than keep a copy of the whole file around, and add it
@@ -276,9 +324,9 @@ export async function commitImportRowsInSlices(
     cursor = ids[ids.length - 1];
     await ImportBatchRow.updateMany(
       { _id: { $in: ids } },
-      { $set: { reviewStatus: "approved", reviewedBy: opts.reviewedBy, reviewedAt: new Date() } }
+      { $set: { reviewStatus: "approved", reviewedAt: new Date(), ...(opts.reviewedBy ? { reviewedBy: opts.reviewedBy } : {}) } }
     );
-    const r = await commitImportRows({ _id: { $in: ids } });
+    const r = await commitImportRows({ _id: { $in: ids } }, { userId: opts.reviewedBy });
     out.committed += r.committed;
     out.created += r.created;
     out.merged += r.merged;

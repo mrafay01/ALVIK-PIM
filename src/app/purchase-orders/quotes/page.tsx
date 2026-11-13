@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import Quotation from "@/models/Quotation";
@@ -41,6 +42,12 @@ export default async function QuotesListPage({
       .lean(),
     Quotation.countDocuments({}),
   ]);
+
+  // A page past the end: go to the last one instead of "No quotes yet".
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (page > lastPage && total > 0) {
+    redirect(lastPage > 1 ? `/purchase-orders/quotes?page=${lastPage}` : "/purchase-orders/quotes");
+  }
 
   return (
     <AppShell

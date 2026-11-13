@@ -3,22 +3,32 @@ import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { Card } from "@/components/ui/Card";
-import { BellRing } from "lucide-react";
-import { NotificationPrefsForm, type NotificationPrefs } from "../NotificationPrefsForm";
-
-const DEFAULT_PREFS: NotificationPrefs = {
-  poStatusChanges: true,
-  mondaySyncErrors: true,
-  weeklyDigest: false,
-};
+import { BellRing, ShieldCheck } from "lucide-react";
+import type { Role } from "@/lib/enums";
+import { ROLE_LABEL } from "@/lib/statusDisplay";
+import { isMailConfigured } from "@/lib/mailer";
+import { NOTIFICATION_EVENTS, eventsForRole, isEnabled, type StoredPrefs } from "@/lib/notifications/events";
+import { NotificationPrefsForm, type NotificationToggle } from "../NotificationPrefsForm";
 
 export default async function NotificationsSettingsPage() {
   const session = await getSession();
+  const role = session?.user?.role as Role;
 
   await connectDB();
-  const user = await User.findById(session?.user?.id).select("notificationPrefs").lean();
+  const user = await User.findById(session?.user?.id).select("email notificationPrefs").lean();
+  const prefs = (user?.notificationPrefs ?? undefined) as StoredPrefs;
 
-  const prefs: NotificationPrefs = { ...DEFAULT_PREFS, ...(user?.notificationPrefs ?? {}) };
+  const toggles: NotificationToggle[] = eventsForRole(role).map((key) => {
+    const def = NOTIFICATION_EVENTS[key];
+    return {
+      key,
+      label: def.label,
+      helper: def.helper,
+      category: def.category,
+      enabled: isEnabled(key, role, prefs),
+      defaultOn: (def.defaultOn as readonly Role[]).includes(role),
+    };
+  });
 
   return (
     <AppShell
@@ -29,18 +39,31 @@ export default async function NotificationsSettingsPage() {
       backLabel="Settings"
     >
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Choose what you want to be notified about. Changes save immediately.
+        Choose which emails you get about what happens in the app. The list shows what&apos;s relevant to your role (
+        {ROLE_LABEL[role] ?? role}). Changes save straight away.
       </p>
 
       <Card>
         <div className="flex items-center gap-2 mb-1">
           <BellRing size={17} className="text-ink-faint" />
-          <h2 className="text-[0.95rem] m-0">Notification preferences</h2>
+          <h2 className="text-[0.95rem] m-0">Email notifications</h2>
         </div>
-        <p className="text-[0.8rem] text-ink-faint mb-1">
-          These control what you&apos;re alerted about, not how (email vs. in-app); that&apos;s not configurable yet.
+        <p className="text-[0.8rem] text-ink-faint mb-2">
+          Sent to <span className="font-mono text-ink-soft">{user?.email ?? session?.user?.email}</span>. You never get
+          an email about something you did yourself.
         </p>
-        <NotificationPrefsForm initialPrefs={prefs} />
+        <NotificationPrefsForm toggles={toggles} mailConfigured={isMailConfigured()} />
+      </Card>
+
+      <Card className="mt-4">
+        <div className="flex items-center gap-2 mb-1">
+          <ShieldCheck size={17} className="text-ink-faint" />
+          <h2 className="text-[0.95rem] m-0">Account security emails</h2>
+        </div>
+        <p className="text-[0.82rem] text-ink-soft m-0 max-w-[68ch]">
+          Always sent and can&apos;t be turned off: when your password is changed or reset, your sign-in email changes
+          (sent to the old address), your role changes, or your account is deactivated or reactivated.
+        </p>
       </Card>
     </AppShell>
   );

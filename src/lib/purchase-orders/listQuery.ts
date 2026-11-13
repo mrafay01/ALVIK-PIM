@@ -1,5 +1,6 @@
 import { Types, type PipelineStage } from "mongoose";
 import { PO_STATUSES, PRIORITIES } from "@/lib/enums";
+import { formatPoNumber } from "./poNumber";
 import {
   MONDAY_CLOSED_LABELS,
   MONDAY_RECEIVED_LABELS,
@@ -143,6 +144,12 @@ export function buildViewCountsPipeline(now: Date): PipelineStage[] {
     stages.push({ $count: "n" });
     facet[v] = stages;
   }
+  // Value of the open POs only: the ~7,000 finished Monday orders aren't
+  // "pipeline".
+  facet.openValue = [
+    { $match: { $and: OPEN } },
+    { $group: { _id: null, n: { $sum: { $ifNull: ["$poTotal", 0] } } } },
+  ];
   return [DERIVED_FIELDS, { $facet: facet }];
 }
 
@@ -157,8 +164,12 @@ export function buildPoListPipeline(
 
   if (state.q) {
     const rx = new RegExp(escapeRegex(state.q), "i");
+    // POs are stored bare ("22906") but people type them the way they're
+    // shown and written: "PO-22906", "PO 22906", "#22906".
+    const bare = formatPoNumber(state.q);
     const or: Record<string, unknown>[] = [
       { poNumber: rx },
+      ...(bare && bare !== state.q ? [{ poNumber: new RegExp(escapeRegex(bare), "i") }] : []),
       { trackingNumber: rx },
       { mondayStatusText: rx },
       { "orderPurpose.tag": rx },

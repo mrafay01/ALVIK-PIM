@@ -3,12 +3,16 @@ import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import { getSessionRole, roleCan } from "@/lib/authz";
 import CatalogConflict from "@/models/CatalogConflict";
-import "@/models/Item";
+import Item from "@/models/Item";
 import "@/models/Quotation";
 import { Card } from "@/components/ui/Card";
+import { getByPath } from "@/lib/catalog/authoritativeFields";
+import { isObjectId } from "@/lib/ids";
 import { ConflictsList } from "./ConflictsList";
 
 type Params = { itemId?: string };
+
+const LIMIT = 500;
 
 export default async function CatalogConflictsPage({
   searchParams,
@@ -22,48 +26,56 @@ export default async function CatalogConflictsPage({
   await connectDB();
 
   const query: Record<string, unknown> = { status: "pending" };
-  if (itemId && /^[0-9a-fA-F]{24}$/.test(itemId)) query.itemId = itemId;
+  if (itemId && isObjectId(itemId)) query.itemId = itemId;
 
-  const conflicts = await CatalogConflict.find(query)
-    .populate("itemId", "itemNumber title baseSku")
-    .populate("quotationId", "sourceFileName poNumber")
-    .sort({ createdAt: -1 })
-    .limit(500)
+  const [conflicts, totalPending] = await Promise.all([
+    CatalogConflict.find(query)
+      .populate("quotationId", "sourceFileName poNumber")
+      .sort({ createdAt: -1 })
+      .limit(LIMIT)
+      .lean(),
+    CatalogConflict.countDocuments(query),
+  ]);
+
+  // The items as they are now: the value stored when the PI came in may
+  // have changed since (an edit, or another conflict resolved first).
+  const itemIds = [...new Set(conflicts.map((c) => String(c.itemId)))];
+  const paths = [...new Set(conflicts.map((c) => c.field))];
+  const items = await Item.find({ _id: { $in: itemIds } })
+    .select(["itemNumber", "title", ...paths].join(" "))
     .lean();
+  const itemById = new Map(items.map((it) => [String(it._id), it]));
 
-  // Group by item for the UI — most conflicts land in bursts of 2-4
-  // fields per item (one PI row touches weight + silver weight +
-  // sometimes vendor SKU), so grouping is more scannable than a flat
-  // list.
-  type RawConflict = (typeof conflicts)[number];
+  // Grouped by item: one PI row usually disagrees on 2-4 fields at once.
+  type RawConflict = (typeof conflicts)[number] & { currentValue: unknown };
   type GroupedItem = {
     itemId: string;
     itemNumber: string;
     title: string | null;
+    // The item was deleted after the conflict was raised. Its conflicts can
+    // only be closed ("keep"), but they're listed so they don't linger in
+    // the Catalog's "unresolved conflicts" count with nothing to click.
+    missing: boolean;
     conflicts: RawConflict[];
   };
   const groups: GroupedItem[] = [];
   const byItem = new Map<string, GroupedItem>();
   for (const c of conflicts) {
-    const it = c.itemId as unknown as {
-      _id?: unknown;
-      itemNumber?: string;
-      title?: string | null;
-    } | null;
-    if (!it || !it._id) continue;
-    const key = String(it._id);
+    const key = String(c.itemId);
+    const it = itemById.get(key);
     let g = byItem.get(key);
     if (!g) {
       g = {
         itemId: key,
-        itemNumber: it.itemNumber ?? "—",
-        title: it.title ?? null,
+        itemNumber: it?.itemNumber ?? "Deleted item",
+        title: it?.title ?? null,
+        missing: !it,
         conflicts: [],
       };
       byItem.set(key, g);
       groups.push(g);
     }
-    g.conflicts.push(c);
+    g.conflicts.push({ ...c, currentValue: it ? getByPath(it, c.field) : undefined });
   }
 
   return (
@@ -79,6 +91,15 @@ export default async function CatalogConflictsPage({
         catalog. Pick which value wins for each — the catalog is only updated once a decision is
         recorded. &quot;Keep catalog&quot; leaves the stored value alone and closes the conflict.
       </p>
+
+      {totalPending > conflicts.length && (
+        <Card className="mb-4">
+          <p className="m-0 text-[0.85rem] text-ink-soft">
+            Showing the newest {conflicts.length} of {totalPending.toLocaleString()} conflicts. Resolve these and the
+            rest appear.
+          </p>
+        </Card>
+      )}
 
       {groups.length === 0 ? (
         <Card>

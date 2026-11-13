@@ -53,10 +53,10 @@ export function MondayUpdates({ mondayItemId }: { mondayItemId: string }) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? `Failed to load (${res.status})`);
       }
-      const data = await res.json();
-      setUpdates(data.updates);
+      const data = await res.json().catch(() => ({}));
+      setUpdates(Array.isArray(data.updates) ? data.updates : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(err instanceof TypeError ? "Couldn't reach the server. Try again." : err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -101,7 +101,7 @@ export function MondayUpdates({ mondayItemId }: { mondayItemId: string }) {
           {updates.map((u) => (
             <div key={u.id}>
               <UpdateRow update={u} />
-              {u.replies.map((r) => (
+              {(u.replies ?? []).map((r) => (
                 <UpdateRow key={r.id} update={r} isReply />
               ))}
             </div>

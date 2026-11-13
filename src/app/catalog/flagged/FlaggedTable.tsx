@@ -21,6 +21,8 @@ export type FlaggedRow = {
   rowNumber: number;
   coerced: Record<string, unknown>;
   flags: { field: string; label: string; message: string; rawValue: string }[];
+  // An item with this SKU already exists: committing updates it.
+  updates: { sku: string; inCatalog: boolean } | null;
 };
 
 type Action = "commit" | "return" | "exclude";
@@ -63,6 +65,7 @@ export function FlaggedTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkValue, setBulkValue] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const rowKey = rows.map((r) => r._id).join(",");
   useEffect(() => setSelected(new Set()), [rowKey]);
@@ -72,6 +75,13 @@ export function FlaggedTable({
   const canBulkSet = !!currentIssue && currentIssue.field !== "itemNumber";
 
   function navigate(next: { q?: string; issue?: string }) {
+    // A search still waiting to run goes along with this change; on its own
+    // it would run later with the old issue filter and undo this one.
+    if (timer.current && next.q === undefined) {
+      clearTimeout(timer.current);
+      next = { ...next, q: (searchRef.current?.value ?? "").trim() };
+    }
+    timer.current = null;
     const sp = new URLSearchParams();
     const nq = next.q ?? q;
     const ni = next.issue ?? issue;
@@ -210,6 +220,7 @@ export function FlaggedTable({
             <span className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none" />
               <input
+                ref={searchRef}
                 type="search"
                 defaultValue={q}
                 onChange={(e) => {
@@ -393,6 +404,13 @@ export function FlaggedTable({
                         <div>row {row.rowNumber}</div>
                       </td>
                       <td className="px-4 py-3">
+                        {row.updates && (
+                          <div className="text-[0.76rem] text-ink-faint mb-1.5">
+                            {row.updates.inCatalog
+                              ? `Updates ${row.updates.sku} in the catalog`
+                              : `Updates un-verified item ${row.updates.sku} and adds it to the catalog`}
+                          </div>
+                        )}
                         {row.flags.length === 0 ? (
                           <span className="inline-flex items-center gap-1.5 text-[0.82rem] font-semibold text-good">
                             <CheckCircle2 size={13} /> Ready to commit

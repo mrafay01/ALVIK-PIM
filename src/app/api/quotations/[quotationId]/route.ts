@@ -3,7 +3,7 @@ import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { QuotationPatchSchema, badRequest } from "@/lib/schemas";
 import { QUOTE_HEADER_TO_KEY } from "@/lib/quote-import/fields";
-import { Types } from "mongoose";
+import { isObjectId } from "@/lib/ids";
 import Quotation from "@/models/Quotation";
 import QuotationRow from "@/models/QuotationRow";
 import { getSharePointContext, deleteDriveItem } from "@/lib/sharepoint/client";
@@ -29,7 +29,7 @@ export async function PATCH(
   if (isAuthFail(gate)) return gate.response;
 
   const { quotationId } = await params;
-  if (!Types.ObjectId.isValid(quotationId)) {
+  if (!isObjectId(quotationId)) {
     return NextResponse.json({ error: "Quotation not found" }, { status: 404 });
   }
   const parsed = QuotationPatchSchema.safeParse(await req.json().catch(() => null));
@@ -97,7 +97,7 @@ export async function DELETE(
   if (isAuthFail(gate)) return gate.response;
 
   const { quotationId } = await params;
-  if (!Types.ObjectId.isValid(quotationId)) {
+  if (!isObjectId(quotationId)) {
     return NextResponse.json({ error: "Quotation not found" }, { status: 404 });
   }
   await connectDB();

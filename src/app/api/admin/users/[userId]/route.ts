@@ -4,6 +4,8 @@ import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { UserPatchSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
 import { isObjectId } from "@/lib/ids";
+import type { Role } from "@/lib/enums";
+import { sendSecurityNoticeAfterResponse, type SecurityNotice } from "@/lib/notifications/security";
 
 // PATCH: change a user's name, role, or active flag. Admin only. An admin
 // can't demote or deactivate their own account here — that's a
@@ -36,7 +38,10 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   if (body.name !== undefined) user.name = body.name;
+  const notices: SecurityNotice[] = [];
+  const adminName = session.user?.name;
   if (body.role !== undefined && body.role !== user.role) {
+    notices.push({ kind: "role_changed", from: user.role as Role, to: body.role, adminName });
     user.role = body.role;
     // The role is stamped into the user's login cookie when they sign in,
     // so a change only takes effect on their next sign-in. Bumping the
@@ -45,9 +50,17 @@ export async function PATCH(
     // live until the cookie expires.
     user.sessionVersion = (user.sessionVersion ?? 0) + 1;
   }
-  if (body.active !== undefined) user.active = body.active;
+  if (body.active !== undefined && body.active !== user.active) {
+    notices.push({ kind: body.active ? "account_reactivated" : "account_deactivated", adminName });
+    user.active = body.active;
+  }
 
   await user.save();
+  // A deactivated account isn't told about a role change in the same save.
+  for (const n of notices) {
+    if (user.active === false && n.kind === "role_changed") continue;
+    sendSecurityNoticeAfterResponse(user.email, n);
+  }
   return NextResponse.json({
     user: {
       _id: user._id,

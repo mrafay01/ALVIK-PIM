@@ -27,10 +27,10 @@ export function CopyPoFilesButton({ poId }: { poId: string }) {
         const res = await fetch(`/api/purchase-orders/${poId}/files`, { method: "POST" });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error ?? `Copy failed (${res.status})`);
-        const r = data as CopyResult;
-        sum.copied += r.copied;
-        sum.failed += r.failed;
-        if (r.remaining.files === 0 || r.copied + r.skipped === 0) break;
+        const r = data as Partial<CopyResult>;
+        sum.copied += r.copied ?? 0;
+        sum.failed += r.failed ?? 0;
+        if (!r.remaining || r.remaining.files === 0 || (r.copied ?? 0) + (r.skipped ?? 0) === 0) break;
       }
       setNote(
         sum.failed > 0
@@ -38,7 +38,13 @@ export function CopyPoFilesButton({ poId }: { poId: string }) {
           : `${sum.copied} file${sum.copied === 1 ? "" : "s"} copied to SharePoint.`
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(
+        err instanceof TypeError
+          ? `Couldn't reach the server.${sum.copied > 0 ? ` ${sum.copied} file(s) were copied before that.` : ""} Try again.`
+          : err instanceof Error
+            ? err.message
+            : String(err)
+      );
     } finally {
       setBusy(false);
       refresh();

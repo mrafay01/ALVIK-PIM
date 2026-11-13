@@ -8,6 +8,7 @@ import { issueOtp, redeemSessionTicket, OtpDeliveryError, otpDeliveryFailed } fr
 import { AdminResetPasswordRequestSchema, AdminResetPasswordConfirmSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
 import { isObjectId } from "@/lib/ids";
+import { sendSecurityNoticeAfterResponse } from "@/lib/notifications/security";
 
 // POST: step 1 of an admin resetting a DIFFERENT user's password. The
 // admin proves THEIR OWN identity — their own current password — and a
@@ -96,6 +97,7 @@ export async function PATCH(
   target.passwordHash = await bcrypt.hash(newPassword, 12);
   target.sessionVersion = (target.sessionVersion ?? 0) + 1;
   await target.save();
+  sendSecurityNoticeAfterResponse(target.email, { kind: "password_reset_by_admin", adminName: session.user?.name });
 
   return NextResponse.json({ ok: true });
 }

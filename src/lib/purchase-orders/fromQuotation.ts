@@ -104,6 +104,9 @@ async function attachInner(
     if (!existing.quotationIds.some((q) => String(q) === String(quotation._id))) {
       existing.quotationIds.push(quotation._id);
     }
+    // A Monday PO whose vendor name didn't match a vendor here has none;
+    // the quote's vendor is the one that sent this PI.
+    if (!existing.vendorId && quotation.vendorId) existing.vendorId = quotation.vendorId;
     // Only fill a total that's missing — a total that came from Monday or
     // was typed by someone is authoritative over a derived one.
     if (existing.poTotal == null) {
@@ -125,7 +128,7 @@ async function attachInner(
       orderPurpose: { category: "stock" },
       lineItems,
       poTotal: quotedPoTotal ?? (sum > 0 ? sum : undefined),
-      statusHistory: [{ status: "send_to_vendor", changedBy: quotation.createdBy ?? undefined }],
+      statusHistory: [{ status: "send_to_vendor", changedAt: new Date(), changedBy: quotation.createdBy ?? undefined }],
     });
     return { poId: po._id, created: true, linesAdded: lineItems.length };
   } catch (err) {
