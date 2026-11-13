@@ -3,7 +3,7 @@ import { Schema, model, models, type InferSchemaType, type Model } from "mongoos
 // Background job queue, MongoDB-backed and serverless-safe.
 //
 // The blueprint originally scoped BullMQ + Redis for this (Monday.com
-// sync, marketplace export), but BullMQ assumes a long-lived worker
+// sync), but BullMQ assumes a long-lived worker
 // process which doesn't exist on serverless (Vercel/Lambda). Using a
 // single DB collection with an atomic claim query lets the same job
 // definitions run from either (a) a Vercel Cron hitting /api/jobs/tick
@@ -24,7 +24,6 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 export const JOB_KINDS = [
   "monday_push_all",
   "monday_push_po",
-  "marketplace_export",
   "archive_po_files",
 ] as const;
 export type JobKind = (typeof JOB_KINDS)[number];

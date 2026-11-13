@@ -74,17 +74,19 @@ export function roleCan(role: Role | undefined, allowed: readonly Role[]): boole
 // allow-lists are defined once.
 export const ROLE_SETS = {
   // Item intake / review / lifecycle. Buyers and buying/purchasing own
-  // this; marketplace_listing edits catalog content fields on the same doc.
-  items: ["buyer_merchandiser", "buying_purchasing", "marketplace_listing"],
+  // this; catalog_manager edits catalog content fields on the same doc.
+  items: ["buyer_merchandiser", "buying_purchasing", "catalog_manager"],
   // Image upload workflow.
   media: ["photography", "buying_purchasing"],
   // PO / PI pipeline: who may change a PO (advance stage, checklist, sync).
   purchaseOrders: ["buying_purchasing"],
   // Who may intake and review vendor quotes, and view the Purchase Orders
   // list and detail pages (read-only unless also in purchaseOrders).
-  quotes: ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"],
+  quotes: ["buying_purchasing", "buyer_merchandiser", "catalog_manager"],
   // Admin-only areas: legacy import, Monday sync/pull.
   adminOnly: [] as Role[],
-  // Marketplace listing review + bulk-import file export.
-  marketplaceExport: ["marketplace_listing"],
+  // Catalog export in the Master File layout (prices included), so not
+  // photography or warehouse, who the roles table keeps away from pricing.
+  // Mirrored in middleware's /catalog/export and /api/catalog/export.
+  catalogExport: ["buyer_merchandiser", "buying_purchasing", "catalog_manager"],
 } satisfies Record<string, readonly Role[]>;

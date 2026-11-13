@@ -28,6 +28,16 @@ describe("fixRowField", () => {
     expect(out.flags.some((f) => f.field === "specs.metal")).toBe(false);
   });
 
+  it("accepts .925 Sterling Silver as written", () => {
+    for (const raw of [".925 Sterling Silver", " .925  sterling SILVER ", "sterling silver 925"]) {
+      const out = fixRowField(row, "specs.metal", raw);
+      expect(out.coerced["specs.metal"]).toBe(".925 Sterling Silver");
+      expect(out.flags.some((f) => f.field === "specs.metal")).toBe(false);
+    }
+    // Typos are still flagged.
+    expect(fixRowField(row, "specs.metal", "Beass").flags.some((f) => f.field === "specs.metal")).toBe(true);
+  });
+
   it("requires a SKU", () => {
     expect(fixRowField({ coerced: {}, flags: [] }, "itemNumber", "").flags[0].field).toBe("itemNumber");
     expect(fixRowField({ coerced: {}, flags: [] }, "itemNumber", "B7").flags).toEqual([]);

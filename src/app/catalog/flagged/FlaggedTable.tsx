@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Select, Input } from "@/components/ui/Field";
 import { Pagination } from "@/components/app/Pagination";
 import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
+import { commitInSlices, commitSummary } from "@/lib/client/commitInSlices";
+import { KNOWN_METALS } from "@/lib/import/metals";
 
 export type IssueOption = { field: string; label: string; summary: string; rows: number; kind: string };
 
@@ -28,7 +30,7 @@ const KIND_HINT: Record<string, string> = {
   number: "a number, e.g. 42.50",
   weight: "a number in grams, e.g. 3.2",
   date: "a date, e.g. 2026-10-20 or 10/20/2026",
-  metal: "Brass, 14K GP, Silver, Gold or 18K Gold",
+  metal: `${KNOWN_METALS.slice(0, -1).join(", ")} or ${KNOWN_METALS[KNOWN_METALS.length - 1]}`,
   bool: "any text marks it as yes",
   text: "text",
 };
@@ -97,29 +99,30 @@ export function FlaggedTable({
   function act(action: Action, scope: Scope, confirmText?: string) {
     if (confirmText && !window.confirm(confirmText)) return;
     return run(`${action}:${scope}`, async () => {
+      const body = {
+        action,
+        scope,
+        q: q || undefined,
+        issue: scope === "filtered" && issue !== "__fixed" ? issue || undefined : undefined,
+        rowIds: scope === "selected" ? [...selected] : undefined,
+      };
+      if (action === "commit") {
+        // Many rows are committed over several calls (~40 s each): each
+        // returns `next` until every row has been tried.
+        const total = await commitInSlices("/api/admin/flagged-items/act", body, (sum) =>
+          setResult({ tone: "good", text: `Committing… ${sum.committed.toLocaleString()} row(s) in the catalog so far.` })
+        );
+        setSelected(new Set());
+        return commitSummary(total, "merged");
+      }
       const res = await fetch("/api/admin/flagged-items/act", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action,
-          scope,
-          q: q || undefined,
-          issue: scope === "filtered" && issue !== "__fixed" ? issue || undefined : undefined,
-          rowIds: scope === "selected" ? [...selected] : undefined,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return { tone: "critical", text: data.error ?? "That didn't work." };
       setSelected(new Set());
-      if (action === "commit") {
-        const errs = (data.errors ?? []) as { message: string }[];
-        return {
-          tone: errs.length ? "critical" : "good",
-          text:
-            `Committed ${data.committed} row(s) to the catalog: ${data.created} new, ${data.merged} merged.` +
-            (errs.length ? ` ${errs.length} couldn't be committed: ${errs.slice(0, 2).map((e) => e.message).join("; ")}` : ""),
-        };
-      }
       return {
         tone: "good",
         text: action === "return" ? `Sent ${data.affected} row(s) back to their review page.` : `Excluded ${data.affected} row(s).`,

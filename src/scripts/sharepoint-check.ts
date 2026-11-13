@@ -47,7 +47,7 @@ async function main() {
 
   for (const f of folders.sort((a, b) => a.name.localeCompare(b.name))) {
     console.log(`  ${f.name}`);
-    for (const sub of ["Main", "Sides", "Models", "Lifestyle"]) {
+    for (const sub of ["Main", "Sides", "Models", "Lifestyle", "Videos"]) {
       const files = (await list(`Images/${f.name}/${sub}`)) ?? [];
       const names = files.filter((x) => !x.folder).map((x) => `${x.name} (${Math.round((x.size ?? 0) / 1024)} KB)`);
       console.log(`    ${names.length ? "✓" : "·"} ${sub.padEnd(9)} ${names.length ? names.join(", ") : "empty"}`);

@@ -13,10 +13,17 @@ import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import type { ImageSubfolder } from "@/lib/enums";
 
 const BodySchema = z.object({ ticket: z.string().max(2000), driveItemId: z.string().min(1).max(200) });
-const KIND_FOR: Record<string, ImageSubfolder> = { Main: "main", Sides: "sides", Models: "models", Lifestyle: "lifestyle" };
+const KIND_FOR: Record<string, ImageSubfolder> = {
+  Main: "main",
+  Sides: "sides",
+  Models: "models",
+  Lifestyle: "lifestyle",
+  Videos: "videos",
+};
 
-// POST: record an image the browser just uploaded to SharePoint (see
-// ./upload-session) on the item, and recompute image completeness.
+// POST: record an image or video clip the browser just uploaded to
+// SharePoint (see ./upload-session) on the item, and recompute image
+// completeness (videos never count towards it).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
   const gate = await requireRole(ROLE_SETS.media);
   if (isAuthFail(gate)) return gate.response;

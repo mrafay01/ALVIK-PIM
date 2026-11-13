@@ -134,12 +134,19 @@ async function mapWithConcurrency<T>(
 // used by the manual "sync now" endpoint and eventually a scheduled job.
 // Runs with bounded concurrency rather than one PO at a time. Returns
 // per-row results for a sync_logs entry.
-export async function syncAllPurchaseOrders(): Promise<{
+//
+// With timeBudgetMs, no new PO is started once the budget is spent (the
+// ones in flight finish), and `more` says POs were left for another run: a
+// big backlog can't fit in one serverless call. Pushed POs are stamped
+// lastPushedToMondayAt, so the next run picks up exactly the rest.
+export async function syncAllPurchaseOrders(opts: { timeBudgetMs?: number } = {}): Promise<{
   processed: number;
   changed: number;
   errored: number;
   errors: { poId: string; message: string }[];
+  more: boolean;
 }> {
+  const deadline = opts.timeBudgetMs ? Date.now() + opts.timeBudgetMs : Infinity;
   const pos = await PurchaseOrder.find({
     $or: [
       { mondayItemId: null },
@@ -151,9 +158,16 @@ export async function syncAllPurchaseOrders(): Promise<{
   });
 
   let changed = 0;
+  let processed = 0;
+  let more = false;
   const errors: { poId: string; message: string }[] = [];
 
   await mapWithConcurrency(pos, 4, async (po) => {
+    if (Date.now() >= deadline) {
+      more = true;
+      return;
+    }
+    processed++;
     try {
       await syncPurchaseOrderToMonday(po);
       changed++;
@@ -162,5 +176,5 @@ export async function syncAllPurchaseOrders(): Promise<{
     }
   });
 
-  return { processed: pos.length, changed, errored: errors.length, errors };
+  return { processed, changed, errored: errors.length, errors, more };
 }

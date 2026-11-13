@@ -50,7 +50,8 @@
       "Bash(npm list *)",
       "Bash(grep -r \"eval\\\\|innerHTML\\\\|\\\\$\\\\|exec\" \"C:\\\\Users\\\\cw\\\\Documents\\\\PIM\\\\src\" --include=\"*.ts\" --include=\"*.tsx\")",
       "Bash(npm test *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "PowerShell(npx tsx --env-file=.env.local src/scripts/_mpcount.ts)"
     ],
     "additionalDirectories": [
       "\\tmp",

@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/app/Pagination";
 import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
+import { commitInSlices, commitSummary } from "@/lib/client/commitInSlices";
 
 type Row = {
   _id: string;
@@ -59,26 +60,30 @@ export function ReviewTable({
     setPending(key);
     setLast(key);
     setResult(null);
+    const body = { action, scope, q: q || undefined, rowIds: scope === "selected" ? [...selected] : undefined };
     try {
+      if (action === "commit") {
+        // A large file is committed over several calls (~40 s each): each
+        // returns `next` until every row has been tried.
+        const total = await commitInSlices(`/api/admin/import-review/${batchId}/rows/act`, body, (sum) =>
+          setResult({ tone: "good", text: `Committing… ${sum.committed.toLocaleString()} row(s) in the catalog so far.` })
+        );
+        setResult(commitSummary(total, "merged into existing items"));
+        setSelected(new Set());
+        refresh();
+        return;
+      }
       const res = await fetch(`/api/admin/import-review/${batchId}/rows/act`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, scope, q: q || undefined, rowIds: scope === "selected" ? [...selected] : undefined }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setResult({ tone: "critical", text: data.error ?? "That didn't work. Try again." });
         return;
       }
-      if (action === "commit") {
-        const errs = (data.errors ?? []) as { message: string }[];
-        setResult({
-          tone: errs.length ? "critical" : "good",
-          text:
-            `Committed ${data.committed} row(s) to the catalog: ${data.created} new, ${data.merged} merged into existing items.` +
-            (errs.length ? ` ${errs.length} couldn't be committed: ${errs.slice(0, 2).map((e) => e.message).join("; ")}` : ""),
-        });
-      } else if (action === "park") {
+      if (action === "park") {
         setResult({ tone: "good", text: `Sent ${data.parked} row(s) to Flagged Items.` });
       } else {
         setResult({ tone: "good", text: `Excluded ${data.excluded} row(s); they won't be imported.` });

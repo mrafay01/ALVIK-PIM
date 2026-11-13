@@ -1,4 +1,4 @@
-import { mondayRequest } from "./client";
+import { mondayRequest, MondayApiError } from "./client";
 import { MONDAY_BOARD_ID, MONDAY_COLUMN_IDS, MONDAY_LABEL_TO_STATUS } from "./config";
 import PurchaseOrder from "@/models/PurchaseOrder";
 import Vendor from "@/models/Vendor";
@@ -60,41 +60,80 @@ interface MondayItem {
   column_values: MondayColumnValue[];
 }
 
-interface BoardItemsResult {
-  boards: { items_page: { cursor: string | null; items: MondayItem[] } }[];
+const ITEM_FIELDS = `id name column_values(ids: ${JSON.stringify(PULL_COLUMN_IDS)}) { id text value }`;
+
+// Reading the whole board (~7,400 items, ~2 minutes) can't fit in one
+// serverless request (60 s), so the preview reads it in slices: each call
+// reads pages for up to PREVIEW_SLICE_MS and hands back Monday's cursor,
+// and the screen calls again with it until the board is done. 500 is
+// Monday's largest page (~8.5 s each; ~35% faster per item than 100).
+// A new page is only started inside the slice window, so even a page that
+// hits the 30 s Monday timeout still ends before the platform limit.
+const BOARD_PAGE_SIZE = 500;
+const PREVIEW_SLICE_MS = 20_000;
+const PREVIEW_MAX_PAGES = 4; // also keeps each response well under 4.5 MB
+
+interface FirstPageResult {
+  boards: { items_count: number | null; items_page: { cursor: string | null; items: MondayItem[] } }[];
+}
+interface NextPageResult {
+  next_items_page: { cursor: string | null; items: MondayItem[] };
 }
 
-async function fetchAllBoardItems(): Promise<MondayItem[]> {
+async function fetchBoardSlice(
+  startCursor: string | null
+): Promise<{ items: MondayItem[]; cursor: string | null; boardItemCount: number | null }> {
+  const started = Date.now();
   const items: MondayItem[] = [];
-  let cursor: string | null = null;
+  let boardItemCount: number | null = null;
+  let cursor = startCursor;
+  let pages = 0;
 
-  do {
-    const query: string = cursor
-      ? `query ($cursor: String!) {
-          boards(ids: [${MONDAY_BOARD_ID}]) {
-            items_page(limit: 100, cursor: $cursor) {
-              cursor
-              items { id name column_values(ids: ${JSON.stringify(PULL_COLUMN_IDS)}) { id text value } }
-            }
-          }
-        }`
-      : `query {
-          boards(ids: [${MONDAY_BOARD_ID}]) {
-            items_page(limit: 100) {
-              cursor
-              items { id name column_values(ids: ${JSON.stringify(PULL_COLUMN_IDS)}) { id text value } }
-            }
-          }
-        }`;
+  if (!cursor) {
+    const data = await mondayRequest<FirstPageResult>(
+      `query { boards(ids: [${MONDAY_BOARD_ID}]) { items_count items_page(limit: ${BOARD_PAGE_SIZE}) { cursor items { ${ITEM_FIELDS} } } } }`
+    );
+    const board = data.boards[0];
+    if (!board) throw new MondayApiError("The Purchase Orders board wasn't found on Monday", []);
+    boardItemCount = board.items_count ?? null;
+    items.push(...board.items_page.items);
+    cursor = board.items_page.cursor;
+    pages++;
+  }
 
-    const data: BoardItemsResult = await mondayRequest<BoardItemsResult>(query, cursor ? { cursor } : undefined);
-    const page: BoardItemsResult["boards"][number]["items_page"] | undefined = data.boards[0]?.items_page;
-    if (!page) break;
-    items.push(...page.items);
-    cursor = page.cursor;
-  } while (cursor);
+  while (cursor && pages < PREVIEW_MAX_PAGES && Date.now() - started < PREVIEW_SLICE_MS) {
+    const data: NextPageResult = await mondayRequest<NextPageResult>(
+      `query ($cursor: String!) { next_items_page(limit: ${BOARD_PAGE_SIZE}, cursor: $cursor) { cursor items { ${ITEM_FIELDS} } } }`,
+      { cursor }
+    );
+    items.push(...data.next_items_page.items);
+    cursor = data.next_items_page.cursor;
+    pages++;
+  }
 
-  return items;
+  return { items, cursor, boardItemCount };
+}
+
+// The import reads only the board items it was asked for (100 per Monday
+// call, Monday's maximum for a lookup by id), not the whole board. Monday
+// answers for any board the token can see, so items from another board
+// are dropped: only the Purchase Orders board is ever imported.
+const ITEMS_BY_ID_BATCH = 100;
+
+async function fetchBoardItemsByIds(ids: string[]): Promise<MondayItem[]> {
+  const out: MondayItem[] = [];
+  for (let i = 0; i < ids.length; i += ITEMS_BY_ID_BATCH) {
+    const batch = ids.slice(i, i + ITEMS_BY_ID_BATCH);
+    const data = await mondayRequest<{ items: (MondayItem & { board: { id: string } | null })[] }>(
+      `query ($ids: [ID!]) { items(ids: $ids, limit: ${ITEMS_BY_ID_BATCH}) { board { id } ${ITEM_FIELDS} } }`,
+      { ids: batch }
+    );
+    for (const item of data.items ?? []) {
+      if (String(item.board?.id) !== String(MONDAY_BOARD_ID)) continue;
+      out.push({ id: item.id, name: item.name, column_values: item.column_values });
+    }
+  }
+  return out;
 }
 
 function colText(item: MondayItem, columnId: string): string | null {
@@ -167,12 +206,11 @@ export interface PullPlan {
   skipped: number;
 }
 
-// Read-only: fetches every item on the real Monday board and computes what
-// a pull would do, without writing to the DB. Matching is by PO number
+// Read-only: computes what a pull would do for these board items, without
+// writing to the DB. Matching is by PO number
 // (Monday item name == PurchaseOrder.poNumber) since no mondayItemId has
 // ever been recorded on the inbound direction for pre-existing board items.
-export async function buildPullPlan(prefetched?: MondayItem[]): Promise<PullPlan> {
-  const items = prefetched ?? (await fetchAllBoardItems());
+async function buildPullPlan(items: MondayItem[]): Promise<PullPlan> {
   const poNumbers = items.map((i) => poKey(i.name));
   const existingPOs = await PurchaseOrder.find({ poNumber: { $in: poNumbers } }).lean();
   const poByNumber = new Map(existingPOs.map((po) => [po.poNumber, po]));
@@ -326,11 +364,10 @@ const CHECKLIST_LABEL_TO_VALUE: Record<string, Record<string, string>> = {
 // POs for unmatched board items whose status has a confident mapping.
 // Deliberately never writes back to Monday — this is inbound-only.
 //
-// The board is re-read once here (so a stale plan can't apply data that
-// changed since the preview), then every DB write is batched into two
-// bulkWrite calls instead of one round-trip per row.
-export async function commitPullPlan(rows: PullPlanRow[], prefetched?: MondayItem[]): Promise<PullCommitResult> {
-  const items = prefetched ?? (await fetchAllBoardItems());
+// `items` is a fresh read of the same board items (so a stale plan can't
+// apply data that changed since the preview); every DB write is batched
+// into two bulkWrite calls instead of one round-trip per row.
+async function commitPullPlan(rows: PullPlanRow[], items: MondayItem[]): Promise<PullCommitResult> {
   const itemById = new Map(items.map((i) => [i.id, i]));
 
   // Pre-resolve every vendor a "create" row needs in one query rather than
@@ -642,14 +679,38 @@ async function materializeItemsFromPull(
   }
 }
 
-// Applies the preview rows for just the board items the reviewer kept
-// selected. The plan is rebuilt here from one fresh read of the board
-// rather than trusted from the browser, and that same read feeds the
-// commit, so the board is fetched once.
+export interface PullPreviewSlice {
+  rows: PullPlanRow[];
+  // Pass back to read the next slice; null once the whole board is read.
+  cursor: string | null;
+  // How many items the board has (first slice only), for a progress count.
+  boardItemCount: number | null;
+}
+
+// One slice of the preview: the next pages of the board from `cursor`
+// (the start when null), turned into plan rows. Read-only.
+export async function previewPullSlice(cursor: string | null): Promise<PullPreviewSlice> {
+  const slice = await fetchBoardSlice(cursor);
+  const plan = await buildPullPlan(slice.items);
+  return { rows: plan.rows, cursor: slice.cursor, boardItemCount: slice.boardItemCount };
+}
+
+// Applies the board items the reviewer kept selected (one chunk of them;
+// the screen sends PULL_IMPORT_CHUNK ids per request). The plan is rebuilt
+// here from a fresh read of just those items rather than trusted from the
+// browser, and that same read feeds the commit.
 export async function commitSelectedPullRows(mondayItemIds: string[]): Promise<PullCommitResult> {
-  const items = await fetchAllBoardItems();
+  const ids = [...new Set(mondayItemIds)];
+  const items = await fetchBoardItemsByIds(ids);
+  const found = new Set(items.map((i) => i.id));
+  const missing = ids.filter((id) => !found.has(id));
   const plan = await buildPullPlan(items);
-  const wanted = new Set(mondayItemIds);
-  const rows = plan.rows.filter((r) => wanted.has(r.mondayItemId));
-  return commitPullPlan(rows, items);
+  const result = await commitPullPlan(plan.rows, items);
+  if (missing.length === 0) return result;
+  // Deleted or moved off the board since the preview: reported, not imported.
+  const errors = [
+    ...missing.map((id) => ({ mondayItemId: id, message: "No longer on the Purchase Orders board" })),
+    ...result.errors,
+  ];
+  return { ...result, processed: result.processed + missing.length, errors, errored: errors.length };
 }

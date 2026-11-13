@@ -8,26 +8,21 @@ import { isObjectId } from "@/lib/ids";
 import { IMAGE_SUBFOLDERS } from "@/lib/enums";
 import { getSharePointContext, ensureItemFolders, createUploadSession, inferSubfolder } from "@/lib/sharepoint/client";
 import { safeSharePointName, signUploadTicket } from "@/lib/purchase-orders/files";
-import {
-  SUBFOLDER_FOR,
-  IMAGE_EXTENSIONS,
-  MAX_IMAGE_BYTES,
-  conventionalImageName,
-  extensionOf,
-} from "@/lib/items/images";
+import { SUBFOLDER_FOR, conventionalImageName, extensionOf, mediaFileProblem } from "@/lib/items/images";
 import logger from "@/lib/logger";
 
 const BodySchema = z.object({
   fileName: z.string().trim().min(1).max(200),
   size: z.number().int().positive(),
   // "auto" keeps the file's own name and routes it by its suffix
-  // ({key}.jpg / -S{n} / -M{n} / -LS{n}); the others rename it to the convention.
+  // ({key}.jpg / -S{n} / -M{n} / -LS{n} / -V{n}); the others rename it to the
+  // convention. "videos" takes video files; every other kind images.
   kind: z.enum([...IMAGE_SUBFOLDERS, "auto"]),
 });
 
-// POST: start a browser -> SharePoint upload of one image for this item.
-// Returns a pre-authenticated upload URL and a signed ticket for
-// ./confirm. The bytes never pass through this server, so image size isn't
+// POST: start a browser -> SharePoint upload of one image or video clip for
+// this item. Returns a pre-authenticated upload URL and a signed ticket for
+// ./confirm. The bytes never pass through this server, so file size isn't
 // limited by the hosting platform's request cap.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
   const gate = await requireRole(ROLE_SETS.media);
@@ -42,11 +37,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ite
   const { fileName, size, kind } = parsed.data;
 
   const ext = extensionOf(fileName);
-  if (!IMAGE_EXTENSIONS.includes(ext)) {
-    return NextResponse.json({ error: `"${fileName}" isn't an image file (${IMAGE_EXTENSIONS.join(", ")})` }, { status: 400 });
-  }
-  if (size > MAX_IMAGE_BYTES) {
-    return NextResponse.json({ error: `"${fileName}" is larger than ${MAX_IMAGE_BYTES / 1024 / 1024} MB` }, { status: 413 });
+  // Checked before touching the database when the folder is already known;
+  // "auto" is checked below, once the name has picked the folder.
+  if (kind !== "auto") {
+    const problem = mediaFileProblem(SUBFOLDER_FOR[kind], fileName, size);
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
   }
 
   await connectDB();
@@ -62,6 +57,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ite
   try {
     if (kind === "auto") {
       subfolder = inferSubfolder(key, fileName);
+      const problem = mediaFileProblem(subfolder, fileName, size);
+      if (problem) throw new Error(problem);
       name = safeSharePointName(fileName);
     } else {
       subfolder = SUBFOLDER_FOR[kind];
@@ -76,11 +73,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ite
     const ctx = await getSharePointContext();
     await ensureItemFolders(ctx, key, subfolder);
     // Main (and an exact re-upload of a named file) replaces the old file;
-    // a numbered side/model/lifestyle shot never overwrites another.
+    // a numbered side/model/lifestyle shot or video never overwrites another.
     const session = await createUploadSession(ctx, folder, name, kind === "main" || kind === "auto" ? "replace" : "rename");
     return NextResponse.json({ uploadUrl: session.uploadUrl, ticket: signUploadTicket(userId, folder, name), fileName: name });
   } catch (err) {
-    logger.error("image upload: starting SharePoint upload failed", { error: err instanceof Error ? err.message : String(err) });
+    logger.error("media upload: starting SharePoint upload failed", { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: "Couldn't start the upload to SharePoint. Try again in a moment." }, { status: 502 });
   }
 }

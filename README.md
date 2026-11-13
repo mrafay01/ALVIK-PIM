@@ -28,4 +28,3 @@ Visit `/api/health` to confirm the Mongo connection is live.
 
 - **Monday.com sync** — needs `MONDAY_API_TOKEN`, not yet built (blueprint §5).
 - **SharePoint image storage** — needs Graph API credentials (to be supplied); folder-convention logic in the blueprint §Image Storage isn't implemented yet.
-- **Marketplace export** — `PlatformTemplate` model exists but is empty; needs the sample format files for Shopify/Amazon/Macy's before real column mappings can be entered.

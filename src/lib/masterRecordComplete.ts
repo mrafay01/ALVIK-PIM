@@ -1,8 +1,8 @@
 import type { ItemDoc } from "@/models/Item";
 
 // The publish gate from FRD Step 7 — an item can't count as a complete
-// master record (and so can't appear in a marketplace export, Phase 6)
-// until every one of these is true. Mirrors the field list next to
+// master record (and can't be submitted to the catalog) until every one of
+// these is true. Mirrors the field list next to
 // masterRecordComplete in the blueprint's items schema.
 export type CompletionCheck = {
   field: string;

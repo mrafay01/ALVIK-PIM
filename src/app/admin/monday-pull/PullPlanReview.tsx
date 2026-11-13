@@ -67,10 +67,13 @@ function actionTone(action: PullPlanRow["action"]) {
 export function PullPlanReview({
   rows,
   committing,
+  progress,
   onApply,
 }: {
   rows: PullPlanRow[];
   committing: boolean;
+  // "500 of 2,000" while the import runs.
+  progress?: string | null;
   onApply: (mondayItemIds: string[], saveFiles: boolean) => void;
 }) {
   // Copy each imported PO's files from Monday into its SharePoint folder
@@ -193,7 +196,7 @@ export function PullPlanReview({
             >
               <span className="flex items-center gap-1.5">
                 {!committing && <ArrowRight size={15} />}
-                {committing ? "Importing…" : `Import ${selectedRows.length} selected`}
+                {committing ? `Importing…${progress ? ` ${progress}` : ""}` : `Import ${selectedRows.length} selected`}
               </span>
             </Button>
           </div>

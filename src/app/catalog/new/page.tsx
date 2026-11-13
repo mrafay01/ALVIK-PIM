@@ -5,7 +5,7 @@ import { NewCatalogItemForm } from "./NewCatalogItemForm";
 
 export default async function NewCatalogItemPage() {
   const role = await getSessionRole();
-  if (!roleCan(role, ["marketplace_listing"])) redirect("/unauthorized");
+  if (!roleCan(role, ["catalog_manager"])) redirect("/unauthorized");
 
   return (
     <AppShell

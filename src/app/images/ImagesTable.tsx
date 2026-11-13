@@ -4,13 +4,14 @@ import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 import type { ImageSubfolder } from "@/lib/enums";
 import { useRouter, usePathname } from "next/navigation";
-import { CheckCircle2, Circle, Link2Off, Search, Upload, ShieldCheck, X, ImagePlus } from "lucide-react";
+import { CheckCircle2, Circle, Link2Off, Search, Upload, ShieldCheck, X, ImagePlus, Film } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
 import { Pagination } from "@/components/app/Pagination";
 import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 import { uploadItemImage, type ItemMediaEntry, type UploadKind } from "@/lib/client/uploadItemImage";
+import { MEDIA_KIND_LABEL, MEDIA_UPLOAD_OPTIONS, acceptFor, exampleNameFor } from "@/lib/items/mediaKinds";
 
 export type ImageRow = {
   _id: string;
@@ -32,10 +33,9 @@ const STATUS_TABS: { value: string; label: string }[] = [
   { value: "complete", label: "Complete" },
 ];
 
-const KIND_LABEL: Record<Kind, string> = { main: "Main", sides: "Sides", models: "Models", lifestyle: "Lifestyle" };
-// Table columns, in folder order. Lifestyle is optional and doesn't count
-// towards "complete".
-const KIND_COLUMNS: Kind[] = ["main", "sides", "models", "lifestyle"];
+// Table columns, in folder order. Lifestyle and video are optional and
+// don't count towards "complete".
+const KIND_COLUMNS: Kind[] = ["main", "sides", "models", "lifestyle", "videos"];
 
 function fileName(m: ItemMediaEntry): string {
   if (m.name) return m.name;
@@ -157,13 +157,7 @@ function UploadPanel({ row, onDone }: { row: ImageRow; onDone: () => void }) {
     if (errs.length < list.length) onDone();
   }
 
-  const EXAMPLES: Record<Kind, string> = {
-    main: `${row.sku}.jpg`,
-    sides: `${row.sku}-S1.jpg, -S2…`,
-    models: `${row.sku}-M1.jpg, -M2…`,
-    lifestyle: `${row.sku}-LS1.jpg, -LS2…`,
-  };
-  const example = kind === "auto" ? "" : EXAMPLES[kind];
+  const example = kind === "auto" ? "" : exampleNameFor(row.sku, kind);
 
   return (
     <div className="flex flex-col gap-2.5 px-4 py-3.5 bg-surface-sunken border-t border-border">
@@ -175,21 +169,31 @@ function UploadPanel({ row, onDone }: { row: ImageRow; onDone: () => void }) {
           disabled={busy}
           className="!py-1.5 !w-[190px] !text-[0.82rem]"
         >
-          <option value="main">Main image</option>
-          <option value="sides">Side images</option>
-          <option value="models">Model images</option>
-          <option value="lifestyle">Lifestyle images (optional)</option>
+          {MEDIA_UPLOAD_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
           <option value="auto">Use the file names</option>
         </Select>
         <Button size="sm" variant="primary" loading={busy} onClick={() => inputRef.current?.click()}>
           <span className="flex items-center gap-1.5">
-            {!busy && <ImagePlus size={13} />} {busy ? "Uploading…" : kind === "main" ? "Choose image" : "Choose images"}
+            {!busy && (kind === "videos" ? <Film size={13} /> : <ImagePlus size={13} />)}{" "}
+            {busy
+              ? "Uploading…"
+              : kind === "main"
+                ? "Choose image"
+                : kind === "videos"
+                  ? "Choose videos"
+                  : kind === "auto"
+                    ? "Choose files"
+                    : "Choose images"}
           </span>
         </Button>
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept={acceptFor(kind)}
           multiple={kind !== "main"}
           hidden
           onChange={(e) => upload(e.target.files)}
@@ -198,9 +202,9 @@ function UploadPanel({ row, onDone }: { row: ImageRow; onDone: () => void }) {
       </div>
       <p className="text-[0.76rem] text-ink-faint m-0">
         {kind === "auto"
-          ? `Files must already be named ${row.sku}.jpg / ${row.sku}-S1.jpg / ${row.sku}-M1.jpg / ${row.sku}-LS1.jpg.`
-          : `Saved to SharePoint Images/${row.sku}/${KIND_LABEL[kind as Kind]} as ${example}${
-              kind === "main" ? " (replaces the current main image)" : ""
+          ? `Files must already be named ${row.sku}.jpg / ${row.sku}-S1.jpg / ${row.sku}-M1.jpg / ${row.sku}-LS1.jpg / ${row.sku}-V1.mp4.`
+          : `Saved to SharePoint Images/${row.sku}/${kind === "videos" ? "Videos" : MEDIA_KIND_LABEL[kind]} as ${example}${
+              kind === "main" ? " (replaces the current main image)" : kind === "videos" ? ". Videos up to 1 GB" : ""
             }.`}
       </p>
       {errors.map((e) => (
@@ -269,7 +273,7 @@ export function ImagesTable({
         files += data.checkedFiles;
         broken += data.broken;
         setCheckNote(
-          `Checked ${files} image link${files === 1 ? "" : "s"}${broken ? `, ${broken} broken` : ", all working"}` +
+          `Checked ${files} link${files === 1 ? "" : "s"}${broken ? `, ${broken} broken` : ", all working"}` +
             (!itemIds && data.remaining > 0 ? ` · ${data.remaining} item(s) left…` : ".")
         );
         if (itemIds || data.remaining === 0 || data.checkedFiles === 0 || stopRef.current) break;
@@ -372,7 +376,7 @@ export function ImagesTable({
           ) : lastCheckedAt ? (
             `Links last checked ${new Date(lastCheckedAt).toLocaleString()}. "Check all" re-checks anything not checked in the last 24 hours.`
           ) : (
-            "Links haven't been checked yet. \"Check all links\" verifies every image against SharePoint."
+            "Links haven't been checked yet. \"Check all links\" verifies every image and video against SharePoint."
           )}
           {error && <span className="text-critical ml-2">{error}</span>}
         </div>
@@ -385,10 +389,10 @@ export function ImagesTable({
       ) : (
         <Card padding={0}>
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse min-w-[860px]">
+            <table className="w-full border-collapse min-w-[960px]">
               <thead>
                 <tr>
-                  {["SKU", "Title", "Main", "Sides", "Models", "Lifestyle (optional)", ""].map((h, i) => (
+                  {["SKU", "Title", "Main", "Sides", "Models", "Lifestyle (optional)", "Video (optional)", ""].map((h, i) => (
                     <th
                       key={i}
                       className="text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap"
@@ -451,7 +455,7 @@ export function ImagesTable({
                     </tr>
                     {uploadingFor === row._id && (
                       <tr>
-                        <td colSpan={7} className="p-0">
+                        <td colSpan={8} className="p-0">
                           <UploadPanel row={row} onDone={refresh} />
                         </td>
                       </tr>

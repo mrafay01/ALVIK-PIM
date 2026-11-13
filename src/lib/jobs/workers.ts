@@ -2,7 +2,6 @@ import type { JobKind } from "@/models/Job";
 import SyncLog from "@/models/SyncLog";
 import PurchaseOrder from "@/models/PurchaseOrder";
 import { syncPurchaseOrderToMonday, syncAllPurchaseOrders } from "@/lib/monday/sync";
-import logger from "@/lib/logger";
 import { archiveMondayFiles } from "@/lib/purchase-orders/files";
 import { enqueue } from "@/lib/jobs/queue";
 
@@ -20,9 +19,16 @@ export type JobResult = unknown;
 type Handler = (payload: Record<string, unknown>) => Promise<JobResult>;
 
 const HANDLERS: Record<JobKind, Handler> = {
+  // Runs in ~30 s slices so one fits inside a 60 s tick (which may start it
+  // up to 15 s in). If POs are left it queues the next slice, but only when
+  // this one pushed something, so a board that keeps refusing doesn't loop
+  // forever.
   async monday_push_all() {
     const startedAt = new Date();
-    const result = await syncAllPurchaseOrders();
+    const result = await syncAllPurchaseOrders({ timeBudgetMs: 30_000 });
+    if (result.more && result.changed > 0) {
+      await enqueue({ kind: "monday_push_all" });
+    }
     await SyncLog.create({
       runType: "monday_push",
       startedAt,
@@ -54,15 +60,6 @@ const HANDLERS: Record<JobKind, Handler> = {
       await enqueue({ kind: "archive_po_files" });
     }
     return result;
-  },
-
-  async marketplace_export(payload) {
-    // Scaffolded — the current /api/marketplace-export route still runs
-    // synchronously because the file is streamed to the response. When
-    // that moves to a store-then-download flow this handler produces the
-    // file into object storage and returns the URL for the UI to poll.
-    logger.info("marketplace_export job handler is a placeholder", { payload });
-    return { placeholder: true };
   },
 };
 

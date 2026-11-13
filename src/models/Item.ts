@@ -101,6 +101,15 @@ const MediaItemSchema = new Schema(
   { _id: false }
 );
 
+// On an entry from a Master File import: the sheet's MSRP, NEW MSRP and
+// MSRP "Date" cells exactly as written (msrp above is only the current
+// price, NEW MSRP when there is one). Lets the catalog export reproduce
+// those three columns. Absent on every other entry.
+const MasterFilePricingSchema = new Schema(
+  { msrp: Number, newMsrp: Number, effectiveDate: String },
+  { _id: false }
+);
+
 const PricingHistoryEntrySchema = new Schema(
   {
     costPerUnit: Number,
@@ -109,6 +118,7 @@ const PricingHistoryEntrySchema = new Schema(
     currency: { type: String, default: "USD" },
     effectiveDate: { type: Date, default: Date.now },
     source: String,
+    masterFile: { type: MasterFilePricingSchema, default: undefined },
   },
   { _id: false }
 );
@@ -184,10 +194,8 @@ const ItemSchema = new Schema(
     // Per-marketplace description overrides, keyed by DESCRIPTION_PLATFORMS
     // ("macys", "kohls", ...). A Map rather than one field per platform —
     // same pattern as customFields below — so adding a marketplace later
-    // needs no schema migration. Falls back to `description` above wherever
-    // a platform's entry is missing/blank (see resolveMarketplaceDescription)
-    // — this only stores the override, not a full copy of every platform's
-    // text from day one.
+    // needs no schema migration. Only overrides are stored; where a
+    // platform has no entry, the general `description` above applies.
     marketplaceDescriptions: { type: Map, of: MarketplaceDescriptionEntrySchema, default: undefined },
 
     specs: SpecsSchema,
@@ -274,9 +282,9 @@ const ItemSchema = new Schema(
     catalogSubmittedAt: Date,
 
     // Catalog-only visibility switch — an inactive item stays in the
-    // catalog (and everywhere else) but is excluded from marketplace
-    // export, so it can't be listed/sold while still being editable and
-    // auditable. Independent of `status`/`masterRecordComplete`.
+    // catalog (and everywhere else), still editable and auditable, and is
+    // listed on the Catalog's "Inactive" tab. Independent of
+    // `status`/`masterRecordComplete`.
     active: { type: Boolean, default: true },
 
     // Who last made a substantive edit to this item — set explicitly by
@@ -328,8 +336,6 @@ ItemSchema.index({ updatedAt: -1 });
 ItemSchema.index({ inCatalog: 1, baseSku: 1 });
 // Catalog filter "Pending approval" tab.
 ItemSchema.index({ "catalogApproval.status": 1 }, { sparse: true });
-// Marketplace export filters by masterRecordComplete and active together.
-ItemSchema.index({ active: 1, masterRecordComplete: 1 });
 // Images page: "broken links" filter.
 ItemSchema.index({ "media.linkStatus": 1 }, { sparse: true });
 // Un-Verified Items page: filter by intake source, newest first.

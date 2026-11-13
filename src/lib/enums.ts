@@ -4,7 +4,7 @@ export const ROLES = [
   "buying_purchasing",
   "warehouse_receiving",
   "photography",
-  "marketplace_listing",
+  "catalog_manager",
 ] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -103,27 +103,22 @@ export type QuotationSource = (typeof QUOTATION_SOURCES)[number];
 export const QUOTATION_ROW_STATUSES = ["needs_review", "approved", "rejected"] as const;
 export type QuotationRowStatus = (typeof QUOTATION_ROW_STATUSES)[number];
 
-export const SYNC_LOG_RUN_TYPES = ["monday_push", "monday_pull", "marketplace_export"] as const;
+export const SYNC_LOG_RUN_TYPES = ["monday_push", "monday_pull"] as const;
 export type SyncLogRunType = (typeof SYNC_LOG_RUN_TYPES)[number];
 
-// Platforms this app can generate a marketplace bulk-import file for, in the
-// order they were built (Macy's first, then Target, then Belk, then
-// Kohl's).
-export const MARKETPLACE_EXPORT_PLATFORMS = ["macys", "target", "belk", "kohls"] as const;
-export type MarketplaceExportPlatform = (typeof MARKETPLACE_EXPORT_PLATFORMS)[number];
-
-// Item image types. Main, sides and models are required for a complete item;
-// lifestyle images are optional and never count towards completeness.
-export const IMAGE_SUBFOLDERS = ["main", "sides", "models", "lifestyle"] as const;
+// Item media types (items.media[].subfolder). Main, sides and models are
+// required for a complete item; lifestyle images and video clips are
+// optional and never count towards completeness. "videos" is the one
+// non-image type: it takes video files only, and image-only counts
+// ("no images") leave it out via IMAGE_ONLY_SUBFOLDERS.
+export const IMAGE_SUBFOLDERS = ["main", "sides", "models", "lifestyle", "videos"] as const;
 export type ImageSubfolder = (typeof IMAGE_SUBFOLDERS)[number];
+export const IMAGE_ONLY_SUBFOLDERS = ["main", "sides", "models", "lifestyle"] as const;
 
 // Marketplaces that get their own tailored product description on the item
-// detail page, independent of whether that platform has an export template
-// yet (MARKETPLACE_EXPORT_PLATFORMS) or a listing overlay
-// (MarketplaceListing). Rue La La has no export template today, but still
-// gets a description box here — same as Shopify. Each is hand-written for
-// now; a later AI pass generates a draft from the item's general
-// title/description that a human then edits in place.
+// detail page. Each is hand-written for now; a later AI pass generates a
+// draft from the item's general title/description that a human then edits
+// in place.
 export const DESCRIPTION_PLATFORMS = ["macys", "kohls", "shopify", "target", "ruelala", "belk"] as const;
 export type DescriptionPlatform = (typeof DESCRIPTION_PLATFORMS)[number];
 

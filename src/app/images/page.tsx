@@ -1,4 +1,4 @@
-import type { ImageSubfolder } from "@/lib/enums";
+import { IMAGE_ONLY_SUBFOLDERS, type ImageSubfolder } from "@/lib/enums";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import { getSessionRole, roleCan, ROLE_SETS } from "@/lib/authz";
@@ -25,7 +25,8 @@ const STATUS_MATCH: Record<Exclude<Status, "all">, Record<string, unknown>> = {
       { "imageCompleteness.models": { $ne: true } },
     ],
   },
-  none: { "media.0": { $exists: false } },
+  // No image of any type (a video clip alone still counts as "no images").
+  none: { media: { $not: { $elemMatch: { subfolder: { $in: [...IMAGE_ONLY_SUBFOLDERS] } } } } },
   broken: { "media.linkStatus": "broken" },
   complete: {
     "imageCompleteness.main": true,
@@ -34,9 +35,10 @@ const STATUS_MATCH: Record<Exclude<Status, "all">, Record<string, unknown>> = {
   },
 };
 
-// Images: every item's Main / Sides / Models images at a glance, which
-// SharePoint links still work, which are broken and which are missing,
-// with upload in place for the photography team.
+// Images: every item's Main / Sides / Models images (plus the optional
+// lifestyle shots and video clips) at a glance, which SharePoint links still
+// work, which are broken and which are missing, with upload in place for the
+// photography team.
 export default async function ImagesPage({
   searchParams,
 }: {
@@ -123,8 +125,8 @@ export default async function ImagesPage({
   return (
     <AppShell activeHref="/images" eyebrow="Digital assets" title="Images">
       <p className="text-ink-soft max-w-[72ch] mb-5 text-[0.92rem]">
-        Every item&apos;s main, side and model images in SharePoint: which links work, which are broken (the file
-        is no longer in SharePoint) and which are missing.
+        Every item&apos;s main, side and model images, plus optional lifestyle shots and video clips, in SharePoint:
+        which links work, which are broken (the file is no longer in SharePoint) and which are missing.
         {canUpload ? " Upload straight from here; files are renamed and filed into the right folder for you." : ""}
       </p>
 

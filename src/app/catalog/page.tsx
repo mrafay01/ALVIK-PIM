@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
-import { getSessionRole } from "@/lib/authz";
+import { getSessionRole, roleCan, ROLE_SETS } from "@/lib/authz";
 import type { PipelineStage } from "mongoose";
 import Item from "@/models/Item";
 import CatalogConflict from "@/models/CatalogConflict";
@@ -15,14 +15,14 @@ import { StatCard } from "@/components/ui/StatCard";
 import { ShieldCheck, TriangleAlert, ListChecks, BookOpenCheck, CircleCheck, CircleDashed, Hourglass } from "lucide-react";
 import { CatalogRowFlags } from "./CatalogRowFlags";
 import { CatalogFilters } from "./CatalogFilters";
+import { CatalogSelectionProvider, CatalogExportBar, RowSelect, PageSelect } from "./CatalogSelection";
+import { parseCatalogQuery, catalogMatch, catalogPriceMatch, LATEST_MSRP, type CatalogTab } from "@/lib/catalog/listQuery";
 
 const TH_CLASS =
   "text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-3.5 py-2.5 border-b border-border-strong whitespace-nowrap";
 const TD_CLASS = "px-3.5 py-3 text-[0.84rem]";
 
-type Tab = "all" | "incomplete" | "pending" | "variations" | "inactive";
-
-const TABS: { value: Tab; label: string }[] = [
+const TABS: { value: CatalogTab; label: string }[] = [
   { value: "all", label: "All" },
   { value: "incomplete", label: "Incomplete only" },
   { value: "pending", label: "Pending approval" },
@@ -30,19 +30,8 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "inactive", label: "Inactive only" },
 ];
 
-// Escape a user string for safe use inside a MongoDB $regex.
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function money(n: number | null | undefined): string {
   return n == null ? "—" : `$${n.toLocaleString()}`;
-}
-
-function num(raw: string | undefined): number | null {
-  if (!raw) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
 }
 
 function fmtEditedDate(d: Date | string | null | undefined): string {
@@ -78,20 +67,9 @@ export default async function CatalogPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const tab: Tab =
-    sp.filter === "incomplete" ||
-    sp.filter === "pending" ||
-    sp.filter === "variations" ||
-    sp.filter === "inactive"
-      ? sp.filter
-      : "all";
+  const listQuery = parseCatalogQuery(sp);
+  const { tab, q, category, brand, plating } = listQuery;
   const page = parsePage(sp.page);
-  const q = (sp.q ?? "").trim();
-  const category = (sp.category ?? "").trim();
-  const brand = (sp.brand ?? "").trim();
-  const plating = (sp.plating ?? "").trim();
-  const minPrice = num(sp.minPrice);
-  const maxPrice = num(sp.maxPrice);
   const sort = sp.sort && sp.sort in SORT_STAGES ? sp.sort : "sku";
 
   await connectDB();
@@ -104,25 +82,12 @@ export default async function CatalogPage({
   // with the filter dropdown values — see lib/catalog/facets.ts).
   const { counts, familySkus, categories, brands, platings } = await loadCatalogFacets();
 
-  // Base match — the tab filter + always inCatalog.
-  const match: Record<string, unknown> = { inCatalog: true };
-  if (tab === "incomplete") match.masterRecordComplete = false;
-  if (tab === "pending") match["catalogApproval.status"] = "pending";
-  if (tab === "variations") match.baseSku = { $in: familySkus };
-  if (tab === "inactive") match.active = false;
-  if (category) match.category = category;
-  if (brand) match.brand = brand;
-  if (plating) match["specs.plating"] = plating;
-  if (q) {
-    const rx = new RegExp(escapeRegex(q), "i");
-    match.$or = [{ itemNumber: rx }, { title: rx }, { brand: rx }, { upc: rx }];
-  }
+  // Base match — the tab filter + always inCatalog (shared with the export).
+  const match = catalogMatch(listQuery, familySkus);
 
   // latestMsrp is the last pricingHistory entry's msrp; price filter + sort
   // need it as a real field, so compute it in the pipeline.
-  const priceMatch: Record<string, unknown> = {};
-  if (minPrice != null) priceMatch.$gte = minPrice;
-  if (maxPrice != null) priceMatch.$lte = maxPrice;
+  const priceMatch = catalogPriceMatch(listQuery);
 
   const pipeline: PipelineStage[] = [
     { $match: match },
@@ -149,13 +114,11 @@ export default async function CatalogPage({
         updatedAt: 1,
         lastEditedBy: 1,
         conflictCount: 1,
-        latestMsrp: { $ifNull: [{ $last: "$pricingHistory.msrp" }, null] },
+        latestMsrp: LATEST_MSRP,
       },
     },
   ];
-  if (Object.keys(priceMatch).length > 0) {
-    pipeline.push({ $match: { latestMsrp: priceMatch } });
-  }
+  if (priceMatch) pipeline.push({ $match: priceMatch });
   pipeline.push({
     $facet: {
       rows: [
@@ -196,6 +159,7 @@ export default async function CatalogPage({
       .lean(),
   ]);
   const isAdmin = role === "administrator";
+  const canExport = roleCan(role, ROLE_SETS.catalogExport);
   const openImport = isAdmin ? openImports[0] : undefined;
   const canApprove = isAdmin;
   const familySkuSet = new Set(familySkus);
@@ -357,6 +321,24 @@ export default async function CatalogPage({
         platings={platings}
       />
 
+      <CatalogSelectionProvider
+        enabled={canExport}
+        pageItems={items.map((it) => ({ id: String(it._id), sku: it.itemNumber ?? "" }))}
+      >
+      {canExport && (
+        <CatalogExportBar
+          total={total}
+          filters={{
+            filter: tab === "all" ? undefined : tab,
+            q: q || undefined,
+            category: category || undefined,
+            brand: brand || undefined,
+            plating: plating || undefined,
+            minPrice: sp.minPrice || undefined,
+            maxPrice: sp.maxPrice || undefined,
+          }}
+        />
+      )}
       {total === 0 ? (
         <Card>
           <p className="text-ink-faint m-0 text-[0.88rem]">No items match these filters.</p>
@@ -365,8 +347,9 @@ export default async function CatalogPage({
         <Card padding={0}>
           <table className="w-full border-collapse table-fixed">
             <colgroup>
+              {canExport && <col className="w-[40px]" />}
               <col className="w-[11%]" />
-              <col className="w-[16%]" />
+              <col className={canExport ? "w-[13%]" : "w-[16%]"} />
               <col className="w-[9%]" />
               <col className="w-[8%]" />
               <col className="w-[9%]" />
@@ -379,6 +362,11 @@ export default async function CatalogPage({
             </colgroup>
             <thead>
               <tr>
+                {canExport && (
+                  <th className={`${TH_CLASS} !px-3`}>
+                    <PageSelect />
+                  </th>
+                )}
                 {["SKU", "Title", "Category", "Brand", "Plating", "UPC", "MSRP", "Status", "Last edited", "Variation?", ""].map(
                   (h, i) => (
                     <th key={i} className={i === 6 ? `${TH_CLASS} text-right` : TH_CLASS}>
@@ -399,6 +387,11 @@ export default async function CatalogPage({
                 const pending = it.catalogApproval?.status === "pending";
                 return (
                   <tr key={String(it._id)} className="czc-row border-b border-border">
+                    {canExport && (
+                      <td className={`${TD_CLASS} !px-3`}>
+                        <RowSelect id={String(it._id)} sku={it.itemNumber ?? ""} />
+                      </td>
+                    )}
                     <td className={`${TD_CLASS} truncate`}>
                       <a
                         href={`/items/${it._id}`}
@@ -462,6 +455,7 @@ export default async function CatalogPage({
           </div>
         </Card>
       )}
+      </CatalogSelectionProvider>
     </AppShell>
   );
 }

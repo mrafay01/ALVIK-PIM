@@ -5,18 +5,14 @@ import { setDotPath } from "@/lib/import/setDotPath";
 import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { splitSku } from "@/lib/catalog/sku";
 
-const PRICING_FIELD_MAP: Record<string, string> = {
-  "pricing.msrp": "msrp",
-  "pricing.newMsrp": "msrp", // "new" MSRP supersedes the old one in the same history entry
-  "pricing.ruePrice": "ruePrice",
-  "pricing.effectiveDate": "effectiveDate",
-};
+// The Master File's price columns: folded into one pricingHistory entry.
+const PRICING_PATHS = new Set(["pricing.msrp", "pricing.newMsrp", "pricing.ruePrice", "pricing.effectiveDate"]);
 
 // `update` is nested (for building a new document); `flat` keeps the
 // dotted paths so an existing item is updated field by field — merging a
 // nested { specs: {...} } would replace the item's whole specs object and
 // drop every spec this row left blank.
-function buildUpdate(coerced: Record<string, unknown>) {
+export function buildUpdate(coerced: Record<string, unknown>) {
   const update: Record<string, unknown> = {};
   const flat: Record<string, unknown> = {};
   const pricingEntry: Record<string, unknown> = {};
@@ -25,17 +21,35 @@ function buildUpdate(coerced: Record<string, unknown>) {
     if (path === "itemNumber" || value === null || value === undefined) continue;
     // Only the Master File's own columns are ever written onto an item.
     if (!isMasterFileField(path)) continue;
-    if (path in PRICING_FIELD_MAP) {
-      pricingEntry[PRICING_FIELD_MAP[path]] = value;
-      continue;
-    }
+    if (PRICING_PATHS.has(path)) continue; // handled below
     setDotPath(update, path, value);
     flat[path] = value;
   }
 
+  const present = (v: unknown) => v !== null && v !== undefined && v !== "";
+  const msrp = coerced["pricing.msrp"];
+  const newMsrp = coerced["pricing.newMsrp"];
+  const ruePrice = coerced["pricing.ruePrice"];
+  const effectiveDate = coerced["pricing.effectiveDate"];
+  // NEW MSRP supersedes MSRP as the item's current price. (Decided
+  // explicitly, not by key order: a fixed MSRP is re-added at the end of
+  // `coerced` and used to overwrite the new one.)
+  if (present(newMsrp)) pricingEntry.msrp = newMsrp;
+  else if (present(msrp)) pricingEntry.msrp = msrp;
+  if (present(ruePrice)) pricingEntry.ruePrice = ruePrice;
+  if (present(effectiveDate)) pricingEntry.effectiveDate = effectiveDate;
+
   const hasPricingData = Object.keys(pricingEntry).length > 0;
   if (hasPricingData) {
     pricingEntry.source = "master_file_import";
+    // The sheet's own MSRP / NEW MSRP / Date cells, kept as written so the
+    // catalog export can give them back column for column (the entry's
+    // msrp holds only the current price, and its date defaults to today).
+    const masterFile: Record<string, unknown> = {};
+    if (present(msrp)) masterFile.msrp = msrp;
+    if (present(newMsrp)) masterFile.newMsrp = newMsrp;
+    if (present(effectiveDate)) masterFile.effectiveDate = effectiveDate;
+    pricingEntry.masterFile = masterFile;
     if (!pricingEntry.effectiveDate) pricingEntry.effectiveDate = new Date();
   }
 
@@ -231,6 +245,48 @@ export async function commitImportRows(filter: Record<string, unknown>): Promise
   const committed = rowCommitTarget.size;
   await updateBatchStatus([...new Set(toCommit.map((r) => String(r.batchId)))]);
   return { committed, created, merged, errors, remaining: toCommit.length - committed };
+}
+
+// A Master File can have many thousands of rows, and committing them all
+// in one request could run past the 60 s serverless limit. This commits
+// the rows matching `filter` 500 at a time in _id order, stopping after
+// ~timeBudgetMs. When rows are left it returns `next` (the last row id it
+// reached) and the screen calls again with `after: next`, so each row is
+// tried once per run: a row that fails stays where it is with its error and
+// isn't retried by the following calls. Each slice is approved
+// (reviewedBy/At) just before it's committed.
+const COMMIT_SLICE_ROWS = 500;
+
+export type SlicedCommitResult = Omit<CommitResult, "remaining"> & { next: string | null };
+
+export async function commitImportRowsInSlices(
+  filter: Record<string, unknown>,
+  opts: { reviewedBy?: Types.ObjectId; after?: string; timeBudgetMs?: number } = {}
+): Promise<SlicedCommitResult> {
+  const deadline = Date.now() + (opts.timeBudgetMs ?? 40_000);
+  let cursor = opts.after ? new Types.ObjectId(opts.after) : null;
+  const out: SlicedCommitResult = { committed: 0, created: 0, merged: 0, errors: [], next: null };
+  const pending = () => ({ $and: [filter, { committedItemId: null }, ...(cursor ? [{ _id: { $gt: cursor } }] : [])] });
+
+  do {
+    const ids = (await ImportBatchRow.find(pending()).select("_id").sort({ _id: 1 }).limit(COMMIT_SLICE_ROWS).lean()).map(
+      (r) => r._id
+    );
+    if (ids.length === 0) return out; // all done
+    cursor = ids[ids.length - 1];
+    await ImportBatchRow.updateMany(
+      { _id: { $in: ids } },
+      { $set: { reviewStatus: "approved", reviewedBy: opts.reviewedBy, reviewedAt: new Date() } }
+    );
+    const r = await commitImportRows({ _id: { $in: ids } });
+    out.committed += r.committed;
+    out.created += r.created;
+    out.merged += r.merged;
+    out.errors.push(...r.errors);
+  } while (Date.now() < deadline);
+
+  if (await ImportBatchRow.exists(pending())) out.next = String(cursor);
+  return out;
 }
 
 async function bumpBatchCounts(perBatch: Map<string, number>, field: "approvedRows" | "rejectedRows") {

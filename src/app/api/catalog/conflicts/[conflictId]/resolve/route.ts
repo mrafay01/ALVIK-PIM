@@ -10,7 +10,7 @@ import type { ConflictStatus } from "@/models/CatalogConflict";
 import { AUTHORITATIVE_FIELD_BY_PATH, getByPath } from "@/lib/catalog/authoritativeFields";
 import { isObjectId } from "@/lib/ids";
 
-const CONFLICT_ROLES = ["marketplace_listing"] as const;
+const CONFLICT_ROLES = ["catalog_manager"] as const;
 
 // POST /api/catalog/conflicts/[conflictId]/resolve
 //

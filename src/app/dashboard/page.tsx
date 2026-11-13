@@ -30,7 +30,7 @@ import {
   CalendarClock,
   Flag,
 } from "lucide-react";
-import { PO_STATUSES } from "@/lib/enums";
+import { PO_STATUSES, IMAGE_ONLY_SUBFOLDERS } from "@/lib/enums";
 import { PO_STATUS_LABEL, PO_STATUS_TONE, ITEM_STATUS_LABEL, ITEM_STATUS_TONE } from "@/lib/statusDisplay";
 import { OPEN_PO_CONDITIONS } from "@/lib/purchase-orders/listQuery";
 import { KpiTile, Panel, PipelineFlow, AttentionList, Ring, LegendRow, CoverageBar, ago } from "./parts";
@@ -93,7 +93,15 @@ const loadDashboardCounts = unstable_cache(
             main: "$imageCompleteness.main",
             sides: "$imageCompleteness.sides",
             models: "$imageCompleteness.models",
-            mediaCount: { $size: { $ifNull: ["$media", []] } },
+            // Images only: an item with just a video clip still has no images.
+            mediaCount: {
+              $size: {
+                $filter: {
+                  input: { $ifNull: ["$media", []] },
+                  cond: { $in: ["$$this.subfolder", [...IMAGE_ONLY_SUBFOLDERS]] },
+                },
+              },
+            },
             broken: { $in: ["broken", { $ifNull: ["$media.linkStatus", []] }] },
           },
         },
@@ -263,7 +271,7 @@ export default async function DashboardPage() {
       icon: FileUp,
       primary: true,
     },
-    roleCan(role, ["marketplace_listing"]) && { href: "/catalog/new", label: "New catalog item", icon: Plus },
+    roleCan(role, ["catalog_manager"]) && { href: "/catalog/new", label: "New catalog item", icon: Plus },
     roleCan(role, ROLE_SETS.media) && { href: "/images?status=missing", label: "Upload images", icon: ImagePlus },
     role === "administrator" && { href: "/admin/monday-pull", label: "Import from Monday", icon: RefreshCw },
   ].filter(Boolean) as { href: string; label: string; icon: typeof Plus; primary?: boolean }[];

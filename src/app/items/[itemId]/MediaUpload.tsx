@@ -1,12 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Upload, ImageIcon, CheckCircle2, Circle, TriangleAlert, ExternalLink, Link2Off } from "lucide-react";
+import { Upload, ImageIcon, CheckCircle2, Circle, TriangleAlert, ExternalLink, Link2Off, Film } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
 import { uploadItemImage, type ItemMediaEntry, type UploadKind } from "@/lib/client/uploadItemImage";
-import type { ImageSubfolder } from "@/lib/enums";
+import { MEDIA_KIND_LABEL, MEDIA_UPLOAD_OPTIONS, acceptFor } from "@/lib/items/mediaKinds";
 
 interface Completeness {
   main: boolean;
@@ -14,19 +14,9 @@ interface Completeness {
   models: boolean;
 }
 
-const SUBFOLDER_LABEL: Record<ImageSubfolder, string> = {
-  main: "Main",
-  sides: "Sides",
-  models: "Models",
-  lifestyle: "Lifestyle",
-};
-
 const KIND_OPTIONS: { value: UploadKind; label: string }[] = [
   { value: "auto", label: "Use the file names" },
-  { value: "main", label: "Main image" },
-  { value: "sides", label: "Side images" },
-  { value: "models", label: "Model images" },
-  { value: "lifestyle", label: "Lifestyle images (optional)" },
+  ...MEDIA_UPLOAD_OPTIONS,
 ];
 
 function displayName(m: ItemMediaEntry): string {
@@ -94,23 +84,24 @@ export function MediaUpload({
     return (
       <Card>
         <h2 className="text-[0.95rem] mb-2 flex items-center gap-1.5">
-          <ImageIcon size={15} /> Images
+          <ImageIcon size={15} /> Images &amp; video
         </h2>
         <p className="text-[0.85rem] text-ink-faint m-0">
-          This item needs a sample SKU or permanent item number before images can be uploaded.
+          This item needs a sample SKU or permanent item number before images or videos can be uploaded.
         </p>
       </Card>
     );
   }
 
   const broken = media.filter((m) => m.linkStatus === "broken").length;
-  const lifestyleCount = media.filter((m) => m.subfolder === "lifestyle" && m.linkStatus !== "broken").length;
+  const optionalCount = (k: "lifestyle" | "videos") =>
+    media.filter((m) => m.subfolder === k && m.linkStatus !== "broken").length;
 
   return (
     <Card>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
         <h2 className="text-[0.95rem] flex items-center gap-1.5">
-          <ImageIcon size={15} /> Images
+          <ImageIcon size={15} /> Images &amp; video
         </h2>
         {canUpload && (
           <div className="flex items-center gap-2">
@@ -136,7 +127,7 @@ export function MediaUpload({
               ref={fileInputRef}
               type="file"
               multiple={kind !== "main"}
-              accept="image/*"
+              accept={acceptFor(kind)}
               hidden
               onChange={(e) => handleFiles(e.target.files)}
             />
@@ -148,12 +139,15 @@ export function MediaUpload({
           <>
             Name files <code className="font-mono">{folderKey}.jpg</code> for the main shot,{" "}
             <code className="font-mono">{folderKey}-S1.jpg</code> for sides,{" "}
-            <code className="font-mono">{folderKey}-M1.jpg</code> for models and{" "}
-            <code className="font-mono">{folderKey}-LS1.jpg</code> for optional lifestyle shots; each goes to its
+            <code className="font-mono">{folderKey}-M1.jpg</code> for models,{" "}
+            <code className="font-mono">{folderKey}-LS1.jpg</code> for optional lifestyle shots and{" "}
+            <code className="font-mono">{folderKey}-V1.mp4</code> for optional video clips; each goes to its
             SharePoint folder by the name.
           </>
+        ) : kind === "videos" ? (
+          <>Video clips up to 1 GB (MP4, MOV, WebM…). Any file name works: it&apos;s renamed to the video convention on upload.</>
         ) : (
-          <>Any file name works: it&apos;s renamed to the {SUBFOLDER_LABEL[kind].toLowerCase()} convention on upload.</>
+          <>Any file name works: it&apos;s renamed to the {MEDIA_KIND_LABEL[kind].toLowerCase()} convention on upload.</>
         )}
       </p>
 
@@ -165,14 +159,19 @@ export function MediaUpload({
             ) : (
               <Circle size={14} color="var(--ink-faint)" />
             )}
-            {SUBFOLDER_LABEL[key]}
+            {MEDIA_KIND_LABEL[key]}
           </span>
         ))}
         {/* Optional: shown as a count, never as missing. */}
-        <span className="flex items-center gap-1.5 text-[0.82rem] text-ink-soft">
-          {lifestyleCount > 0 ? <CheckCircle2 size={14} color="var(--good)" /> : <Circle size={14} color="var(--ink-faint)" />}
-          Lifestyle <span className="text-ink-faint">(optional{lifestyleCount > 0 ? `, ${lifestyleCount}` : ""})</span>
-        </span>
+        {(["lifestyle", "videos"] as const).map((key) => {
+          const n = optionalCount(key);
+          return (
+            <span key={key} className="flex items-center gap-1.5 text-[0.82rem] text-ink-soft">
+              {n > 0 ? <CheckCircle2 size={14} color="var(--good)" /> : <Circle size={14} color="var(--ink-faint)" />}
+              {MEDIA_KIND_LABEL[key]} <span className="text-ink-faint">(optional{n > 0 ? `, ${n}` : ""})</span>
+            </span>
+          );
+        })}
         {broken > 0 && (
           <span className="flex items-center gap-1.5 text-[0.82rem] text-critical">
             <Link2Off size={14} /> {broken} broken link{broken === 1 ? "" : "s"}
@@ -189,7 +188,7 @@ export function MediaUpload({
       ))}
 
       {media.length === 0 ? (
-        <p className="text-[0.85rem] text-ink-faint m-0">No images uploaded yet.</p>
+        <p className="text-[0.85rem] text-ink-faint m-0">No images or videos uploaded yet.</p>
       ) : (
         <div className="flex flex-col gap-1">
           {media.map((m) =>
@@ -200,7 +199,7 @@ export function MediaUpload({
                 title="This file is no longer in SharePoint"
               >
                 <Link2Off size={12} />
-                <span className="capitalize">{m.subfolder}</span>
+                <span>{MEDIA_KIND_LABEL[m.subfolder] ?? m.subfolder}</span>
                 <span className="font-mono">{displayName(m)}</span>
                 <span>(missing from SharePoint)</span>
               </span>
@@ -212,8 +211,8 @@ export function MediaUpload({
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-[0.83rem] text-brass no-underline py-0.5"
               >
-                <ExternalLink size={12} />
-                <span className="capitalize">{m.subfolder}</span>
+                {m.subfolder === "videos" ? <Film size={12} /> : <ExternalLink size={12} />}
+                <span>{MEDIA_KIND_LABEL[m.subfolder] ?? m.subfolder}</span>
                 <span className="font-mono text-ink-soft">{displayName(m)}</span>
                 <span className="text-ink-faint">(view on SharePoint)</span>
               </a>

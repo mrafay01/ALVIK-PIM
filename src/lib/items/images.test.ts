@@ -1,4 +1,4 @@
-import { conventionalImageName, imageCompletenessOf, mediaFileName } from "./images";
+import { conventionalImageName, imageCompletenessOf, mediaFileName, mediaFileProblem } from "./images";
 import { searchFilter, scopeFilter, onReviewPage } from "@/lib/import/reviewQuery";
 
 describe("conventionalImageName", () => {
@@ -7,6 +7,7 @@ describe("conventionalImageName", () => {
     { subfolder: "sides", name: "A1-S3.png", url: "https://x/a" },
     { subfolder: "models", url: "https://x/Images/A1/Models/A1-M1.jpg" },
     { subfolder: "lifestyle", name: "A1-LS2.jpg", url: "https://x/b" },
+    { subfolder: "videos", name: "A1-V1.mp4", url: "https://x/c" },
   ];
   it("names main after the item", () => expect(conventionalImageName("A1", "main", ".jpg", media)).toBe("A1.jpg"));
   it("takes the next free side number", () => expect(conventionalImageName("A1", "sides", ".jpg", media)).toBe("A1-S4.jpg"));
@@ -15,6 +16,24 @@ describe("conventionalImageName", () => {
   it("numbers lifestyle shots with LS, apart from sides", () => {
     expect(conventionalImageName("A1", "lifestyle", ".jpg", media)).toBe("A1-LS3.jpg");
     expect(conventionalImageName("B2", "lifestyle", ".png", [])).toBe("B2-LS1.png");
+  });
+  it("numbers video clips with V, apart from the images", () => {
+    expect(conventionalImageName("A1", "videos", ".mp4", media)).toBe("A1-V2.mp4");
+    expect(conventionalImageName("B2", "videos", ".mov", [])).toBe("B2-V1.mov");
+  });
+});
+
+describe("mediaFileProblem", () => {
+  it("takes videos only in the Videos folder", () => {
+    expect(mediaFileProblem("Videos", "clip.MP4", 10)).toBeNull();
+    expect(mediaFileProblem("Videos", "A1.jpg", 10)).toMatch(/isn't a video/);
+    expect(mediaFileProblem("Videos", "clip.mp4", 2 * 1024 ** 3)).toMatch(/larger than 1 GB/);
+  });
+  it("takes images only everywhere else, pointing videos to the video type", () => {
+    expect(mediaFileProblem("Main", "A1.jpg", 10)).toBeNull();
+    expect(mediaFileProblem("Sides", "clip.mp4", 10)).toMatch(/upload it as a video clip/);
+    expect(mediaFileProblem("Models", "notes.pdf", 10)).toMatch(/isn't an image/);
+    expect(mediaFileProblem("Lifestyle", "big.jpg", 60 * 1024 ** 2)).toMatch(/larger than 50 MB/);
   });
 });
 
@@ -33,6 +52,7 @@ describe("imageCompletenessOf", () => {
       imageCompletenessOf([{ subfolder: "main" }, { subfolder: "sides" }, { subfolder: "models" }])
     ).toEqual({ main: true, sides: true, models: true });
     expect(imageCompletenessOf([{ subfolder: "lifestyle" }])).toEqual({ main: false, sides: false, models: false });
+    expect(imageCompletenessOf([{ subfolder: "videos" }])).toEqual({ main: false, sides: false, models: false });
   });
   it("reads file names from urls", () => expect(mediaFileName({ url: "https://x/A%201.jpg?web=1" })).toBe("A 1.jpg"));
 });

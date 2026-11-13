@@ -27,7 +27,7 @@ import { formatPoNumber, poNumberFromFileName } from "@/lib/purchase-orders/poNu
 import logger from "@/lib/logger";
 
 // Who may intake a quote — buyers/purchasing own the PO area this lives
-// under; marketplace_listing already has item-create rights elsewhere.
+// under; catalog_manager already has item-create rights elsewhere.
 const QUOTE_ROLES = ROLE_SETS.quotes;
 
 const MAX_ROWS = 5_000;

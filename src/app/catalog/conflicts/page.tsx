@@ -16,7 +16,7 @@ export default async function CatalogConflictsPage({
   searchParams: Promise<Params>;
 }) {
   const role = await getSessionRole();
-  if (!roleCan(role, ["marketplace_listing"])) redirect("/unauthorized");
+  if (!roleCan(role, ["catalog_manager"])) redirect("/unauthorized");
 
   const { itemId } = await searchParams;
   await connectDB();

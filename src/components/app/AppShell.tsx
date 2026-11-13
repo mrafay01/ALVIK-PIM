@@ -23,14 +23,14 @@ const NAV: NavEntry[] = [
     href: "/purchase-orders",
     label: "Purchase Orders",
     icon: "ClipboardList",
-    roles: ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"] as Role[],
+    roles: ["buying_purchasing", "buyer_merchandiser", "catalog_manager"] as Role[],
     children: [
       // Quotes list; importing a file or entering a quote by hand starts from there.
       {
         href: "/purchase-orders/quotes",
         label: "Quotes",
         icon: "FileSpreadsheet",
-        roles: ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"] as Role[],
+        roles: ["buying_purchasing", "buyer_merchandiser", "catalog_manager"] as Role[],
       },
       { href: "/items", label: "Un-Verified Items", icon: "PackageSearch", roles: null },
       // Admin only, same as middleware's /admin gate.
@@ -42,21 +42,21 @@ const NAV: NavEntry[] = [
     label: "Catalog",
     icon: "BookOpenCheck",
     roles: null,
-    // Role lists match middleware's /catalog/new, /catalog/import and
-    // /catalog/flagged gates ([] = administrator only).
+    // Role lists match middleware's /catalog/new, /catalog/import,
+    // /catalog/flagged and /catalog/export gates ([] = administrator only).
     children: [
-      { href: "/catalog/new", label: "New catalog item", icon: "Plus", roles: ["marketplace_listing"] as Role[] },
+      { href: "/catalog/new", label: "New catalog item", icon: "Plus", roles: ["catalog_manager"] as Role[] },
       { href: "/catalog/import", label: "Import Master File", icon: "FileUp", roles: [] },
       { href: "/catalog/flagged", label: "Flagged Items", icon: "Flag", roles: [] },
+      {
+        href: "/catalog/export",
+        label: "Export catalog",
+        icon: "FileDown",
+        roles: ["buyer_merchandiser", "buying_purchasing", "catalog_manager"] as Role[],
+      },
     ],
   },
   { href: "/images", label: "Images", icon: "Images", roles: null },
-  {
-    href: "/marketplace-export",
-    label: "Marketplace Export",
-    icon: "Store",
-    roles: ["administrator", "marketplace_listing"] as Role[],
-  },
   // Master File import lives on the Catalog page ("Import Master File",
   // admin only) rather than its own nav entry.
   // Settings is the last item in the main nav list (not a separate footer

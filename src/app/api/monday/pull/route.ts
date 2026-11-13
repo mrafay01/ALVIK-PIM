@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import SyncLog from "@/models/SyncLog";
-import { buildPullPlan, commitSelectedPullRows } from "@/lib/monday/pull";
+import { previewPullSlice, commitSelectedPullRows } from "@/lib/monday/pull";
+import { PULL_IMPORT_CHUNK } from "@/lib/monday/pullLimits";
 import { MondayApiError } from "@/lib/monday/client";
 import logger from "@/lib/logger";
 
@@ -16,27 +17,35 @@ function mondayFailed(what: string, err: unknown) {
   );
 }
 
-// Reading the whole board plus the database writes can take a while on a
-// large board.
+// Each call does a bounded slice of work (see lib/monday/pull.ts): the
+// whole board takes ~2 minutes to read, far past the serverless limit, so
+// the screen pages through it with repeated calls.
 export const maxDuration = 60;
 
-// GET: dry-run preview only. Reads the live Monday board and reports what
-// a pull would create/update/skip — never writes to the DB or to Monday.
-export async function GET() {
+// GET: dry-run preview only, one slice at a time. Without `cursor` it reads
+// the first pages of the live board; with the `cursor` a previous call
+// returned, the next ones. Reports what a pull would create/update/skip for
+// those items. Never writes to the DB or to Monday.
+export async function GET(req: NextRequest) {
   const gate = await requireRole(ROLE_SETS.adminOnly);
   if (isAuthFail(gate)) return gate.response;
 
+  const cursor = req.nextUrl.searchParams.get("cursor") || null;
+  if (cursor && cursor.length > 2000) {
+    return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+  }
+
   await connectDB();
   try {
-    return NextResponse.json(await buildPullPlan());
+    return NextResponse.json(await previewPullSlice(cursor));
   } catch (err) {
     return mondayFailed("preview", err);
   }
 }
 
-// POST: applies a plan the caller already reviewed via GET. Expects the
-// same `rows` array back (not re-fetched from Monday blind) so what gets
-// committed matches what was shown on screen.
+// POST: applies the rows the caller reviewed via GET, by board item id
+// (up to PULL_IMPORT_CHUNK per call). Those items are re-read from Monday
+// so what's written is the board's current data.
 export async function POST(req: NextRequest) {
   const gate = await requireRole(ROLE_SETS.adminOnly);
   if (isAuthFail(gate)) return gate.response;
@@ -48,6 +57,11 @@ export async function POST(req: NextRequest) {
   const ids = body?.mondayItemIds;
   if (!Array.isArray(ids) || ids.length === 0 || !ids.every((id) => typeof id === "string" && /^\d+$/.test(id))) {
     return NextResponse.json({ error: "Select at least one board item to import" }, { status: 400 });
+  }
+  // The screen sends the selection in chunks; one chunk per request keeps
+  // the Monday reads + writes inside the time limit.
+  if (ids.length > PULL_IMPORT_CHUNK) {
+    return NextResponse.json({ error: `Send at most ${PULL_IMPORT_CHUNK} board items per request` }, { status: 413 });
   }
 
   await connectDB();

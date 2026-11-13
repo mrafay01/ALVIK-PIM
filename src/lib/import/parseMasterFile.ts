@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { isXlsBuffer, convertXlsToXlsxBuffer } from "@/lib/xlsToXlsx";
+import { METAL_MAP, metalKey } from "@/lib/import/metals";
 
 // Coercion + validation rules for the Master File import, per the blueprint's
 // Data-quality note: treat every legacy cell as untrusted text, coerce with
@@ -38,24 +39,13 @@ function isPlaceholder(value: unknown): boolean {
   return false;
 }
 
-// Metals seen hand-typed in the wild, mapped to a canonical value. Anything
-// not in this table gets flagged for a human to classify rather than passed
-// through as freeform text.
-const METAL_MAP: Record<string, string> = {
-  brass: "Brass",
-  "14k gp": "14K GP",
-  "14kgp": "14K GP",
-  silver: "Silver",
-  "925 silver": "Silver",
-  "sterling silver": "Silver",
-  gold: "Gold",
-  "18k gold": "18K Gold",
-};
-
+// Metals seen hand-typed in the wild, mapped to a canonical value
+// (lib/import/metals.ts). Anything not in that table gets flagged for a
+// human to classify rather than passed through as freeform text.
 function coerceMetal(raw: unknown, flags: FieldFlag[]): string | null {
   if (isPlaceholder(raw)) return null;
   const str = String(raw).trim();
-  const mapped = METAL_MAP[str.toLowerCase()];
+  const mapped = METAL_MAP[metalKey(str)];
   if (mapped) return mapped;
   flags.push({
     field: "specs.metal",
@@ -188,6 +178,11 @@ const COLUMNS: ColumnDef[] = [
   { header: "upc", path: "upc", kind: "text" },
   { header: "birthstone", path: "specs.birthstone", kind: "text" },
 ];
+
+// The Master File's columns in sheet order, for the catalog export, which
+// writes this exact list back out (same headers, same order) so an exported
+// file reads back through this parser with every value in its column.
+export const MASTER_FILE_COLUMNS: readonly Readonly<{ header: string; path: string | null; kind: ColumnKind }>[] = COLUMNS;
 
 // header text (lowercased, trimmed) -> index into COLUMNS, for the
 // header-text fallback path. Two columns share the literal label "Date" —

@@ -23,7 +23,7 @@ Older docs in the repo: `PROJECT-REPORT.md`, `GETTING-STARTED-PRODUCTION.md` (th
   authoritative field (weights, sizes/measurements, vendor SKU), the catalog value is kept and a
   **conflict** is raised for a human (Catalog → Conflicts). Non-authoritative fields and pricing merge.
 - **SharePoint holds every file**: item images (`Images/{sku}/Main|Sides|Models`, plus optional
-  `Lifestyle`) and every PO document (`Purchase Orders/{poNumber}/`, e.g. `Purchase Orders/22906/`,
+  `Lifestyle` and `Videos`) and every PO document (`Purchase Orders/{poNumber}/`, e.g. `Purchase Orders/22906/`,
   including the files copied from Monday). MongoDB stores only ids, names and links, never bytes.
 - **One order is one PO**, keyed by the bare PO number Monday uses (`22906`); "PO-22906" is only a
   label on screen.
@@ -59,9 +59,8 @@ src/app/                    pages (server components) + client components beside
   dashboard/                overview (also served at "/")
   purchase-orders/          PO list/detail, quotes (/quotes, /quotes/import, /quotes/new, /quotes/[id])
   items/                    Un-Verified Items list (/items) and item detail/edit (/items/[id])
-  catalog/                  catalog list, /new, /conflicts, /import (Master File), /flagged
+  catalog/                  catalog list, /new, /conflicts, /import (Master File), /flagged, /export
   images/                   Images page (link health + uploads)
-  marketplace-export/       per-platform export review + file download
   admin/                    users, monday-pull (Monday import); admin/import-review only redirects
   settings/, help/, login/
   api/                      route handlers (REST); every handler checks its own role
@@ -96,7 +95,7 @@ src/scripts/migrations/     dated migrations (run via npm run migrate)
 
 There is deliberately **no generic "create item" endpoint** (`POST /api/items` was removed).
 Un-Verified items reach the catalog via *Submit to catalog* on the item page (`SubmitToCatalog.tsx`; lists
-what's missing until `masterRecordComplete`; marketplace_listing + admin) + admin approval on the Catalog list.
+what's missing until `masterRecordComplete`; catalog_manager + admin) + admin approval on the Catalog list.
 
 ### Vendor quotes → items + PO
 1. `/purchase-orders/quotes/import`: the browser uploads the file **straight to SharePoint**
@@ -129,10 +128,30 @@ what's missing until `masterRecordComplete`; marketplace_listing + admin) + admi
 - **Committed and excluded rows are deleted**; the batch keeps running totals (`approvedRows` =
   committed, `rejectedRows` = excluded). Status: `updateBatchStatus` (needs_review / reviewed / committed).
 
+### Catalog export (Master File layout)
+- Two ways in: tick rows on `/catalog` (selection kept across pages in sessionStorage) → *Export selected*
+  / *Export all N matching* (the list's own filters via `lib/catalog/listQuery.ts`, shared with the page);
+  or `/catalog/export`: upload a one-column list (`SKUs` in A1, .xlsx/.xls/.csv) →
+  `POST /api/catalog/export/skus` reads it + reports each SKU (in catalog / un-verified / only a Master
+  File row / not found, flagged?) → user confirms → `POST /api/catalog/export` `{ itemIds | skus | filters,
+  flaggedColumn }` returns the .xlsx. Max 10,000 items (`lib/catalog/exportLimits.ts`); ~170 B/item.
+- Columns = `MASTER_FILE_COLUMNS` (the importer's own list: same headers, order, both "Date"s), optional
+  `Flagged` column last ("No" / "Yes: issues"). `masterFileExport.test.ts` round-trips every column through
+  `parseMasterFileBuffer` — **change the importer's columns and the export follows; keep that test green**.
+- SKUs match ignoring case. A SKU with an item exports the item; one that's only an uncommitted Master File
+  row (Flagged Items or on review) exports that row (unparsed bad cells as written). Flagged = the SKU has
+  such a row that is parked or has issues. Roles: `ROLE_SETS.catalogExport` (not photography/warehouse).
+- Prices: the commit stores the sheet's MSRP / NEW MSRP / Date as written on the pricing entry
+  (`pricingHistory[].masterFile`); `msrp` stays the current price (NEW MSRP wins). Items committed before
+  2026-11-04 have no `masterFile`, so their MSRP column shows the current price and NEW MSRP is blank.
+
 ### Monday.com
-- **Pull** (`/admin/monday-pull`): preview the whole board (`GET /api/monday/pull`), filter/select rows,
-  POST only the selected **board ids**; the server rebuilds rows from one fresh board read
-  (`commitSelectedPullRows`). Matches POs by PO number = item name. Stores the board's status label
+- **Pull** (`/admin/monday-pull`): preview the whole board in slices (`GET /api/monday/pull?cursor=`;
+  ~20 s / up to 2,000 items per call, the screen loops on Monday's cursor — the full ~7,400-item board
+  takes ~95 s, so it can't be one request), filter/select rows, then POST the selected **board ids** in
+  chunks of `PULL_IMPORT_CHUNK` (500, `lib/monday/pullLimits.ts`); the server re-reads just those items
+  with `items(ids:)` (dropping any not on the PO board) and commits them (`commitSelectedPullRows`).
+  Matches POs by PO number = item name. Stores the board's status label
   verbatim (`mondayStatusText`) and maps it to `status` only when the mapping is confident.
   Finished labels (Received, Canceled, …) mean **closed**: such POs are read-only and excluded from "open".
 - **PO files go to SharePoint for good.** The import has an "Also save PO files to SharePoint" option
@@ -153,31 +172,37 @@ Status flow in `lib/purchase-orders/transitions.ts` (forward-only except admin "
 `ready_to_ship` requires all six back-office checklist items). **"Open" PO** = `OPEN_PO_CONDITIONS`
 in `listQuery.ts` (not received, not closed on Monday) — reuse it anywhere you count open POs.
 
-### Images
-Folder `Images/{itemNumber or sampleSku}/{Main|Sides|Models|Lifestyle}`; names `{key}.jpg`, `{key}-S{n}`,
-`{key}-M{n}`, `{key}-LS{n}` (`inferSubfolder` rejects names that don't start with the key). **Lifestyle is
-optional**: its folder is created only when one is uploaded, and it never counts in `imageCompleteness`
-(the type list is `IMAGE_SUBFOLDERS` in `lib/enums.ts`). Uploads are browser → SharePoint:
+### Images (and video clips)
+Folder `Images/{itemNumber or sampleSku}/{Main|Sides|Models|Lifestyle|Videos}`; names `{key}.jpg`, `{key}-S{n}`,
+`{key}-M{n}`, `{key}-LS{n}`, `{key}-V{n}.mp4` (`inferSubfolder` rejects names that don't start with the key).
+**Lifestyle and Videos are optional**: each folder is created only when its first file is uploaded, and
+neither counts in `imageCompleteness` (the type list is `IMAGE_SUBFOLDERS` in `lib/enums.ts`, subfolder
+`videos`; image-only counts like "no images" use `IMAGE_ONLY_SUBFOLDERS`). The Videos folder takes video
+files only (≤ 1 GB), every other folder images only (≤ 50 MB): `mediaFileProblem` in `lib/items/images.ts`.
+Upload screens (item page `MediaUpload`, Images page `UploadPanel`) share labels/pickers from
+`lib/items/mediaKinds.ts` — a new type goes there too. Uploads are browser → SharePoint:
 `api/items/[id]/media/upload-session` (server picks the conventional name for main/sides/models, or
 "auto" keeps the file's name) → `.../media/confirm`. `/images` checks links via Graph `$batch`
 (`api/images/check`) and records `media.linkStatus`; broken images don't count in `imageCompleteness`,
 which feeds `masterRecordComplete` (the publish gate: item number, category, metal, MSRP, all 3 image types).
 
 ### Other pages
-Dashboard (`/`, `/dashboard`), Marketplace Export (Target CSV; Macy's/Belk/Kohl's XLSX matching the real
-templates; inactive items never exported), Help & Support (`/help`, emails the developer via SMTP,
+Dashboard (`/`, `/dashboard`), Help & Support (`/help`, emails the developer via SMTP,
 5/hour/user, sent "as" the signed-in user via From name + Reply-To).
 
 ## 5. Roles & auth
 
 Roles: `administrator`, `buyer_merchandiser`, `buying_purchasing`, `warehouse_receiving`, `photography`,
-`marketplace_listing`. Administrator passes every check.
+`catalog_manager` (shown as "Catalog Manager"; was `marketplace_listing` until 2026-11-13). Administrator
+passes every check.
 - Two layers: `middleware.ts` (route-prefix gate, `PAGE_ROUTE_ROLES` / `API_ROUTE_ROLES`, plus the
   `matcher` list — **a new top-level page or API prefix must be added to `matcher`**) and
   `requireRole(ROLE_SETS.x)` inside **every** API handler. Pages that are admin-only also check
   `getSessionRole()` and redirect.
 - `ROLE_SETS`: `quotes` (view POs/quotes), `purchaseOrders` (change POs: buying_purchasing),
-  `items`, `media` (photography, buying_purchasing), `marketplaceExport`, `adminOnly` ([]).
+  `items`, `media` (photography, buying_purchasing), `catalogExport` (buyers,
+  buying_purchasing, catalog_manager; mirrored in middleware `/catalog/export`, `/api/catalog/export`),
+  `adminOnly` ([]).
 - Login: credentials + email OTP (`OTP_2FA_ENABLED`), rate-limited (Mongo-backed). JWT sessions carry
   `role` + `sessionVersion`; the jwt callback re-checks the DB each request, so bumping
   `sessionVersion` (sign out everywhere, **role change**, deactivation) revokes sessions immediately.
@@ -211,7 +236,10 @@ Roles: `administrator`, `buyer_merchandiser`, `buying_purchasing`, `warehouse_re
 **Next.js / platform**
 - **Vercel caps request bodies at 4.5 MB**. Anything that can be larger goes browser → SharePoint via a
   Graph upload session (quotes, images). The Master File upload still goes through the server — known
-  follow-up. Long handlers set `export const maxDuration = 60` and do work in ~40 s slices.
+  follow-up. Long handlers set `export const maxDuration = 60` and do work in ~40 s slices
+  that the screen calls repeatedly (Monday preview/import, Master File + Flagged Items commit via
+  `commitImportRowsInSlices` → `next`/`after`, PO file copy, image check; jobs re-enqueue themselves).
+  Works locally but 504s on Vercel = it ran past this limit. Responses are capped at 4.5 MB too.
 - Route files (`route.ts`) may only export handlers/config — put shared constants in `lib/`.
 - **CSP**: `script-src 'self' 'unsafe-inline'` in production on purpose — App Router streams page data
   in inline scripts; a hash-only CSP renders every page blank. `connect-src` includes
@@ -230,8 +258,9 @@ Roles: `administrator`, `buyer_merchandiser`, `buying_purchasing`, `warehouse_re
 - Every page renders inside `AppShell` (pass `activeHref`; optional back link). New nav items go in
   `AppShell` NAV + an icon in `Sidebar` ICONS. A sub-page goes in its parent's `children` (shown as
   a dropdown): Quotes, Un-Verified Items and Monday Import (admin) under Purchase Orders; New
-  catalog item, Import Master File (admin) and Flagged Items (admin) under Catalog. The list pages
-  themselves carry no buttons for these; Catalog shows four stat cards instead. A sub-page's
+  catalog item, Import Master File (admin), Flagged Items (admin) and Export catalog under Catalog. The list pages
+  themselves carry no buttons for these; Catalog shows four stat cards instead (the one exception is
+  Catalog's export bar, since exporting works on the rows ticked in the list). A sub-page's
   `activeHref` is its own path (`/catalog/flagged`), so the sub-item, not the parent, highlights.
 - Copy style: plain words for non-technical staff; no jargon in UI text.
 - Whole-collection counts are cached briefly with `unstable_cache`: dashboard counts (30 s) and
@@ -252,8 +281,6 @@ Roles: `administrator`, `buyer_merchandiser`, `buying_purchasing`, `warehouse_re
 - Every staged-row fix is allow-listed and re-coerced: quote rows via `coerceQuoteValue`, Master File rows via
   `isMasterFileField` + `fixRowField` (commit also skips non-column paths), so a fix can't set fields like
   `inCatalog` and a flag clears only when the value is valid.
-- Marketplace export: page and generator share `EXPORT_ELIGIBLE`; the Target CSV neutralizes formula-like
-  text (`neutralizeFormula`).
 - Outbound calls have timeouts: Monday 30 s (non-JSON answers become `MondayApiError`), Graph 60 s.
 - Client fetch handlers always `catch` (show "Couldn't reach the server") and parse JSON with `.catch(() => ({}))`.
 
@@ -281,18 +308,25 @@ People need CZCPIM site membership to open the links the app shows.
 ## 9. Status (2026-10-28)
 Built: auth + 2FA, roles, PO list/detail + Monday push/pull, vendor quote intake + review + commit,
 catalog (+ variations, conflicts, approvals, Submit to catalog), Master File import + Flagged Items,
-Un-Verified Items, SharePoint images (incl. optional Lifestyle) + PO documents (Monday files saved to
-SharePoint for good), Images page, marketplace export, dashboard, settings, Help & Support, sidebar
+Un-Verified Items, SharePoint images (incl. optional Lifestyle and video clips) + PO documents (Monday files saved to
+SharePoint for good), Images page, catalog export, dashboard, settings, Help & Support, sidebar
 dropdowns.
 
-Open decisions (see the blueprint's "Open — decisions needed"): whether export enforces
-`masterRecordComplete` (not yet: almost no item has images), whether photography/warehouse should see
+Removed 2026-11-13: the Marketplace Export tab (pages, `api/marketplace-export`, `lib/marketplace-export`,
+the `MarketplaceListing` model, the `marketplace_export` job / sync-log type). Don't reintroduce. Per-marketplace
+item descriptions (`items.marketplaceDescriptions`, item page + New catalog item form) were kept.
+
+Open decisions (see the blueprint's "Open — decisions needed"): whether photography/warehouse should see
 pricing, and a "send back" for catalog submissions. Known gaps: SKU change leaves images in the old
 folder; the Master File import doesn't refuse case-only duplicate SKUs; no button for bulk Monday push.
 
-Pending: run `npm run migrate` to apply `2026-10-22-unset-null-item-numbers` and
+Pending: run `npm run migrate` to apply `2026-10-22-unset-null-item-numbers`,
 `2026-10-23-slim-database` (removes `raw` rows, null fields, dead fields, 3 empty collections,
-unused indexes).
+unused indexes) and `2026-11-04-recheck-metal-flags` (clears the metal flag on ~10,238 staged rows now
+that `.925 Sterling Silver` is accepted; metals list: `lib/import/metals.ts`) and
+`2026-11-13-remove-marketplace-export` (drops `marketplacelistings`, deletes `marketplace_export` jobs/logs,
+drops the `{active, masterRecordComplete}` item index, renames role `marketplace_listing` → `catalog_manager`
+and signs those users out once). Deploy the code and run this migration together.
 
 Not built / open: receiving & warehouse screen (role has no screen yet; its `ReceivingLog` and
 `Shipment` models were removed 2026-10-23 as unused — recreate when built), shipment grouping, extracting

@@ -93,5 +93,5 @@ export const ROLE_LABEL: Record<Role, string> = {
   buying_purchasing: "Buying & Purchasing",
   warehouse_receiving: "Warehouse Receiving",
   photography: "Photography",
-  marketplace_listing: "Marketplace Listing",
+  catalog_manager: "Catalog Manager",
 };

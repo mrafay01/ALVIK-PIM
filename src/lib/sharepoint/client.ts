@@ -135,8 +135,8 @@ export async function ensureFolderPath(ctx: SharePointContext, segments: string[
 }
 
 // Item images: Images/{itemNumber}/Main, /Sides, /Models (required) and
-// /Lifestyle (optional, so it's only created once a lifestyle image is
-// uploaded; pass `also`).
+// /Lifestyle and /Videos (optional, so each is only created once its first
+// file is uploaded; pass `also`).
 const REQUIRED_IMAGE_FOLDERS = ["Main", "Sides", "Models"] as const;
 
 export async function ensureItemFolders(
@@ -149,11 +149,12 @@ export async function ensureItemFolders(
   await Promise.all([...folders].map((subfolder) => ensureChildFolder(ctx, ["Images", itemNumber], subfolder)));
 }
 
-export type ImageSubfolder = "Main" | "Sides" | "Models" | "Lifestyle";
+export type ImageSubfolder = "Main" | "Sides" | "Models" | "Lifestyle" | "Videos";
 
 // Filename-suffix routing, as in the blueprint's Image Storage convention:
 // bare "{itemNumber}.jpg" -> Main, "-S{n}" -> Sides, "-M{n}" -> Models,
-// "-LS{n}" -> Lifestyle. Anything else is rejected rather than misfiled.
+// "-LS{n}" -> Lifestyle, "-V{n}" -> Videos. Anything else is rejected
+// rather than misfiled.
 export function inferSubfolder(itemNumber: string, filename: string): ImageSubfolder {
   const base = filename.replace(/\.[^.]+$/, "");
   // The name must start with this item's number; otherwise another item's
@@ -167,9 +168,10 @@ export function inferSubfolder(itemNumber: string, filename: string): ImageSubfo
   if (/^-S\d+$/i.test(suffix)) return "Sides";
   if (/^-M\d+$/i.test(suffix)) return "Models";
   if (/^-LS\d+$/i.test(suffix)) return "Lifestyle";
+  if (/^-V\d+$/i.test(suffix)) return "Videos";
 
   throw new Error(
-    `Filename "${filename}" doesn't match the "{itemNumber}.jpg" / "-S{n}" / "-M{n}" / "-LS{n}" convention`
+    `Filename "${filename}" doesn't match the "{itemNumber}.jpg" / "-S{n}" / "-M{n}" / "-LS{n}" / "-V{n}" convention`
   );
 }
 

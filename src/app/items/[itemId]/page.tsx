@@ -60,7 +60,7 @@ export default async function ItemDetailPage({
   const canEditItem = roleCan(role, ROLE_SETS.items);
   const canUploadMedia = roleCan(role, ROLE_SETS.media);
   // Same role as POST /api/items/[id]/submit-to-catalog.
-  const canSubmitToCatalog = roleCan(role, ["marketplace_listing"]);
+  const canSubmitToCatalog = roleCan(role, ["catalog_manager"]);
   const missingForCatalog = checkMasterRecordComplete(item)
     .filter((c) => !c.ok)
     .map((c) => c.reason ?? c.field);

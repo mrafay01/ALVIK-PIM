@@ -10,7 +10,7 @@ import { validateItemMeasurements, formatValidationIssues } from "@/lib/measurem
 import type { ItemMeasurements } from "@/lib/measurements/types";
 import { refreshCatalogFacets } from "@/lib/catalog/facets";
 
-const CATALOG_ROLES = ["marketplace_listing"] as const;
+const CATALOG_ROLES = ["catalog_manager"] as const;
 
 // Master File-derived spec fields that can vary per variation row, falling
 // back to the shared/base value when a variation doesn't override it. Keys

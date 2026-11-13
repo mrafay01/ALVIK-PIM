@@ -7,7 +7,7 @@ import { isMasterRecordComplete } from "@/lib/masterRecordComplete";
 import { isObjectId } from "@/lib/ids";
 import { refreshCatalogFacets } from "@/lib/catalog/facets";
 
-const CATALOG_ROLES = ["marketplace_listing"] as const;
+const CATALOG_ROLES = ["catalog_manager"] as const;
 
 // POST: submit a quotation-origin item to the finalized catalog. It enters
 // as `inCatalog` with a pending approval; an admin approves it separately

@@ -63,7 +63,7 @@ export function SubmitToCatalog({
           )}
           {!canSubmit && missing.length === 0 && (
             <p className="text-[0.8rem] text-ink-faint mt-1.5 mb-0">
-              Someone on the marketplace listing team, or an administrator, can submit it.
+              A catalog manager or an administrator can submit it.
             </p>
           )}
           {error && <p className="text-[0.82rem] text-critical mt-1.5 mb-0">{error}</p>}

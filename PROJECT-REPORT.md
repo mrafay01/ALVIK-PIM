@@ -6,7 +6,7 @@ CZC PIM is a purpose-built web application replacing two systems the jewelry who
 
 **Explicitly out of scope for this build:**
 - **Jm** — a third-party system built separately on request, which already handles pricing, stock, and invoices. **Confirmed:** no integration with Jm is planned. Where a Monday.com board references Jm (e.g. the "save in JM" flag in §4a), CZC PIM only records that the hand-off happened — it never reads from or writes to Jm itself.
-- **Live marketplace integrations** (Shopify, Amazon, Macy's) — the app produces filled export spreadsheets in each platform's exact format for manual upload. No live API sync.
+- **Marketplace integrations** (Shopify, Amazon, Macy's, …) — neither live API sync nor marketplace export files. The Marketplace Export tab was removed 2026-11-13.
 
 **No longer out of scope — now live:** SharePoint (image storage) and Monday.com (board sync) integrations were blocked on credentials; both were supplied on 2026-09-01 and are now built and verified against the real systems. See §7 and §14.
 
@@ -31,7 +31,7 @@ Eight roles exist, matching the departments that touch this workflow in real lif
 - `buying_purchasing` — SKU creation, PO/PI management, status updates
 - `warehouse_receiving` — receiving log, QC checks
 - `photography` — image upload workflow
-- `marketplace_listing` — master DB content fields, publish/export
+- `catalog_manager` (was `marketplace_listing` until 2026-11-13) — catalog content fields, new catalog items, Submit to catalog, catalog export
 - `accounts_finance` — payables, payment recording
 - (a `hold`/reject reviewer path also exists under buyer_merchandiser)
 
@@ -39,7 +39,7 @@ Eight roles exist, matching the departments that touch this workflow in real lif
 
 ## 4. Database Schema
 
-Fourteen MongoDB collections, defined as Mongoose models in [`src/models/`](src/models/) (`import_batches` split into two 2026-09-08; `marketplace_listings` added 2026-09-09; `quotation_rows` added 2026-09-10 alongside the extended `quotations`). `Item` is the spine — almost everything else references it.
+Fourteen MongoDB collections, defined as Mongoose models in [`src/models/`](src/models/) (`import_batches` split into two 2026-09-08; `marketplace_listings` added 2026-09-09 and removed 2026-11-13; `quotation_rows` added 2026-09-10 alongside the extended `quotations`). `Item` is the spine — almost everything else references it.
 
 ### `users`
 Name, email (unique), bcrypt password hash, role, active flag.
@@ -115,7 +115,7 @@ Content check (weight/qty/silver good-or-flagged) and packaging check, logged pe
 Each PO's payment isn't a single amount — it's one or more **tranche** records (`deposit`/`balance`/`prepayment`/`credit`), mirroring how the real Monday.com data showed POs split into paired sub-items like "16056-Deposit" / "16056-balance". Includes invoice reference, amount due, due date, payment method, proof-of-payment URL, and who recorded it. A `creditAppliedFrom` self-reference explicitly models overpayment credits carried from one PO to another, replacing what was previously an opaque negative-number workaround in the spreadsheet.
 
 ### `sync_logs`, `platform_templates`
-Scaffolded for future phases — Monday.com sync runs and marketplace export column mappings.
+`sync_logs` records Monday.com sync runs. `platform_templates` was never used and was dropped 2026-10-23.
 
 ### `import_batches` and `import_batch_rows` — legacy-import staging (see §5)
 Each uploaded Master File becomes one `import_batches` document (filename, status, summary counters) plus one `import_batch_rows` document **per row** in a separate collection, referencing the batch by `batchId`. This is a two-collection design, not one — see the 2026-09-08 fix note in §5 for why rows aren't embedded directly in the batch.
@@ -174,7 +174,7 @@ It lives under **Purchase Orders**, not Items: a quote is a vendor-pipeline arti
 
 ## 6. Master Record Completion Gate (Phase 5)
 
-An item can't be considered ready for marketplace export until its record is genuinely complete. [`src/lib/masterRecordComplete.ts`](src/lib/masterRecordComplete.ts) defines the exact rule, recomputed automatically on every relevant update (item edits and legacy-import commits alike):
+An item can't be submitted to the catalog until its record is genuinely complete. [`src/lib/masterRecordComplete.ts`](src/lib/masterRecordComplete.ts) defines the exact rule, recomputed automatically on every relevant update (item edits and legacy-import commits alike):
 
 An item is "complete" only when **all** of the following are true:
 - Permanent item number is assigned
@@ -192,7 +192,7 @@ items with `inCatalog: true`:
   / `manual`, `catalogApproval.status: "approved"` — the import is by definition the finalized DB, and
   a person with catalog rights added the manual one deliberately).
 - **Quote-committed items** (`origin: quotation`) are **not** in the catalog. Once such an item's
-  master record is complete, someone with `marketplace_listing` rights hits **"Submit to catalog"** on
+  master record is complete, someone with `catalog_manager` rights hits **"Submit to catalog"** on
   its detail page (`POST /api/items/[id]/submit-to-catalog`, guarded on `isMasterRecordComplete`); it
   enters as `inCatalog: true` with `catalogApproval.status: "pending"`, and an **admin approves** it
   (`POST /api/catalog/[id]/approve`) before it counts as finalized.
@@ -220,7 +220,7 @@ and `variantSuffix`; alphabetical SKU sort naturally clusters a family, and the 
 filter (`variantSuffix != null`) isolates the suffixed rows. A **"Variation?"** column shows Yes/No +
 the suffix.
 
-**Manual add** — `/catalog/new` (`marketplace_listing` + admin), `POST /api/catalog` with
+**Manual add** — `/catalog/new` (`catalog_manager` + admin), `POST /api/catalog` with
 `CatalogItemCreateSchema`: a base SKU plus a repeatable variations block
 (`{ suffix, plating?, upc?, msrp? }`). Rejects a hyphen in the base SKU and any duplicate `itemNumber`.
 
@@ -303,12 +303,14 @@ The project follows an 11-phase plan, plus one newly identified sub-phase (3b) s
 | 3b | Sample-purchasing intake pipeline — vendor proposal file attach, two-stage approval (image review + "molly's approval"), Pass/Done-Ordered outcome, permanent item/box number assignment | **Partly addressed 2026-09-10** — vendor quote intake (file upload `.xlsx`/`.csv` + manual multi-item entry) with staged parse → review → commit is built and verified (§5a). The two-stage approval, Pass/Done-Ordered outcome, and box-number assignment parts of 3b are still not started. Image-from-directory → SharePoint upload is deferred (§13). |
 | 4 | Receiving + photography + SharePoint image pipeline | **Done** — SharePoint credentials received 2026-09-01, image pipeline built and verified live same day. Receiving log + warehouse QC screens (content/packaging checks) still to build. |
 | 5 | Master DB completion gate | **Done** — plus the Catalog rebuilt 2026-09-10 as the finalized company database (`inCatalog` filter, admin approval for quote items, variations as separate rows, manual `/catalog/new` entry). See §6a. |
-| 6 | Marketplace export generator | **Done** — real Target, Macy's, Belk, and Kohl's bulk-import templates supplied 2026-09-09; export-review UI built and verified live for all four platforms. Shopify/Amazon still blocked on template files. |
+| 6 | Marketplace export generator | **Removed 2026-11-13** — built for Target, Macy's, Belk and Kohl's (2026-09-09), then taken out of the app with its data and APIs. |
 | 7 | Payables + payment recording | **Done** |
 | 8 | Role hardening + Monday.com sync + dashboard | Mostly done — role gating exists (and its `/items`/`/catalog`/`/` gap was fixed, §10 item 7), Monday.com sync built and verified live both directions (push §12, pull §12 "Inbound pull") 2026-09-01. `/dashboard` aggregation views not yet built. |
 | 9–11 | UAT → deployment/training → post-launch support | Not started |
 
 **Eight of twelve phases are complete and function-verified against the live database** (up from seven as of 2026-09-08 — Phase 6's marketplace export went live 2026-09-09 with Target/Macy's/Belk/Kohl's templates verified, though Shopify/Amazon templates remain blocked). What's left: Phase 3b (scoped, not requested), the remaining marketplaces for Phase 6 (Shopify/Amazon, blocked on template files), the `/dashboard` view within Phase 8, and Phases 9–11 (depend on everything above being live first).
+
+_Update 2026-11-13: the Phase 6 marketplace export described above has since been removed from the app._
 
 ## 12. Monday.com Sync Engine (Phase 8, sync portion)
 
@@ -364,7 +366,6 @@ The sync above is one-way (PIM → Monday). A second, independent pull direction
 - **No pagination on the import-review screen** — the 16MB document-size crash (§10 item 11) is fixed and batches of any size now insert correctly, but the review table still renders every staged row client-side at once. A batch in the low thousands of rows (what's been seen from real usage so far) is fine; tens of thousands of rows would be sluggish to review in the browser even though the backend handles it. Worth adding if larger files become routine.
 - **No upload size/row-count cap** — nothing currently stops an arbitrarily large file from being uploaded and parsed in memory in one request. Not a data-corruption risk after the §10 item 11 fix, but a resource-exhaustion one worth guarding against with a sane cap and a clear rejection message.
 - **Monday.com status vocabulary gap** (§12) — roughly 20 real board-status labels have no equivalent in this app's `PoStatus` enum. Worth a conversation with Joel; not currently blocking anything.
-- **Marketplace export files don't yet replicate dropdown validation from real templates** — generated Macy's/Belk/Kohl's/Target files match every column exactly but don't carry the Excel data-validation pick-lists and conditional formatting from your native templates. Adding these is technically straightforward (exceljs supports it) but requires listing which columns have restricted values and what those values are.
 - **Quote intake — image field is a placeholder** (§5a) — every parsed/entered line item gets a fixed `"working on it"` note in the image field; it's never written to the `Item`. The intended replacement is directory-select in the browser → automatic SharePoint upload following the §7 folder structure, deferred by decision to a later piece of work.
 - **Quote intake — item→Monday.com sync not built** — a committed quote produces `items` but nothing pushes them to a Monday board. Feasibility and the exact work involved are written up at the end of §12; the one external dependency is an items board id + column-id map from someone with board access.
 - **`applyToItem` deep-merge fix not yet back-ported to the §5 legacy-import commit** — the same "partial dot-path replaces the whole subdocument" bug exists in [`import-review/[batchId]/commit`](src/app/api/admin/import-review/[batchId]/commit/route.ts), currently masked because Master File rows always carry the full spec set. Low risk today; worth aligning the two commit paths on the shared helper.

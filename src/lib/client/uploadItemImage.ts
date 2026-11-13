@@ -20,7 +20,7 @@ export type UploadedImageResult = {
 // SharePoint upload chunks must be a multiple of 320 KiB.
 const CHUNK = 320 * 1024 * 16;
 
-// Uploads one image for an item straight from the browser to SharePoint:
+// Uploads one image or video clip for an item straight from the browser to SharePoint:
 // the server opens the upload (and picks the file name for the chosen
 // kind), the bytes go directly to SharePoint, then the server records it.
 export async function uploadItemImage(
@@ -57,6 +57,6 @@ export async function uploadItemImage(
     body: JSON.stringify({ ticket: session.ticket, driveItemId }),
   });
   const data = await confirm.json().catch(() => ({}));
-  if (!confirm.ok) throw new Error(data.error ?? `Couldn't save the image (${confirm.status})`);
+  if (!confirm.ok) throw new Error(data.error ?? `Couldn't save the file (${confirm.status})`);
   return data as UploadedImageResult;
 }

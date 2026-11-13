@@ -376,32 +376,6 @@ export const QuotationPatchSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("remove_custom_column"), label: customColumnLabel }),
 ]);
 
-// ------------------------------------------------- marketplace listings
-
-export const MarketplaceListingPatchSchema = z
-  .object({
-    upc: shortText.optional(),
-    gtin: shortText.optional(),
-    productTitle: z.string().trim().max(500).optional(),
-    productDescription: z.string().trim().max(5000).optional(),
-    bulletFeatures: z.array(z.string().trim().max(500)).max(10).optional(),
-    weightLb: z.number().finite().min(0).max(1000).optional(),
-    weightOz: z.number().finite().min(0).max(16000).optional(),
-    lengthIn: z.number().finite().min(0).max(1000).optional(),
-    widthIn: z.number().finite().min(0).max(1000).optional(),
-    heightIn: z.number().finite().min(0).max(1000).optional(),
-    price: money.optional(),
-    salePrice: money.optional(),
-    marketplaceCategory: z.string().trim().max(300).optional(),
-    marketplaceSubtype: z.string().trim().max(300).optional(),
-    careInstructions: z.string().trim().max(1000).optional(),
-    countryOfOrigin: z.string().trim().max(100).optional(),
-    chokingHazardWarning: z.string().trim().max(500).optional(),
-    prop65Warning: z.string().trim().max(500).optional(),
-    readyToExport: z.boolean().optional(),
-  })
-  .refine((b) => Object.keys(b).length > 0, "empty update");
-
 // ----------------------------------------------------------------- users
 
 const userName = z.string().trim().min(1).max(120);

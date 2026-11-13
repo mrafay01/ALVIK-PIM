@@ -19,15 +19,16 @@ const logger = {
 const PAGE_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
   // Viewable by everyone who works quotes; changing a PO is gated to
   // buying_purchasing in the API (and its controls hidden for others).
-  ["/purchase-orders", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
+  ["/purchase-orders", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
   ["/receiving", ["warehouse_receiving"]],
   ["/admin", []], // administrator only
-  ["/marketplace-export", ["marketplace_listing"]],
   // /catalog itself is read-only for any signed-in user; only the
   // hand-entry form is gated.
-  ["/catalog/new", ["marketplace_listing"]],
+  ["/catalog/new", ["catalog_manager"]],
   ["/catalog/import", []], // Master File import: administrator only
   ["/catalog/flagged", []], // Flagged Master File rows: administrator only
+  // Catalog export (ROLE_SETS.catalogExport): not photography / warehouse.
+  ["/catalog/export", ["buyer_merchandiser", "buying_purchasing", "catalog_manager"]],
   // /settings deliberately has no entry here — firstMatch() returning
   // undefined means "any signed-in role passes" (see the call site below).
   // It's every user's own account page; the admin-only bits it links to
@@ -45,16 +46,18 @@ const API_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
   ["/api/monday/sync", []],
   ["/api/monday/pull", []],
   // Read-only views on the PO detail page (vendor PI files, conversation).
-  ["/api/monday/files", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
-  ["/api/monday/updates", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
+  ["/api/monday/files", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
+  ["/api/monday/updates", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
   ["/api/monday", ["buying_purchasing"]],
-  ["/api/purchase-orders", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
-  ["/api/quotations", ["buying_purchasing", "buyer_merchandiser", "marketplace_listing"]],
-  ["/api/items", ["buyer_merchandiser", "buying_purchasing", "marketplace_listing", "photography"]],
-  ["/api/marketplace-export", ["marketplace_listing"]],
-  // /api/catalog: create is marketplace_listing; the approve sub-route is
+  ["/api/purchase-orders", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
+  ["/api/quotations", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
+  ["/api/items", ["buyer_merchandiser", "buying_purchasing", "catalog_manager", "photography"]],
+  // Catalog export (ROLE_SETS.catalogExport); listed before /api/catalog,
+  // which is narrower, since the first matching prefix wins.
+  ["/api/catalog/export", ["buyer_merchandiser", "buying_purchasing", "catalog_manager"]],
+  // /api/catalog: create is catalog_manager; the approve sub-route is
   // admin-only, enforced in the handler itself.
-  ["/api/catalog", ["marketplace_listing"]],
+  ["/api/catalog", ["catalog_manager"]],
   // /api/users (self-service notification prefs) deliberately has no entry
   // — any signed-in role passes, same reasoning as /settings above.
 ];
@@ -257,7 +260,6 @@ export const config = {
     "/catalog/:path*",
     "/receiving/:path*",
     "/admin/:path*",
-    "/marketplace-export/:path*",
     "/settings/:path*",
     "/help/:path*",
     "/images/:path*",
@@ -267,7 +269,6 @@ export const config = {
     "/api/quotations/:path*",
     "/api/monday/:path*",
     "/api/admin/:path*",
-    "/api/marketplace-export/:path*",
     "/api/users/:path*",
     "/api/support/:path*",
     "/api/images/:path*",

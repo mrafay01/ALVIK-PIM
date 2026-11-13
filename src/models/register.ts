@@ -18,7 +18,6 @@ import PurchaseOrder from "./PurchaseOrder";
 import SyncLog from "./SyncLog";
 import ImportBatch from "./ImportBatch";
 import ImportBatchRow from "./ImportBatchRow";
-import MarketplaceListing from "./MarketplaceListing";
 import RateLimit from "./RateLimit";
 import Job from "./Job";
 import Migration from "./Migration";
@@ -37,7 +36,6 @@ export const MODELS = {
   SyncLog,
   ImportBatch,
   ImportBatchRow,
-  MarketplaceListing,
   RateLimit,
   Job,
   Migration,

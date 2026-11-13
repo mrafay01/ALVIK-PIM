@@ -7,7 +7,7 @@ import { badRequest } from "@/lib/schemas";
 import ImportBatch from "@/models/ImportBatch";
 import ImportBatchRow from "@/models/ImportBatchRow";
 import { isObjectId } from "@/lib/ids";
-import { commitImportRows, excludeImportRows, updateBatchStatus } from "@/lib/import/commitRows";
+import { commitImportRowsInSlices, excludeImportRows, updateBatchStatus } from "@/lib/import/commitRows";
 import { onReviewPage, scopeFilter, searchFilter } from "@/lib/import/reviewQuery";
 import { refreshCatalogFacets } from "@/lib/catalog/facets";
 
@@ -20,6 +20,8 @@ const BodySchema = z.object({
   rowIds: z.array(z.string().regex(/^[a-f0-9]{24}$/i)).max(5000).optional(),
   // The review page's search box, so "all"/"flagged"/"unflagged" mean the rows shown.
   q: z.string().max(100).optional(),
+  // commit only: resume a commit from the `next` an earlier call returned.
+  after: z.string().regex(/^[a-f0-9]{24}$/i).optional(),
 });
 
 // POST: the review page's bulk actions on rows still waiting there.
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ bat
   if (!isObjectId(batchId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const parsed = BodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error);
-  const { action, scope, rowIds, q } = parsed.data;
+  const { action, scope, rowIds, q, after } = parsed.data;
   if (scope === "selected" && !rowIds?.length) {
     return NextResponse.json({ error: "Select at least one row" }, { status: 400 });
   }
@@ -53,14 +55,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ bat
     return NextResponse.json({ excluded: await excludeImportRows(filter) });
   }
 
-  // commit: approve the chosen rows, then write exactly those to the catalog.
-  const ids = (await ImportBatchRow.find(filter).select("_id").lean()).map((r) => r._id);
-  if (ids.length === 0) return NextResponse.json({ committed: 0, created: 0, merged: 0, errors: [], remaining: 0 });
-  await ImportBatchRow.updateMany(
-    { _id: { $in: ids } },
-    { $set: { reviewStatus: "approved", reviewedBy: userId, reviewedAt: new Date() } }
-  );
-  const result = await commitImportRows({ _id: { $in: ids } });
-  refreshCatalogFacets();
+  // commit: approve the chosen rows and write them to the catalog, in
+  // slices for up to ~40 s; `next` set means call again with `after: next`.
+  const result = await commitImportRowsInSlices(filter, { reviewedBy: userId, after });
+  if (result.committed > 0) refreshCatalogFacets();
   return NextResponse.json(result);
 }

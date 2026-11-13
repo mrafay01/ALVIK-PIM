@@ -9,7 +9,6 @@ import {
   PackageSearch,
   BookOpenCheck,
   FileSpreadsheet,
-  Store,
   Users,
   ChevronsLeft,
   ChevronsRight,
@@ -23,6 +22,7 @@ import {
   RefreshCw,
   Plus,
   FileUp,
+  FileDown,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -39,7 +39,6 @@ const ICONS = {
   PackageSearch,
   BookOpenCheck,
   FileSpreadsheet,
-  Store,
   Users,
   Settings,
   LifeBuoy,
@@ -48,6 +47,7 @@ const ICONS = {
   RefreshCw,
   Plus,
   FileUp,
+  FileDown,
 };
 
 export type NavIconName = keyof typeof ICONS;

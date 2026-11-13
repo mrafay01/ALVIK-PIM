@@ -5,12 +5,16 @@ import { RefreshCw, TriangleAlert, CheckCircle2, CloudUpload } from "lucide-reac
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PullPlanReview, type PullPlanRow } from "./PullPlanReview";
+import { PULL_IMPORT_CHUNK } from "@/lib/monday/pullLimits";
 
 interface PullPlan {
   rows: PullPlanRow[];
-  toUpdate: number;
-  toCreate: number;
-  skipped: number;
+}
+
+interface PullPreviewSlice {
+  rows: PullPlanRow[];
+  cursor: string | null;
+  boardItemCount: number | null;
 }
 
 interface PullCommitResult {
@@ -138,6 +142,8 @@ function SharePointArchive({ autoStartKey, recheckKey }: { autoStartKey: number;
 export function MondayPullPanel() {
   const [plan, setPlan] = useState<PullPlan | null>(null);
   const [loading, setLoading] = useState(false);
+  // "1,500 of 7,398" while the board is read / the import runs.
+  const [progress, setProgress] = useState<string | null>(null);
   const [committing, setCommitting] = useState(false);
   const [result, setResult] = useState<PullCommitResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,48 +152,100 @@ export function MondayPullPanel() {
   const [archiveCheck, setArchiveCheck] = useState(0);
   const [planVersion, setPlanVersion] = useState(0);
 
+  // The board is too big to read in one request, so it's read in slices:
+  // each call returns some rows plus a cursor for the next call.
   async function runPreview() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setPlan(null);
+    setProgress(null);
+    const rows: PullPlanRow[] = [];
+    let total: number | null = null;
+    let cursor: string | null = null;
     try {
-      const res = await fetch("/api/monday/pull");
-      if (!res.ok) {
+      do {
+        let res: Response;
+        try {
+          res = await fetch(`/api/monday/pull${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
+        } catch {
+          throw new Error("Couldn't reach the server. Try the preview again.");
+        }
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? `Preview failed (${res.status})`);
-      }
-      setPlan(await res.json());
+        if (!res.ok) throw new Error(data.error ?? `Preview failed (${res.status})`);
+        const slice = data as PullPreviewSlice;
+        rows.push(...slice.rows);
+        total = slice.boardItemCount ?? total;
+        cursor = slice.cursor;
+        setProgress(total ? `${rows.length.toLocaleString()} of ${total.toLocaleString()}` : rows.length.toLocaleString());
+      } while (cursor);
+      setPlan({ rows });
       setPlanVersion((v) => v + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   }
 
+  // Sent in chunks of PULL_IMPORT_CHUNK board items, one request each, so
+  // every request stays inside the server's time limit. Re-importing an
+  // item is harmless (it updates the same PO), so after a failure the
+  // reviewer can simply run the import again.
   async function commit(mondayItemIds: string[], saveFiles: boolean) {
     if (!plan) return;
     setCommitting(true);
     setError(null);
+    setResult(null);
+    const sum: PullCommitResult = { processed: 0, updated: 0, created: 0, skipped: 0, errored: 0, errors: [] };
+    let done = 0;
+    setProgress(`0 of ${mondayItemIds.length.toLocaleString()}`);
     try {
-      const res = await fetch("/api/monday/pull", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mondayItemIds }),
-      });
-      if (!res.ok) {
+      for (let i = 0; i < mondayItemIds.length; i += PULL_IMPORT_CHUNK) {
+        const chunk = mondayItemIds.slice(i, i + PULL_IMPORT_CHUNK);
+        let res: Response;
+        try {
+          res = await fetch("/api/monday/pull", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mondayItemIds: chunk }),
+          });
+        } catch {
+          throw new Error("Couldn't reach the server.");
+        }
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? `Import failed (${res.status})`);
+        if (!res.ok) throw new Error(data.error ?? `Import failed (${res.status})`);
+        const r = data as PullCommitResult;
+        sum.processed += r.processed;
+        sum.updated += r.updated;
+        sum.created += r.created;
+        sum.skipped += r.skipped;
+        sum.errored += r.errored;
+        sum.errors.push(...r.errors);
+        done += chunk.length;
+        setProgress(`${done.toLocaleString()} of ${mondayItemIds.length.toLocaleString()}`);
       }
-      setResult(await res.json());
+      setResult(sum);
       setPlan(null);
       // "Also save PO files to SharePoint" was ticked: copy them now.
       if (saveFiles) setArchiveRun((n) => n + 1);
       else setArchiveCheck((n) => n + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setError(
+        done > 0
+          ? `The import stopped after ${done.toLocaleString()} of ${mondayItemIds.length.toLocaleString()} items: ${message} ` +
+              "Those already imported are saved; run the import again to finish the rest."
+          : message
+      );
+      if (done > 0) {
+        setResult(sum);
+        setArchiveCheck((n) => n + 1);
+      }
     } finally {
       setCommitting(false);
+      setProgress(null);
     }
   }
 
@@ -210,7 +268,7 @@ export function MondayPullPanel() {
           <Button variant="primary" disabled={loading} onClick={runPreview}>
             <span className="flex items-center gap-1.5">
               <RefreshCw size={15} className={loading ? "spin" : undefined} />
-              {loading ? "Reading board…" : "Preview import"}
+              {loading ? `Reading board…${progress ? ` ${progress}` : ""}` : "Preview import"}
             </span>
           </Button>
         </div>
@@ -253,6 +311,7 @@ export function MondayPullPanel() {
           key={planVersion}
           rows={plan.rows}
           committing={committing}
+          progress={committing ? progress : null}
           onApply={commit}
         />
       )}

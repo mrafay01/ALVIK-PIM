@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 // Catalog-visibility switch — independent of the lifecycle status. An
-// inactive item stays in the catalog and everywhere else in the app, it's
-// just excluded from marketplace export (see Item.active).
+// inactive item stays in the catalog and everywhere else in the app, and
+// shows on the Catalog's "Inactive" tab (see Item.active).
 export function ItemActiveToggle({
   itemId,
   active,

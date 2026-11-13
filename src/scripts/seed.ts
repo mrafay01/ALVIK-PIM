@@ -18,7 +18,7 @@ const ROLE_SEED_USERS: { role: Role; name: string; emailLocalPart: string }[] = 
   { role: "buying_purchasing", name: "Buying Purchasing", emailLocalPart: "purchasing" },
   { role: "warehouse_receiving", name: "Warehouse Receiving", emailLocalPart: "warehouse" },
   { role: "photography", name: "Photography", emailLocalPart: "photography" },
-  { role: "marketplace_listing", name: "Marketplace Listing", emailLocalPart: "marketplace" },
+  { role: "catalog_manager", name: "Catalog Manager", emailLocalPart: "catalog" },
 ];
 
 // Vendor names confirmed from the real Monday.com board exports (§5 of the
