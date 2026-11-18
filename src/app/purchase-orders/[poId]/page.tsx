@@ -27,7 +27,6 @@ import { PoActions } from "./PoActions";
 import { PoChecklist } from "./PoChecklist";
 import { MondayUpdates } from "./MondayUpdates";
 import { CopyPoFilesButton } from "./CopyPoFilesButton";
-import { poFolder } from "@/lib/purchase-orders/files";
 
 function fmtDate(d: Date | string | null | undefined): string {
   if (!d) return "—";
@@ -103,7 +102,7 @@ export default async function PurchaseOrderDetailPage({
         )}
         {po.mondayStatusText && po.mondayStatusMapped === false && !closedLabel && (
           <span
-            title="This board item's Monday status has no equivalent in this app's pipeline, so the pipeline status above wasn't moved by it; this is the board's exact current status"
+            title="Status as shown on the board"
             className="flex items-center gap-1.5 text-[0.78rem] px-2.5 py-1 rounded-full bg-warn-bg text-warn"
           >
             <TriangleAlert size={13} /> Board status: {po.mondayStatusText}
@@ -123,7 +122,7 @@ export default async function PurchaseOrderDetailPage({
                 href={`https://view.monday.com/boards/${MONDAY_BOARD_ID}/pulses/${po.mondayItemId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[0.75rem] text-brass no-underline"
+                className="flex items-center gap-1 text-[0.75rem] text-brand no-underline"
               >
                 <ExternalLink size={12} /> View on Monday
               </a>
@@ -260,13 +259,11 @@ export default async function PurchaseOrderDetailPage({
         <p className="text-[0.82rem] text-ink-soft mb-3">
           {checklistLocked ? (
             <>
-              This PO is at <strong>{PO_STATUS_LABEL[po.status as keyof typeof PO_STATUS_LABEL]}</strong>, so a
-              completed item can&apos;t be changed back. Move the PO back a stage first if it needs to change.
+              Locked at <strong>{PO_STATUS_LABEL[po.status as keyof typeof PO_STATUS_LABEL]}</strong>.
             </>
           ) : (
             <>
-              A purchase order can&apos;t move to <strong>Ready to ship</strong> until all six are complete;
-              enforced by the server, not just this screen.
+              All six are needed before <strong>Ready to ship</strong>.
             </>
           )}
         </p>
@@ -282,13 +279,12 @@ export default async function PurchaseOrderDetailPage({
       {quotes.length > 0 && (
         <Card className="mb-5">
           <h2 className="text-[0.95rem] mb-1">Created from vendor quote{quotes.length === 1 ? "" : "s"}</h2>
-          <p className="text-[0.8rem] text-ink-faint mb-3">The quotes whose committed rows became this PO&apos;s line items.</p>
           <div className="flex flex-col gap-1.5">
             {quotes.map((q) => (
               <Link
                 key={String(q._id)}
                 href={`/purchase-orders/quotes/${String(q._id)}`}
-                className="flex items-center gap-2 text-[0.85rem] text-brass no-underline py-1"
+                className="flex items-center gap-2 text-[0.85rem] text-brand no-underline py-1"
               >
                 <FileSpreadsheet size={14} />
                 {q.sourceFileName || q.poNumber || `Quote ${String(q._id).slice(-6)}`}
@@ -310,16 +306,12 @@ export default async function PurchaseOrderDetailPage({
                 href={po.sharePointFolderUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-[0.82rem] text-brass no-underline"
+                className="flex items-center gap-1.5 text-[0.82rem] text-brand no-underline"
               >
                 <ExternalLink size={13} /> Open folder in SharePoint
               </a>
             )}
           </div>
-          <p className="text-[0.8rem] text-ink-faint mb-3">
-            Every PO file, whether uploaded here or attached on Monday, is kept in SharePoint under{" "}
-            {poFolder(po.poNumber).join("/")}, and opens from there.
-          </p>
           {waitingCount > 0 && (
             <div className="flex items-center justify-between gap-3 flex-wrap mb-3 rounded-md bg-warn-bg px-3 py-2.5">
               <span className="text-[0.82rem] text-warn">
@@ -335,7 +327,7 @@ export default async function PurchaseOrderDetailPage({
                 href={f.webUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-[0.85rem] text-brass no-underline py-1.5"
+                className="flex items-center gap-2 text-[0.85rem] text-brand no-underline py-1.5"
               >
                 <FileSpreadsheet size={14} /> {f.name}
                 <span className="text-[0.75rem] text-ink-faint">
@@ -352,7 +344,7 @@ export default async function PurchaseOrderDetailPage({
                     href={`/api/monday/files/${f.assetId}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[0.75rem] text-brass no-underline"
+                    className="text-[0.75rem] text-brand no-underline"
                   >
                     Try opening it on Monday
                   </a>

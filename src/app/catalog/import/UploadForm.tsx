@@ -78,10 +78,10 @@ export function UploadForm() {
           pick(e.dataTransfer.files?.[0]);
         }}
         className={`flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-6 py-10 text-center cursor-pointer transition-colors duration-150 ${
-          dragging ? "border-brass bg-brass-bg" : "border-border-strong bg-surface-sunken hover:border-brass"
+          dragging ? "border-brand bg-brand-bg" : "border-border-strong bg-surface-sunken hover:border-brand"
         }`}
       >
-        <UploadCloud size={28} className={dragging ? "text-brass" : "text-ink-faint"} />
+        <UploadCloud size={28} className={dragging ? "text-brand" : "text-ink-faint"} />
         <div className="text-[0.92rem] font-semibold text-ink">Drop the Master File here, or click to browse</div>
         <div className="text-[0.8rem] text-ink-faint">Excel .xlsx or .xls</div>
         <input
@@ -96,7 +96,7 @@ export function UploadForm() {
       {file && (
         <div className="flex items-center gap-3 flex-wrap">
           <span className="inline-flex items-center gap-2 text-[0.85rem] px-3 py-2 rounded-sm bg-surface-sunken border border-border">
-            <FileSpreadsheet size={15} className="text-brass" />
+            <FileSpreadsheet size={15} className="text-brand" />
             <span className="font-medium">{file.name}</span>
             <span className="text-ink-faint">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
             {!uploading && (

@@ -33,7 +33,7 @@ export function PageSkeleton() {
           <Bone className="h-4 w-full max-w-[68ch] mb-2" />
           <Bone className="h-4 w-2/3 max-w-[50ch] mb-8" />
 
-          <div className="grid grid-cols-4 gap-3.5 mb-7">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-7">
             {Array.from({ length: 4 }).map((_, i) => (
               <Bone key={i} className="h-[86px]" />
             ))}

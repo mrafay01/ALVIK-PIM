@@ -98,10 +98,7 @@ function SharePointArchive({ autoStartKey, recheckKey }: { autoStartKey: number;
             <CloudUpload size={16} /> PO files in SharePoint
           </h2>
           <p className="text-[0.85rem] text-ink-soft m-0 max-w-[620px]">
-            The PO files attached on Monday are saved in SharePoint for good, one folder per PO (named after
-            the PO), newest POs first. Everyone then opens them from SharePoint in this app. This runs after an
-            import when &quot;Also save PO files to SharePoint&quot; is ticked, and you can start it here any time.
-            You can close this page; it picks up where it stopped.
+            Copies PO files from Monday into SharePoint. Safe to close; it resumes.
           </p>
           <p className="text-[0.85rem] mt-2 mb-0">
             {remaining == null
@@ -256,13 +253,7 @@ export function MondayPullPanel() {
           <div>
             <h2 className="text-base mb-1">Pull updates from Monday.com</h2>
             <p className="text-[0.85rem] text-ink-soft m-0 max-w-[560px]">
-              Reads every item on the live Purchase Orders board (status, checklist progress, PO totals, dates,
-              priority, tracking, and vendor-uploaded PI files) and shows what would change before anything is
-              written. Never modifies the Monday board. A vendor name on the board that doesn&apos;t exist in
-              PIM yet is created automatically (matched by exact name, so it&apos;s never duplicated). The
-              board&apos;s exact status label is always captured, even when it&apos;s a side-lane state (Stuck,
-              Canceled, On Hold, …) with no equivalent in this app&apos;s pipeline; only an item with no vendor
-              set at all is skipped.
+              Preview changes from the board before importing. Monday itself is never changed.
             </p>
           </div>
           <Button variant="primary" disabled={loading} onClick={runPreview}>

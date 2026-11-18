@@ -102,7 +102,7 @@ export function PoChecklist({
                   disabled={busyField === field}
                   onChange={(e) => update(field, e.target.value)}
                   aria-label={`${checklistLabel(field)} status`}
-                  className="font-body text-[0.82rem] px-2.5 py-1.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass disabled:opacity-60"
+                  className="font-body text-[0.82rem] px-2.5 py-1.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brand disabled:opacity-60"
                 >
                   {options.map((o) => (
                     <option key={o} value={o}>

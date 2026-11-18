@@ -189,10 +189,6 @@ export function MeasurementFieldsEditor({
         <h3 className="text-[0.85rem] font-semibold text-ink-faint uppercase tracking-wide m-0 mb-3.5">
           Unparsed / raw measurement text
         </h3>
-        <p className="text-ink-faint text-[0.78rem] mb-3 mt-0">
-          A catch-all for supplier text that doesn&apos;t cleanly map to one of the fields above (e.g.
-          combined dimensions like &quot;5x4mm&quot; from an import), kept instead of dropped or guessed.
-        </p>
         <Field label="Raw measurement note">
           <Input value={value.raw ?? ""} onChange={(e) => onChange({ ...value, raw: e.target.value })} />
         </Field>
@@ -214,7 +210,7 @@ function groupFields(fields: MeasurementFieldConfig[]): [FieldGroup, Measurement
 function SectionHeader({ hint }: { hint?: string }) {
   return (
     <div className="flex items-center gap-2 mb-1">
-      <span className="text-brass shrink-0 flex items-center">
+      <span className="text-brand shrink-0 flex items-center">
         <Ruler size={16} />
       </span>
       <h2 className="text-[0.92rem] font-semibold m-0">Measurements</h2>
@@ -238,7 +234,7 @@ function ToggleField({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="w-4 h-4 accent-[var(--brass)]"
+        className="w-4 h-4 accent-[var(--brand-fill)]"
       />
       {label}
     </label>

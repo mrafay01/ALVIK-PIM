@@ -55,7 +55,7 @@ function cmpPo(a: PullPlanRow, b: PullPlanRow) {
 }
 
 function actionTone(action: PullPlanRow["action"]) {
-  if (action === "update") return "brass" as const;
+  if (action === "update") return "brand" as const;
   if (action === "create") return "good" as const;
   return "neutral" as const;
 }
@@ -214,7 +214,7 @@ export function PullPlanReview({
                 value={q}
                 onChange={(e) => resetPageAnd(setQ)(e.target.value)}
                 placeholder="PO #, vendor, tracking, status…"
-                className="font-body text-[0.88rem] pl-8 pr-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brass"
+                className="font-body text-[0.88rem] pl-8 pr-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brand"
               />
             </span>
           </label>
@@ -264,7 +264,7 @@ export function PullPlanReview({
               type="checkbox"
               checked={onlyChanges}
               onChange={(e) => resetPageAnd(setOnlyChanges)(e.target.checked)}
-              className="w-4 h-4 accent-[var(--brass)]"
+              className="w-4 h-4 accent-[var(--brand-fill)]"
             />
             Only new POs or status changes
           </label>
@@ -309,7 +309,7 @@ export function PullPlanReview({
                     aria-label="Select all shown rows"
                     checked={allShownSelected}
                     onChange={(e) => setShown(e.target.checked)}
-                    className="w-4 h-4 accent-[var(--brass)]"
+                    className="w-4 h-4 accent-[var(--brand-fill)]"
                   />
                 </th>
                 {[
@@ -360,7 +360,7 @@ export function PullPlanReview({
                         checked={isSel}
                         disabled={skip}
                         onChange={() => toggle(row.mondayItemId)}
-                        className="w-4 h-4 accent-[var(--brass)] disabled:opacity-40"
+                        className="w-4 h-4 accent-[var(--brand-fill)] disabled:opacity-40"
                       />
                     </td>
                     <td className="px-3.5 py-2.5 font-mono text-[0.82rem] font-semibold">{row.mondayItemName}</td>
@@ -372,7 +372,7 @@ export function PullPlanReview({
                       {!row.vendorMatched && row.vendorName && (
                         <span
                           title={`"${row.vendorName}" will be created automatically on import`}
-                          className="ml-1.5 inline-flex items-center gap-1 align-[-1px] text-[0.72rem] text-brass"
+                          className="ml-1.5 inline-flex items-center gap-1 align-[-1px] text-[0.72rem] text-brand"
                         >
                           <UserPlus size={12} /> new
                         </span>
@@ -382,7 +382,7 @@ export function PullPlanReview({
                       {row.statusText ?? "—"}
                       {row.statusText && !row.mappedStatus && (
                         <span
-                          title="No pipeline-status equivalent; stored as-is, pipeline status left unchanged"
+                          title="Kept as shown on the board"
                           className="ml-1.5 inline-flex items-center gap-1 align-[-1px] text-[0.72rem] text-warn"
                         >
                           <TriangleAlert size={12} /> unmapped
@@ -391,7 +391,7 @@ export function PullPlanReview({
                     </td>
                     <td className="px-3.5 py-2.5 text-[0.83rem]">
                       {row.mappedStatus ? (
-                        <span className={row.statusChanged ? "text-brass font-semibold" : "text-ink-soft"}>
+                        <span className={row.statusChanged ? "text-brand font-semibold" : "text-ink-soft"}>
                           {row.mappedStatus.replace(/_/g, " ")}
                         </span>
                       ) : (

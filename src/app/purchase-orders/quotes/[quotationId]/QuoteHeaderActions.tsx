@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ClipboardList, Trash2, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ErrorText } from "@/components/ui/Field";
+import { buttonClasses } from "@/components/ui/buttonStyles";
 
 export function QuoteHeaderActions({
   quotationId,
@@ -59,7 +60,7 @@ export function QuoteHeaderActions({
       {purchaseOrderId && (
         <Link
           href={`/purchase-orders/${purchaseOrderId}`}
-          className="flex items-center gap-1.5 font-body font-semibold text-[0.85rem] px-3.5 py-2 rounded-sm bg-brass-bg text-brass border border-[color:var(--brass-glow)] no-underline hover:brightness-110"
+          className="flex items-center gap-1.5 font-display font-semibold text-[0.85rem] px-4 py-2 rounded-full bg-brand-bg text-brand border border-[color:var(--brand-glow)] no-underline hover:brightness-110"
         >
           <ClipboardList size={14} /> View purchase order{poNumber ? ` ${poNumber}` : ""}
         </Link>
@@ -69,7 +70,7 @@ export function QuoteHeaderActions({
           href={fileUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 font-body font-semibold text-[0.85rem] px-3.5 py-2 rounded-sm bg-surface-sunken text-ink-soft border border-border no-underline hover:text-brass"
+          className={buttonClasses("secondary", "sm")}
         >
           <FileSpreadsheet size={14} /> Open {fileName ?? "file"} in SharePoint
         </a>

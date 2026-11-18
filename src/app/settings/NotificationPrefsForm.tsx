@@ -36,7 +36,7 @@ function Toggle({
       onClick={onChange}
       className={`relative w-[42px] h-[24px] rounded-full shrink-0 border transition-colors duration-150 ${
         disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-      } ${checked ? "bg-brass border-brass" : "bg-surface-sunken border-border-strong"}`}
+      } ${checked ? "bg-brand-fill border-brand-fill" : "bg-surface-sunken border-border-strong"}`}
     >
       <span
         className={`absolute top-[2px] w-[18px] h-[18px] rounded-full bg-surface shadow-sm transition-[left] duration-150 ${

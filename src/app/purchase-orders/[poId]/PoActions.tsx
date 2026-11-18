@@ -121,8 +121,7 @@ export function PoActions({
         <h2 className="text-[0.95rem] mb-2">Actions</h2>
         <p className="text-[0.85rem] text-ink-soft flex items-start gap-2 m-0">
           <Lock size={15} className="mt-0.5 shrink-0" />
-          This PO is marked <strong className="text-ink">&nbsp;{closedLabel}&nbsp;</strong> on Monday, so it&apos;s
-          finished; its stage can&apos;t be changed here.
+          Closed as <strong className="text-ink">&nbsp;{closedLabel}</strong>.
         </p>
       </Card>
     );

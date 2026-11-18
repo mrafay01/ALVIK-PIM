@@ -130,7 +130,7 @@ export function ReviewTable({
             <Link
               key={c.label}
               href={c.href}
-              className="rounded-md border border-border bg-surface-raised px-4 py-3 no-underline hover:border-brass"
+              className="rounded-md border border-border bg-surface-raised px-4 py-3 no-underline hover:border-brand"
             >
               {inner}
             </Link>
@@ -183,8 +183,8 @@ export function ReviewTable({
           </Button>
         </div>
         <p className="mt-3 mb-0 text-[0.8rem] text-ink-faint">
-          Rows sent to <Link href="/catalog/flagged" className="text-brass no-underline">Flagged Items</Link> are
-          kept there to be fixed and committed later.{q ? " Buttons act on the rows matching your search." : ""}
+          Flagged rows go to <Link href="/catalog/flagged" className="text-brand no-underline">Flagged Items</Link>.
+          {q ? " Buttons act on rows matching your search." : ""}
         </p>
         {result && (
           <p className={`mt-2.5 mb-0 text-[0.84rem] ${result.tone === "good" ? "text-good" : "text-critical"}`}>
@@ -210,14 +210,14 @@ export function ReviewTable({
                 );
               }}
               placeholder="Find rows by SKU or title, then tick them to commit"
-              className="font-body text-[0.88rem] pl-8 pr-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brass"
+              className="font-body text-[0.88rem] pl-8 pr-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brand"
             />
           </span>
         </label>
       </Card>
 
       {selected.size > 0 && (
-        <Card className="!border-brass flex flex-wrap items-center gap-2.5">
+        <Card className="!border-brand flex flex-wrap items-center gap-2.5">
           <span className="mr-1 text-[0.86rem] font-semibold">{selected.size} selected</span>
           <Button
             size="sm"
@@ -263,7 +263,7 @@ export function ReviewTable({
               {counts.parked > 0 && (
                 <Link
                   href="/catalog/flagged"
-                  className="inline-flex items-center gap-1 text-[0.86rem] font-semibold text-brass no-underline"
+                  className="inline-flex items-center gap-1 text-[0.86rem] font-semibold text-brand no-underline"
                 >
                   {counts.parked} still in Flagged Items <ArrowRight size={14} />
                 </Link>
@@ -283,7 +283,7 @@ export function ReviewTable({
                       aria-label="Select every row on this page"
                       checked={allOnPage}
                       onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r._id)) : new Set())}
-                      className="w-4 h-4 accent-[var(--brass)]"
+                      className="w-4 h-4 accent-[var(--brand-fill)]"
                     />
                   </th>
                   {["Row", "SKU", "Title", "Category", "Brand", "MSRP", "Issues"].map((h) => (
@@ -300,7 +300,7 @@ export function ReviewTable({
                 {rows.map((row) => {
                   const isSel = selected.has(row._id);
                   return (
-                    <tr key={row._id} className={`border-b border-border align-top ${isSel ? "bg-brass-bg" : ""}`}>
+                    <tr key={row._id} className={`border-b border-border align-top ${isSel ? "bg-brand-bg" : ""}`}>
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
@@ -314,7 +314,7 @@ export function ReviewTable({
                               return next;
                             })
                           }
-                          className="w-4 h-4 accent-[var(--brass)]"
+                          className="w-4 h-4 accent-[var(--brand-fill)]"
                         />
                       </td>
                       <td className="px-4 py-3 font-mono text-[0.82rem] text-ink-faint">{row.rowNumber}</td>

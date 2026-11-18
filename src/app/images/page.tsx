@@ -127,15 +127,13 @@ export default async function ImagesPage({
   return (
     <AppShell activeHref="/images" eyebrow="Digital assets" title="Images">
       <p className="text-ink-soft max-w-[72ch] mb-5 text-[0.92rem]">
-        Every item&apos;s main, side and model images, plus optional lifestyle shots and video clips, in SharePoint:
-        which links work, which are broken (the file is no longer in SharePoint) and which are missing.
-        {canUpload ? " Upload straight from here; files are renamed and filed into the right folder for you." : ""}
+        Photos and videos for every item, and which are missing.
       </p>
 
       {total === 0 && statusCounts.all === 0 && !q ? (
         <Card>
           <p className="text-ink-faint m-0 text-[0.88rem]">
-            No items with a SKU yet. Items appear here once they have a sample SKU or item number.
+            No items with a SKU yet.
           </p>
         </Card>
       ) : (

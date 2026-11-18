@@ -4,10 +4,10 @@ import { ArrowRight, ArrowUpRight } from "lucide-react";
 
 // Building blocks for the dashboard. Server components; no client JS.
 
-type Tone = "brass" | "good" | "warn" | "critical" | "neutral";
+type Tone = "brand" | "good" | "warn" | "critical" | "neutral";
 
 const TONE: Record<Tone, { chip: string; text: string; bar: string }> = {
-  brass: { chip: "bg-brass-bg text-brass", text: "text-brass", bar: "var(--brass)" },
+  brand: { chip: "bg-brand-bg text-brand", text: "text-brand", bar: "var(--brand-fill)" },
   good: { chip: "bg-good-bg text-good", text: "text-good", bar: "var(--good)" },
   warn: { chip: "bg-warn-bg text-warn", text: "text-warn", bar: "var(--warn)" },
   critical: { chip: "bg-critical-bg text-critical", text: "text-critical", bar: "var(--critical)" },
@@ -21,7 +21,7 @@ export function KpiTile({
   value,
   sub,
   subTone = "neutral",
-  tone = "brass",
+  tone = "brand",
 }: {
   href: string;
   icon: LucideIcon;
@@ -34,7 +34,7 @@ export function KpiTile({
   return (
     <Link
       href={href}
-      className="group relative flex flex-col gap-3 rounded-lg border border-border bg-surface-raised p-5 no-underline shadow-sm transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-brass hover:shadow-md"
+      className="group relative flex flex-col gap-3 rounded-lg border border-border bg-surface-raised p-5 no-underline shadow-sm transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-brand hover:shadow-md"
     >
       <div className="flex items-center justify-between">
         <span className={`flex items-center justify-center w-9 h-9 rounded-md ${TONE[tone].chip}`}>
@@ -81,7 +81,7 @@ export function Panel({
         {href && (
           <Link
             href={href}
-            className="inline-flex shrink-0 items-center gap-1 text-[0.78rem] font-semibold text-ink-faint no-underline hover:text-brass"
+            className="inline-flex shrink-0 items-center gap-1 text-[0.78rem] font-semibold text-ink-faint no-underline hover:text-brand"
           >
             {linkLabel} <ArrowRight size={13} />
           </Link>
@@ -105,10 +105,10 @@ export function PipelineFlow({
         <Link
           key={s.key}
           href={s.href}
-          className="group flex flex-col justify-between gap-3 rounded-md border border-border bg-surface px-3 py-3 no-underline transition-colors duration-150 hover:border-brass min-h-[108px]"
+          className="group flex flex-col justify-between gap-3 rounded-md border border-border bg-surface px-3 py-3 no-underline transition-colors duration-150 hover:border-brand min-h-[108px]"
         >
           <div className="flex items-center gap-1.5 text-[0.66rem] font-semibold uppercase tracking-wide text-ink-faint">
-            <span className="font-mono text-brass">{String(i + 1).padStart(2, "0")}</span>
+            <span className="font-mono text-brand">{String(i + 1).padStart(2, "0")}</span>
           </div>
           <div>
             <div className="font-display text-[1.45rem] font-semibold leading-none text-ink tabular-nums">{s.count}</div>
@@ -117,7 +117,7 @@ export function PipelineFlow({
           <div className="h-1 w-full rounded-full bg-surface-sunken overflow-hidden">
             <div
               className="h-full rounded-full"
-              style={{ width: `${(s.count / max) * 100}%`, background: s.count ? "var(--brass)" : "transparent" }}
+              style={{ width: `${(s.count / max) * 100}%`, background: s.count ? "var(--brand-fill)" : "transparent" }}
             />
           </div>
         </Link>
@@ -157,7 +157,7 @@ export function AttentionList({
               <span className="block truncate text-[0.74rem] text-ink-faint">{i.detail}</span>
             </span>
             <span className={`font-mono text-[0.95rem] font-semibold tabular-nums ${TONE[i.tone].text}`}>{i.count}</span>
-            <ArrowRight size={14} className="shrink-0 text-ink-faint group-hover:text-brass" />
+            <ArrowRight size={14} className="shrink-0 text-ink-faint group-hover:text-brand" />
           </Link>
         </li>
       ))}
@@ -214,7 +214,7 @@ export function CoverageBar({ label, value, total }: { label: string; value: num
         </span>
       </div>
       <div className="h-2 w-full rounded-full bg-surface-sunken overflow-hidden">
-        <div className="h-full rounded-full bg-brass" style={{ width: `${pct}%` }} />
+        <div className="h-full rounded-full bg-brand-fill" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

@@ -27,23 +27,23 @@ export default function GlobalError({
           alignItems: "center",
           justifyContent: "center",
           fontFamily: "system-ui, sans-serif",
-          background: "#0e0d0b",
-          color: "#f2f0ec",
+          background: "#0c0d10",
+          color: "#f1f1ef",
         }}
       >
         <div style={{ textAlign: "center", maxWidth: 420, padding: 24 }}>
           <h1 style={{ fontSize: "1.25rem", marginBottom: 8 }}>Something went wrong</h1>
-          <p style={{ color: "#c7c4bd", fontSize: "0.9rem", marginBottom: 20 }}>
+          <p style={{ color: "#c4c6cc", fontSize: "0.9rem", marginBottom: 20 }}>
             The application hit an unexpected error. Try reloading.
           </p>
           <button
             onClick={() => reset()}
             style={{
-              padding: "10px 18px",
-              borderRadius: 8,
-              border: "1px solid #d9ac45",
-              background: "#d9ac45",
-              color: "#241a06",
+              padding: "11px 22px",
+              borderRadius: 999,
+              border: "1px solid #8dca37",
+              background: "#8dca37",
+              color: "#17202b",
               fontWeight: 600,
               cursor: "pointer",
             }}

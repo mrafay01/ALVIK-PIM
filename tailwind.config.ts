@@ -1,7 +1,8 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 /**
- * CZC PIM — Tailwind theme
+ * Alvik PIM — Tailwind theme
  * Maps directly onto the CSS custom-property tokens defined in
  * src/app/globals.css. Colors/radii/shadows resolve through var(--token)
  * so the existing dark-first / [data-theme="light"] switching keeps
@@ -26,11 +27,14 @@ export default {
         border: "var(--border)",
         "border-strong": "var(--border-strong)",
 
-        brass: "var(--brass)",
-        "brass-soft": "var(--brass-soft)",
-        "brass-bg": "var(--brass-bg)",
-        "brass-hover": "var(--brass-hover)",
-        "on-brass": "var(--on-brass)",
+        brand: "var(--brand)",
+        "brand-soft": "var(--brand-soft)",
+        "brand-bg": "var(--brand-bg)",
+        "brand-hover": "var(--brand-hover)",
+        "on-brand": "var(--on-brand)",
+        // Solid green fills (primary buttons, bars, toggles). Text uses `brand`.
+        "brand-fill": "var(--brand-fill)",
+        "brand-fill-hover": "var(--brand-fill-hover)",
 
         "navy-deep": "var(--navy-deep)",
         "navy-soft": "var(--navy-soft)",
@@ -57,11 +61,21 @@ export default {
         sm: "var(--shadow-sm)",
         md: "var(--shadow-md)",
         lg: "var(--shadow-lg)",
+        btn: "var(--shadow-btn)",
+        "btn-quiet": "var(--shadow-btn-quiet)",
       },
       backgroundColor: {
-        "brass-glow": "var(--brass-glow)",
+        "brand-glow": "var(--brand-glow)",
+        glass: "var(--glass)",
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // `live:` = "not disabled". Lets one class string give hover/press
+    // effects to links and enabled buttons, never to a disabled button
+    // (src/components/ui/buttonStyles.ts).
+    plugin(({ addVariant }) => {
+      addVariant("live", "&:not(:disabled)");
+    }),
+  ],
 } satisfies Config;

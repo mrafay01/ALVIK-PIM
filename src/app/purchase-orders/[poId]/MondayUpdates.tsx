@@ -25,7 +25,7 @@ function timeAgo(iso: string): string {
 function UpdateRow({ update, isReply = false }: { update: MondayUpdate | MondayUpdate["replies"][number]; isReply?: boolean }) {
   return (
     <div className={`flex gap-2.5 py-2.5 ${isReply ? "ml-6" : "border-t border-border"}`}>
-      <span className="w-[26px] h-[26px] rounded-full bg-navy-deep text-brass-soft flex items-center justify-center text-[0.68rem] font-semibold shrink-0 font-mono">
+      <span className="w-[26px] h-[26px] rounded-full bg-navy-deep text-brand-soft flex items-center justify-center text-[0.68rem] font-semibold shrink-0 font-mono">
         {(update.creator?.name ?? "?").slice(0, 2).toUpperCase()}
       </span>
       <div className="min-w-0 flex-1">
@@ -83,7 +83,6 @@ export function MondayUpdates({ mondayItemId }: { mondayItemId: string }) {
           <RefreshCw size={12} /> {loading ? "Loading…" : "Refresh"}
         </button>
       </div>
-      <p className="text-[0.8rem] text-ink-faint mb-1.5">Read-only; fetched live from the board, never stored in PIM.</p>
 
       {error && (
         <div className="flex gap-1.5 items-start text-critical text-[0.83rem] py-2.5">

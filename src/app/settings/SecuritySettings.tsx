@@ -35,8 +35,7 @@ export function SecuritySettings() {
   return (
     <div className="flex flex-col gap-3 max-w-[420px]">
       <p className="text-[0.8rem] text-ink-faint m-0">
-        Ends every other signed-in session for your account, on any other browser or device. This device stays
-        signed in.
+        Signs you out on every other device.
       </p>
       <Button variant="danger" loading={submitting} onClick={handleSignOutEverywhere} className="self-start">
         <span className="flex items-center gap-1.5">

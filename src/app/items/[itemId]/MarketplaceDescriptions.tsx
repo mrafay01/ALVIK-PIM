@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import type { DescriptionPlatform } from "@/lib/enums";
@@ -10,7 +10,7 @@ import { DESCRIPTION_PLATFORM_LABEL } from "@/lib/statusDisplay";
 import { useRefreshAfterSave } from "@/lib/hooks/useRefreshAfterSave";
 
 const textareaClass =
-  "font-body text-[0.86rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)] resize-y min-h-[90px]";
+  "font-body text-[0.86rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-glow)] resize-y min-h-[90px]";
 
 type PlatformEntry = { text: string; overridden: boolean };
 
@@ -67,11 +67,7 @@ export function MarketplaceDescriptions({
   return (
     <Card>
       <h2 className="text-[0.95rem] mb-1.5">Marketplace descriptions</h2>
-      <p className="text-ink-soft text-[0.83rem] mb-3.5">
-        Per-marketplace copy, falling back to the general description above until a platform gets its
-        own. AI-assisted drafting from the title/description is planned; for now these are edited by
-        hand.
-      </p>
+      <p className="text-ink-soft text-[0.83rem] mb-3.5">Optional. Uses the main description if left blank.</p>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
         {DESCRIPTION_PLATFORMS.map((platform) => {
           const draft = drafts[platform];
@@ -119,9 +115,6 @@ export function MarketplaceDescriptions({
         })}
       </div>
       {error && <p className="text-critical text-[0.82rem] mt-3 mb-0">{error}</p>}
-      <p className="flex items-center gap-1.5 text-ink-faint text-[0.76rem] mt-4 mb-0">
-        <Sparkles size={12} /> AI-generated drafts from title/description are coming soon.
-      </p>
     </Card>
   );
 }

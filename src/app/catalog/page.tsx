@@ -236,28 +236,25 @@ export default async function CatalogPage({
   return (
     <AppShell activeHref="/catalog" eyebrow="Finalized database" title="Catalog">
       <p className="text-ink-soft max-w-[68ch] mb-3 text-[0.92rem]">
-        The company&apos;s verified product database: Master File items, hand-added items, and
-        quote items an admin has approved. Vendor-quote items in the pipeline don&apos;t appear here.
-        Click a SKU for the full item.
+        Every approved product. Click a SKU to open it.
       </p>
 
       <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
         <Card className="flex items-center gap-3.5 flex-1 min-w-[320px]">
-          <span className="flex items-center justify-center w-10 h-10 rounded-md bg-brass-bg text-brass shrink-0">
+          <span className="flex items-center justify-center w-10 h-10 rounded-md bg-brand-bg text-brand shrink-0">
             <ShieldCheck size={20} />
           </span>
           <div>
-            <div className="font-semibold text-[0.92rem] mb-1">Complete means all five hold true:</div>
+            <div className="font-semibold text-[0.92rem] mb-1">An item is complete when it has:</div>
             <div className="text-[0.82rem] text-ink-soft">
-              Permanent item number · Category · Metal spec · At least one MSRP entry · All three image
-              subfolders (main, sides, models)
+              Item number · Category · Metal · MSRP · Main, side and model photos
             </div>
           </div>
         </Card>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5">
-        <StatCard label="Catalog items" value={counts.total.toLocaleString()} icon={BookOpenCheck} tone="brass" />
+        <StatCard label="Catalog items" value={counts.total.toLocaleString()} icon={BookOpenCheck} tone="brand" />
         <StatCard
           label="Complete"
           value={`${counts.complete.toLocaleString()}${
@@ -272,7 +269,7 @@ export default async function CatalogPage({
 
       {openImport && (
         <Card className="mb-5 flex items-center gap-3.5">
-          <ListChecks size={18} className="text-brass shrink-0" />
+          <ListChecks size={18} className="text-brand shrink-0" />
           <div className="flex-1 text-[0.86rem]">
             <span className="font-semibold">Master File import waiting for review:</span>{" "}
             <span className="text-ink-soft">
@@ -281,7 +278,7 @@ export default async function CatalogPage({
           </div>
           <Link
             href={`/catalog/import/${openImport._id}`}
-            className="font-body font-semibold text-[0.85rem] px-3.5 py-2 rounded-sm bg-brass-bg text-brass no-underline hover:brightness-110"
+            className="font-display font-semibold text-[0.85rem] px-3.5 py-2 rounded-full bg-brand-bg text-brand no-underline hover:brightness-110"
           >
             Continue review
           </Link>
@@ -296,13 +293,12 @@ export default async function CatalogPage({
               {pendingConflictCount} unresolved conflict{pendingConflictCount === 1 ? "" : "s"} from new PIs
             </div>
             <div className="text-[0.82rem] text-ink-soft">
-              A new PI tried to change weight, size, or vendor SKU on a catalog item. The stored value
-              stays until each one is reviewed.
+              New quotes disagree with catalog values.
             </div>
           </div>
           <Link
             href="/catalog/conflicts"
-            className="font-body font-semibold text-[0.85rem] px-3.5 py-2 rounded-sm bg-warn-bg text-warn border border-warn-bg no-underline hover:brightness-110"
+            className="font-display font-semibold text-[0.85rem] px-3.5 py-2 rounded-full bg-warn-bg text-warn border border-warn-bg no-underline hover:brightness-110"
           >
             Review
           </Link>
@@ -330,7 +326,7 @@ export default async function CatalogPage({
                 active
                   ? t.value === "incomplete"
                     ? "font-semibold bg-warn-bg text-warn"
-                    : "font-semibold bg-brass-bg text-brass"
+                    : "font-semibold bg-brand-bg text-brand"
                   : "font-medium bg-transparent text-ink-soft"
               }`}
             >
@@ -371,111 +367,113 @@ export default async function CatalogPage({
         </Card>
       ) : (
         <Card padding={0}>
-          <table className="w-full border-collapse table-fixed">
-            <colgroup>
-              {canExport && <col className="w-[40px]" />}
-              <col className="w-[11%]" />
-              <col className={canExport ? "w-[13%]" : "w-[16%]"} />
-              <col className="w-[9%]" />
-              <col className="w-[8%]" />
-              <col className="w-[9%]" />
-              <col className="w-[8%]" />
-              <col className="w-[7%]" />
-              <col className="w-[7%]" />
-              <col className="w-[12%]" />
-              <col className="w-[7%]" />
-              <col className="w-[6%]" />
-            </colgroup>
-            <thead>
-              <tr>
-                {canExport && (
-                  <th className={`${TH_CLASS} !px-3`}>
-                    <PageSelect />
-                  </th>
-                )}
-                {["SKU", "Title", "Category", "Brand", "Plating", "UPC", "MSRP", "Status", "Last edited", "Variation?", ""].map(
-                  (h, i) => (
-                    <th key={i} className={i === 6 ? `${TH_CLASS} text-right` : TH_CLASS}>
-                      {h}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] border-collapse table-fixed">
+              <colgroup>
+                {canExport && <col className="w-[40px]" />}
+                <col className="w-[11%]" />
+                <col className={canExport ? "w-[13%]" : "w-[16%]"} />
+                <col className="w-[9%]" />
+                <col className="w-[8%]" />
+                <col className="w-[9%]" />
+                <col className="w-[8%]" />
+                <col className="w-[7%]" />
+                <col className="w-[7%]" />
+                <col className="w-[12%]" />
+                <col className="w-[7%]" />
+                <col className="w-[6%]" />
+              </colgroup>
+              <thead>
+                <tr>
+                  {canExport && (
+                    <th className={`${TH_CLASS} !px-3`}>
+                      <PageSelect />
                     </th>
+                  )}
+                  {["SKU", "Title", "Category", "Brand", "Plating", "UPC", "MSRP", "Status", "Last edited", "Variation?", ""].map(
+                    (h, i) => (
+                      <th key={i} className={i === 6 ? `${TH_CLASS} text-right` : TH_CLASS}>
+                        {h}
+                      </th>
+                    )
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it) => {
+                  const missing = checkMasterRecordComplete(
+                    it as unknown as Parameters<typeof checkMasterRecordComplete>[0]
                   )
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it) => {
-                const missing = checkMasterRecordComplete(
-                  it as unknown as Parameters<typeof checkMasterRecordComplete>[0]
-                )
-                  .filter((c) => !c.ok)
-                  .map((c) => c.reason ?? c.field);
-                const isVariant = !!it.baseSku && familySkuSet.has(it.baseSku);
-                const pending = it.catalogApproval?.status === "pending";
-                return (
-                  <tr key={String(it._id)} className="czc-row border-b border-border">
-                    {canExport && (
-                      <td className={`${TD_CLASS} !px-3`}>
-                        <RowSelect id={String(it._id)} sku={it.itemNumber ?? ""} />
-                      </td>
-                    )}
-                    <td className={`${TD_CLASS} truncate`}>
-                      <a
-                        href={`/items/${it._id}`}
-                        className="font-mono font-semibold text-[0.83rem] text-navy-deep no-underline"
-                      >
-                        {it.itemNumber}
-                      </a>
-                    </td>
-                    <td className={`${TD_CLASS} text-ink truncate`} title={it.title || undefined}>
-                      {it.title || "—"}
-                    </td>
-                    <td className={`${TD_CLASS} text-ink-soft truncate`}>{it.category || "—"}</td>
-                    <td className={`${TD_CLASS} text-ink-soft truncate`}>{it.brand || "—"}</td>
-                    <td
-                      className={`${TD_CLASS} text-ink-soft truncate`}
-                      title={it.specs?.plating || undefined}
-                    >
-                      {it.specs?.plating || "—"}
-                    </td>
-                    <td className={`${TD_CLASS} font-mono text-[0.8rem] truncate`}>{it.upc || "—"}</td>
-                    <td className={`${TD_CLASS} font-mono text-right`}>{money(it.latestMsrp)}</td>
-                    <td className={TD_CLASS}>
-                      <Pill tone={it.active === false ? "neutral" : "good"} dot>
-                        {it.active === false ? "Inactive" : "Active"}
-                      </Pill>
-                    </td>
-                    <td className={`${TD_CLASS} text-ink-soft`}>
-                      <span className="block truncate" title={fmtEditedDate(it.updatedAt)}>
-                        {fmtEditedDate(it.updatedAt)}
-                      </span>
-                      <span className="block text-[0.76rem] text-ink-faint truncate">
-                        {it.lastEditedByName || "—"}
-                      </span>
-                    </td>
-                    <td className={`${TD_CLASS} text-ink-soft`}>
-                      {isVariant ? (
-                        <span className="text-[0.82rem]">
-                          Yes
-                          {it.variantSuffix && <span className="text-ink-faint"> · {it.variantSuffix}</span>}
-                        </span>
-                      ) : (
-                        <span className="text-ink-faint text-[0.82rem]">No</span>
+                    .filter((c) => !c.ok)
+                    .map((c) => c.reason ?? c.field);
+                  const isVariant = !!it.baseSku && familySkuSet.has(it.baseSku);
+                  const pending = it.catalogApproval?.status === "pending";
+                  return (
+                    <tr key={String(it._id)} className="czc-row border-b border-border">
+                      {canExport && (
+                        <td className={`${TD_CLASS} !px-3`}>
+                          <RowSelect id={String(it._id)} sku={it.itemNumber ?? ""} />
+                        </td>
                       )}
-                    </td>
-                    <td className={`${TD_CLASS} !py-2`}>
-                      <CatalogRowFlags
-                        itemId={String(it._id)}
-                        missing={missing}
-                        pending={pending}
-                        canApprove={canApprove}
-                        conflictCount={it.conflictCount ?? 0}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <td className={`${TD_CLASS} truncate`}>
+                        <a
+                          href={`/items/${it._id}`}
+                          className="font-mono font-semibold text-[0.83rem] text-navy-deep no-underline"
+                        >
+                          {it.itemNumber}
+                        </a>
+                      </td>
+                      <td className={`${TD_CLASS} text-ink truncate`} title={it.title || undefined}>
+                        {it.title || "—"}
+                      </td>
+                      <td className={`${TD_CLASS} text-ink-soft truncate`}>{it.category || "—"}</td>
+                      <td className={`${TD_CLASS} text-ink-soft truncate`}>{it.brand || "—"}</td>
+                      <td
+                        className={`${TD_CLASS} text-ink-soft truncate`}
+                        title={it.specs?.plating || undefined}
+                      >
+                        {it.specs?.plating || "—"}
+                      </td>
+                      <td className={`${TD_CLASS} font-mono text-[0.8rem] truncate`}>{it.upc || "—"}</td>
+                      <td className={`${TD_CLASS} font-mono text-right`}>{money(it.latestMsrp)}</td>
+                      <td className={TD_CLASS}>
+                        <Pill tone={it.active === false ? "neutral" : "good"} dot>
+                          {it.active === false ? "Inactive" : "Active"}
+                        </Pill>
+                      </td>
+                      <td className={`${TD_CLASS} text-ink-soft`}>
+                        <span className="block truncate" title={fmtEditedDate(it.updatedAt)}>
+                          {fmtEditedDate(it.updatedAt)}
+                        </span>
+                        <span className="block text-[0.76rem] text-ink-faint truncate">
+                          {it.lastEditedByName || "—"}
+                        </span>
+                      </td>
+                      <td className={`${TD_CLASS} text-ink-soft`}>
+                        {isVariant ? (
+                          <span className="text-[0.82rem]">
+                            Yes
+                            {it.variantSuffix && <span className="text-ink-faint"> · {it.variantSuffix}</span>}
+                          </span>
+                        ) : (
+                          <span className="text-ink-faint text-[0.82rem]">No</span>
+                        )}
+                      </td>
+                      <td className={`${TD_CLASS} !py-2`}>
+                        <CatalogRowFlags
+                          itemId={String(it._id)}
+                          missing={missing}
+                          pending={pending}
+                          canApprove={canApprove}
+                          conflictCount={it.conflictCount ?? 0}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           <div className="px-4 pb-3">
             <Pagination page={page} total={total} basePath="/catalog" query={carryQuery} />
           </div>

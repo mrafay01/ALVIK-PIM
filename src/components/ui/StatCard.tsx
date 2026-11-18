@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 
-const TONE_CLASSES: Record<"neutral" | "brass" | "good" | "warn" | "critical", { icon: string; bg: string }> = {
+const TONE_CLASSES: Record<"neutral" | "brand" | "good" | "warn" | "critical", { icon: string; bg: string }> = {
   neutral: { icon: "text-ink-faint", bg: "bg-neutral-pill" },
-  brass: { icon: "text-brass", bg: "bg-brass-bg" },
+  brand: { icon: "text-brand", bg: "bg-brand-bg" },
   good: { icon: "text-good", bg: "bg-good-bg" },
   warn: { icon: "text-warn", bg: "bg-warn-bg" },
   critical: { icon: "text-critical", bg: "bg-critical-bg" },
@@ -17,7 +17,7 @@ export function StatCard({
   label: string;
   value: string | number;
   icon?: LucideIcon;
-  tone?: "neutral" | "brass" | "good" | "warn" | "critical";
+  tone?: "neutral" | "brand" | "good" | "warn" | "critical";
 }) {
   const t = TONE_CLASSES[tone];
 
@@ -33,15 +33,15 @@ export function StatCard({
       suppressHydrationWarning
     >
       {Icon && (
-        <span className={`flex items-center justify-center w-10 h-10 rounded-sm shrink-0 ${t.bg}`}>
-          <Icon size={19} className={t.icon} strokeWidth={2} />
+        <span className={`flex items-center justify-center w-11 h-11 rounded-[14px] shrink-0 ${t.bg}`}>
+          <Icon size={20} className={t.icon} strokeWidth={2} />
         </span>
       )}
       <div className="min-w-0" suppressHydrationWarning>
-        <div className="text-[0.72rem] font-bold text-ink-faint uppercase tracking-wide mb-0.5" suppressHydrationWarning>
+        <div className="text-[0.78rem] font-semibold text-ink-faint mb-0.5 truncate" suppressHydrationWarning>
           {label}
         </div>
-        <div className="text-2xl font-bold text-ink font-mono leading-tight" suppressHydrationWarning>
+        <div className="text-[1.65rem] font-bold text-ink font-display tabular-nums tracking-tight leading-tight" suppressHydrationWarning>
           {value}
         </div>
       </div>

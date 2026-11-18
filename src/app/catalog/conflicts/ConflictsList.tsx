@@ -97,141 +97,143 @@ export function ConflictsList({ groups }: { groups: Group[] }) {
                 : `${group.conflicts.length} field${group.conflicts.length === 1 ? "" : "s"} to decide`}
             </span>
           </div>
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                {["Field", "Catalog (now)", "Incoming (PI)", "From", "Decide"].map((h) => (
-                  <th
-                    key={h}
-                    className="text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {group.conflicts.map((c) => {
-                const isCustoming = customing === c._id;
-                const isBusy = busy === c._id || (refreshing && lastBusy?.id === c._id);
-                const spinning = (d: string) => isBusy && lastBusy?.id === c._id && lastBusy.decision === d;
-                return (
-                  <tr key={c._id} className="border-b border-border last:border-b-0 align-top">
-                    <td className="px-4 py-3 text-[0.86rem] font-semibold">{c.fieldLabel}</td>
-                    <td className="px-4 py-3 font-mono text-[0.84rem]">
-                      {group.missing ? "—" : formatValue(c.currentValue)}
-                      {!group.missing && formatValue(c.currentValue) !== formatValue(c.catalogValue) && (
-                        <div className="font-body text-[0.74rem] text-ink-faint mt-0.5">
-                          was {formatValue(c.catalogValue)} when the PI came in
-                        </div>
-                      )}
-                      {!group.missing && formatValue(c.currentValue) === formatValue(c.incomingValue) && (
-                        <div className="font-body text-[0.74rem] text-good mt-0.5">Already matches the PI</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[0.84rem] text-warn">
-                      {formatValue(c.incomingValue)}
-                    </td>
-                    <td className="px-4 py-3 text-[0.8rem] text-ink-soft">
-                      {c.quotationId ? (
-                        <Link
-                          href={`/purchase-orders/quotes/${c.quotationId._id}`}
-                          className="text-navy-deep no-underline"
-                        >
-                          {c.quotationId.sourceFileName ??
-                            c.quotationId.poNumber ??
-                            "quote"}
-                        </Link>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {group.missing ? (
-                        <Button
-                          size="sm"
-                          disabled={isBusy}
-                          loading={spinning("keep")}
-                          onClick={() => resolve(c._id, { decision: "keep" })}
-                        >
-                          Close
-                        </Button>
-                      ) : isCustoming ? (
-                        <div className="flex items-center gap-2">
-                          <Input
-                            value={customDraft}
-                            onChange={(e) => setCustomDraft(e.target.value)}
-                            placeholder="New value"
-                            autoFocus
-                            className="!py-1.5 !w-[160px]"
-                          />
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            disabled={!customDraft.trim() || isBusy}
-                            loading={spinning("custom")}
-                            onClick={() =>
-                              resolve(c._id, {
-                                decision: "custom",
-                                customValue: customDraft.trim(),
-                              })
-                            }
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse">
+              <thead>
+                <tr>
+                  {["Field", "Catalog (now)", "Incoming (PI)", "From", "Decide"].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint bg-surface-sunken px-4 py-2.5 border-b border-border-strong whitespace-nowrap"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {group.conflicts.map((c) => {
+                  const isCustoming = customing === c._id;
+                  const isBusy = busy === c._id || (refreshing && lastBusy?.id === c._id);
+                  const spinning = (d: string) => isBusy && lastBusy?.id === c._id && lastBusy.decision === d;
+                  return (
+                    <tr key={c._id} className="border-b border-border last:border-b-0 align-top">
+                      <td className="px-4 py-3 text-[0.86rem] font-semibold">{c.fieldLabel}</td>
+                      <td className="px-4 py-3 font-mono text-[0.84rem]">
+                        {group.missing ? "—" : formatValue(c.currentValue)}
+                        {!group.missing && formatValue(c.currentValue) !== formatValue(c.catalogValue) && (
+                          <div className="font-body text-[0.74rem] text-ink-faint mt-0.5">
+                            was {formatValue(c.catalogValue)} when the PI came in
+                          </div>
+                        )}
+                        {!group.missing && formatValue(c.currentValue) === formatValue(c.incomingValue) && (
+                          <div className="font-body text-[0.74rem] text-good mt-0.5">Already matches the PI</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[0.84rem] text-warn">
+                        {formatValue(c.incomingValue)}
+                      </td>
+                      <td className="px-4 py-3 text-[0.8rem] text-ink-soft">
+                        {c.quotationId ? (
+                          <Link
+                            href={`/purchase-orders/quotes/${c.quotationId._id}`}
+                            className="text-navy-deep no-underline"
                           >
-                            Save
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setCustoming(null);
-                              setCustomDraft("");
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-1.5 flex-wrap">
+                            {c.quotationId.sourceFileName ??
+                              c.quotationId.poNumber ??
+                              "quote"}
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {group.missing ? (
                           <Button
                             size="sm"
                             disabled={isBusy}
                             loading={spinning("keep")}
                             onClick={() => resolve(c._id, { decision: "keep" })}
                           >
-                            <span className="flex items-center gap-1">
-                              <Shield size={13} /> Keep catalog
-                            </span>
+                            Close
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            disabled={isBusy}
-                            loading={spinning("accept")}
-                            onClick={() => resolve(c._id, { decision: "accept" })}
-                          >
-                            <span className="flex items-center gap-1">
-                              <CheckCircle2 size={13} /> Accept PI
-                            </span>
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={isBusy}
-                            onClick={() => {
-                              setCustoming(c._id);
-                              setCustomDraft(formatValue(c.incomingValue));
-                            }}
-                          >
-                            Custom…
-                          </Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        ) : isCustoming ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              value={customDraft}
+                              onChange={(e) => setCustomDraft(e.target.value)}
+                              placeholder="New value"
+                              autoFocus
+                              className="!py-1.5 !w-[160px]"
+                            />
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              disabled={!customDraft.trim() || isBusy}
+                              loading={spinning("custom")}
+                              onClick={() =>
+                                resolve(c._id, {
+                                  decision: "custom",
+                                  customValue: customDraft.trim(),
+                                })
+                              }
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setCustoming(null);
+                                setCustomDraft("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1.5 flex-wrap">
+                            <Button
+                              size="sm"
+                              disabled={isBusy}
+                              loading={spinning("keep")}
+                              onClick={() => resolve(c._id, { decision: "keep" })}
+                            >
+                              <span className="flex items-center gap-1">
+                                <Shield size={13} /> Keep catalog
+                              </span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              disabled={isBusy}
+                              loading={spinning("accept")}
+                              onClick={() => resolve(c._id, { decision: "accept" })}
+                            >
+                              <span className="flex items-center gap-1">
+                                <CheckCircle2 size={13} /> Accept PI
+                              </span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={isBusy}
+                              onClick={() => {
+                                setCustoming(c._id);
+                                setCustomDraft(formatValue(c.incomingValue));
+                              }}
+                            >
+                              Custom…
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </Card>
       ))}
     </div>

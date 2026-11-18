@@ -22,7 +22,7 @@ export function SectionCard({
     <Card padding={0} className="overflow-hidden">
       <div id={id} className="flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-border scroll-mt-20">
         <h2 className="flex items-center gap-2 text-[0.92rem] font-semibold m-0">
-          {icon && <span className="text-brass shrink-0 flex items-center">{icon}</span>}
+          {icon && <span className="text-brand shrink-0 flex items-center">{icon}</span>}
           {title}
         </h2>
         {meta && <div className="text-[0.76rem] text-ink-faint shrink-0">{meta}</div>}

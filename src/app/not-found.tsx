@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LayoutDashboard, BookOpenCheck, ClipboardList, PackageSearch, ArrowLeft, Compass } from "lucide-react";
 import { Card } from "@/components/ui/Card";
+import { buttonClasses } from "@/components/ui/buttonStyles";
 
 const SHORTCUTS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -15,7 +16,7 @@ export default function NotFound() {
       className="relative min-h-screen overflow-hidden flex items-center justify-center p-5"
       style={{
         background:
-          "radial-gradient(1000px 560px at 50% -10%, rgba(217,176,119,0.12), transparent 60%), var(--surface-sunken)",
+          "radial-gradient(1000px 560px at 50% -10%, var(--brand-glow), transparent 60%), var(--surface-sunken)",
       }}
     >
       {/* Faceted gem-cut line pattern — brand motif shared with the login screen */}
@@ -31,7 +32,7 @@ export default function NotFound() {
                 M60 52 L60 104
               "
               fill="none"
-              stroke="var(--brass)"
+              stroke="var(--brand)"
               strokeWidth="1"
             />
           </pattern>
@@ -48,8 +49,8 @@ export default function NotFound() {
       </svg>
 
       <div className="relative w-full max-w-[460px] text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-md bg-brass-bg border border-[color:var(--brass-glow)] mb-6">
-          <Compass size={28} color="var(--brass)" strokeWidth={1.75} />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-md bg-brand-bg border border-[color:var(--brand-glow)] mb-6">
+          <Compass size={28} color="var(--brand)" strokeWidth={1.75} />
         </div>
 
         <div
@@ -59,21 +60,11 @@ export default function NotFound() {
           404
         </div>
 
-        <h1 className="text-[1.3rem] mt-3.5 mb-2.5 text-ink">This page has wandered off the spine</h1>
-        <p className="text-ink-soft text-[0.92rem] leading-[1.6] mb-8">
-          The page you&apos;re looking for doesn&apos;t exist, may have moved, or the link might be
-          out of date. Let&apos;s get you back to something real.
-        </p>
+        <h1 className="text-[1.3rem] mt-3.5 mb-2.5 text-ink">Page not found</h1>
+        <p className="text-ink-soft text-[0.92rem] leading-[1.6] mb-8">This link may be out of date.</p>
 
         <div className="flex justify-center mb-8">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 text-on-brass rounded-sm px-[22px] py-[11px] font-bold text-[0.87rem] no-underline border border-brass"
-            style={{
-              background: "linear-gradient(135deg, var(--brass) 0%, var(--brass-soft) 160%)",
-              boxShadow: "0 2px 10px var(--brass-glow)",
-            }}
-          >
+          <Link href="/dashboard" className={buttonClasses("primary")}>
             <ArrowLeft size={15} />
             Back to Dashboard
           </Link>

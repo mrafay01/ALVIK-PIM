@@ -1,7 +1,7 @@
 import type { ItemStatus, PoStatus, Role, DescriptionPlatform } from "@/lib/enums";
 import { CHECKLIST_DONE } from "@/lib/purchase-orders/transitions";
 
-type Tone = "good" | "warn" | "critical" | "neutral" | "brass";
+type Tone = "good" | "warn" | "critical" | "neutral" | "brand";
 
 export const ITEM_STATUS_LABEL: Record<ItemStatus, string> = {
   quoted: "Quoted",
@@ -23,16 +23,16 @@ export const ITEM_STATUS_LABEL: Record<ItemStatus, string> = {
 export const ITEM_STATUS_TONE: Record<ItemStatus, Tone> = {
   quoted: "neutral",
   review_pending: "warn",
-  approved: "brass",
+  approved: "brand",
   rejected: "critical",
   hold: "warn",
-  sample_ordered: "brass",
-  sample_received: "brass",
-  photography: "brass",
+  sample_ordered: "brand",
+  sample_received: "brand",
+  photography: "brand",
   final_review: "warn",
-  sku_permanent: "brass",
-  po_sent: "brass",
-  receiving: "brass",
+  sku_permanent: "brand",
+  po_sent: "brand",
+  receiving: "brand",
   live: "good",
   discontinued: "neutral",
 };
@@ -53,8 +53,8 @@ export const PO_STATUS_TONE: Record<PoStatus, Tone> = {
   negotiating: "neutral",
   send_to_vendor: "warn",
   pi_confirmed_pending: "warn",
-  pi_confirmed: "brass",
-  in_transit: "brass",
+  pi_confirmed: "brand",
+  in_transit: "brand",
   ready_to_ship: "good",
   shipment_received: "good",
 };

@@ -30,7 +30,7 @@ import {
 import { MeasurementFieldsEditor } from "@/components/ui/MeasurementFieldsEditor";
 
 const textareaClass =
-  "font-body text-[0.86rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)] resize-y";
+  "font-body text-[0.86rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-glow)] resize-y";
 
 function TextField({
   label,
@@ -121,7 +121,7 @@ export function VariationsStep({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-[0.82rem] font-semibold text-ink-faint bg-transparent border-none p-0 cursor-pointer hover:text-brass transition-colors duration-150"
+          className="inline-flex items-center gap-1.5 text-[0.82rem] font-semibold text-ink-faint bg-transparent border-none p-0 cursor-pointer hover:text-brand transition-colors duration-150"
         >
           <ArrowLeft size={14} /> Back to product details
         </button>
@@ -129,16 +129,14 @@ export function VariationsStep({
 
       <Card>
         <div className="flex items-start gap-3">
-          <span className="flex items-center justify-center w-9 h-9 rounded-md bg-brass-bg text-brass shrink-0">
+          <span className="flex items-center justify-center w-9 h-9 rounded-md bg-brand-bg text-brand shrink-0">
             <Package size={18} />
           </span>
           <div className="min-w-0">
             <h1 className="text-lg font-semibold text-ink m-0 mb-1">Variations</h1>
             <p className="text-[0.85rem] text-ink-soft m-0">
               Building variations for <span className="font-mono font-semibold text-ink">{base.sku || "—"}</span>
-              {base.title && <> ({base.title})</>}. Category, brand, gender, metal, and MSRP are locked to the
-              base item&apos;s values on every variation; title, description, plating, and stone details can
-              differ per row.
+              {base.title && <> ({base.title})</>}.
             </p>
           </div>
         </div>
@@ -174,8 +172,7 @@ export function VariationsStep({
         {variations.length === 0 ? (
           <div className="px-5 py-10 text-center">
             <p className="text-ink-faint text-[0.87rem] m-0 mb-3">
-              Add a row for each plating / stone / size variant of this product, e.g. suffix{" "}
-              <code className="font-mono">GP</code>, <code className="font-mono">RP</code>,{" "}
+              Add a row per variant, e.g. <code className="font-mono">GP</code> or{" "}
               <code className="font-mono">GP-6</code>.
             </p>
             <Button type="button" onClick={addRow}>
@@ -259,7 +256,7 @@ export function VariationsStep({
                             onChange={(e) =>
                               updateRow(i, { independentSku: e.target.checked ? v.independentSku || " " : "" })
                             }
-                            className="w-4 h-4 accent-[var(--brass)]"
+                            className="w-4 h-4 accent-[var(--brand-fill)]"
                           />
                           <Link2 size={13} className="text-ink-faint" />
                           This variation uses a different SKU family (not {base.sku || "the base SKU"}-{v.suffix || "…"})
@@ -273,9 +270,8 @@ export function VariationsStep({
                               className="max-w-[240px]"
                             />
                             <p className="text-[0.76rem] text-warn mt-2 mb-0 flex items-center gap-1.5">
-                              <AlertTriangle size={12} /> This breaks the automatic {base.sku || "base"}-
-                              {v.suffix || "suffix"} SKU pattern. The two items stay linked as a family
-                              internally, but the SKU itself won&apos;t show the relationship.
+                              <AlertTriangle size={12} /> Doesn&apos;t follow the {base.sku || "base"}-
+                              {v.suffix || "suffix"} pattern.
                             </p>
                           </>
                         )}
@@ -411,7 +407,7 @@ function VariationMeasurements({
           <Ruler size={13} />
           Measurements
           {differs && (
-            <span className="text-[0.68rem] font-semibold text-brass bg-brass-bg px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+            <span className="text-[0.68rem] font-semibold text-brand bg-brand-bg px-1.5 py-0.5 rounded-full uppercase tracking-wide">
               Differs from base
             </span>
           )}
@@ -420,7 +416,7 @@ function VariationMeasurements({
           <button
             type="button"
             onClick={() => onChange(structuredCloneMeasurements(baseMeasurements))}
-            className="flex items-center gap-1 text-[0.76rem] text-ink-faint hover:text-brass transition-colors duration-150 bg-transparent border-none p-0 cursor-pointer"
+            className="flex items-center gap-1 text-[0.76rem] text-ink-faint hover:text-brand transition-colors duration-150 bg-transparent border-none p-0 cursor-pointer"
           >
             <RotateCcw size={11} /> Reset to base
           </button>
@@ -430,7 +426,7 @@ function VariationMeasurements({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="text-[0.78rem] text-ink-faint hover:text-brass transition-colors duration-150 bg-transparent border-none p-0 cursor-pointer mt-1.5"
+          className="text-[0.78rem] text-ink-faint hover:text-brand transition-colors duration-150 bg-transparent border-none p-0 cursor-pointer mt-1.5"
         >
           Same as base, click to override for this variation
         </button>

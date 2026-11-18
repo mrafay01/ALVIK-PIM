@@ -87,9 +87,7 @@ export default async function CatalogConflictsPage({
       title="Pending catalog conflicts"
     >
       <p className="text-ink-soft max-w-[72ch] mb-6 text-[0.92rem]">
-        A new vendor PI tried to change an authoritative field on an item that&apos;s already in the
-        catalog. Pick which value wins for each — the catalog is only updated once a decision is
-        recorded. &quot;Keep catalog&quot; leaves the stored value alone and closes the conflict.
+        A new quote disagrees with the catalog. Choose which value to keep.
       </p>
 
       {totalPending > conflicts.length && (

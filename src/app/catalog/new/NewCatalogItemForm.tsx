@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Package, DollarSign, Gem, Ruler, Save, Megaphone, Sparkles, Layers, Check } from "lucide-react";
+import { Package, DollarSign, Gem, Ruler, Save, Megaphone, Layers, Check } from "lucide-react";
 import { Field, Input, Select, ErrorText } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -17,7 +17,7 @@ import { VariationsStep } from "./VariationsStep";
 import { type VariationDraft, emptyVariationDraft, draftToPayload } from "@/lib/catalog/variationDraft";
 
 const textareaClass =
-  "font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none transition-[border-color,box-shadow] duration-150 focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)] resize-y";
+  "font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none transition-[border-color,box-shadow] duration-150 focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-glow)] resize-y";
 
 function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} className={`${textareaClass} ${props.className ?? ""}`} />;
@@ -28,7 +28,7 @@ function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
 function SectionHeader({ icon, title, hint }: { icon: React.ReactNode; title: string; hint?: string }) {
   return (
     <div className="flex items-center gap-2 mb-4">
-      <span className="text-brass shrink-0 flex items-center">{icon}</span>
+      <span className="text-brand shrink-0 flex items-center">{icon}</span>
       <h2 className="text-[0.92rem] font-semibold m-0">{title}</h2>
       {hint && <span className="text-[0.78rem] text-ink-faint">({hint})</span>}
     </div>
@@ -358,11 +358,7 @@ export function NewCatalogItemForm() {
 
       <Card>
         <SectionHeader icon={<Megaphone size={16} />} title="Marketplace descriptions" />
-        <p className="text-ink-soft text-[0.83rem] -mt-2 mb-4">
-          Per-marketplace copy, falling back to the general description above until a platform gets its
-          own. AI-assisted drafting from the title/description is planned; for now these are entered by
-          hand.
-        </p>
+        <p className="text-ink-soft text-[0.83rem] -mt-2 mb-4">Optional. Uses the main description if left blank.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {DESCRIPTION_PLATFORMS.map((platform) => (
             <Field key={platform} label={DESCRIPTION_PLATFORM_LABEL[platform]}>
@@ -377,9 +373,6 @@ export function NewCatalogItemForm() {
             </Field>
           ))}
         </div>
-        <p className="flex items-center gap-1.5 text-ink-faint text-[0.76rem] mt-4 mb-0">
-          <Sparkles size={12} /> AI-generated drafts from title/description are coming soon.
-        </p>
       </Card>
 
       <Card>
@@ -444,9 +437,7 @@ export function NewCatalogItemForm() {
       <Card>
         <SectionHeader icon={<Layers size={16} />} title="Variations" />
         <p className="text-ink-soft text-[0.85rem] mb-4">
-          Does this item come in multiple platings, stone colors, or sizes, each needing its own SKU?
-          Category, brand, gender, metal, and MSRP always stay the same across every variation; title,
-          description, and stone/plating details can differ.
+          Does this item come in different platings, stones or sizes?
         </p>
         <div className="flex gap-3">
           <button
@@ -454,16 +445,16 @@ export function NewCatalogItemForm() {
             onClick={() => setHasVariations(true)}
             className={`flex-1 flex items-center gap-2.5 px-4 py-3 rounded-md border text-left transition-colors duration-150 cursor-pointer ${
               hasVariations === true
-                ? "border-brass bg-brass-bg text-ink"
-                : "border-border-strong bg-surface text-ink-soft hover:border-brass"
+                ? "border-brand bg-brand-bg text-ink"
+                : "border-border-strong bg-surface text-ink-soft hover:border-brand"
             }`}
           >
             <span
               className={`flex items-center justify-center w-5 h-5 rounded-full border-2 shrink-0 ${
-                hasVariations === true ? "border-brass bg-brass" : "border-border-strong"
+                hasVariations === true ? "border-brand-fill bg-brand-fill" : "border-border-strong"
               }`}
             >
-              {hasVariations === true && <Check size={12} className="text-on-brass" />}
+              {hasVariations === true && <Check size={12} className="text-on-brand" />}
             </span>
             <span>
               <span className="block font-semibold text-[0.87rem]">Yes, it has variations</span>
@@ -477,16 +468,16 @@ export function NewCatalogItemForm() {
             onClick={() => setHasVariations(false)}
             className={`flex-1 flex items-center gap-2.5 px-4 py-3 rounded-md border text-left transition-colors duration-150 cursor-pointer ${
               hasVariations === false
-                ? "border-brass bg-brass-bg text-ink"
-                : "border-border-strong bg-surface text-ink-soft hover:border-brass"
+                ? "border-brand bg-brand-bg text-ink"
+                : "border-border-strong bg-surface text-ink-soft hover:border-brand"
             }`}
           >
             <span
               className={`flex items-center justify-center w-5 h-5 rounded-full border-2 shrink-0 ${
-                hasVariations === false ? "border-brass bg-brass" : "border-border-strong"
+                hasVariations === false ? "border-brand-fill bg-brand-fill" : "border-border-strong"
               }`}
             >
-              {hasVariations === false && <Check size={12} className="text-on-brass" />}
+              {hasVariations === false && <Check size={12} className="text-on-brand" />}
             </span>
             <span>
               <span className="block font-semibold text-[0.87rem]">No, just this one SKU</span>

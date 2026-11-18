@@ -46,7 +46,7 @@ function safeHref(href: string): string | null {
 }
 
 export function renderNotificationEmail(e: NotificationEmail): RenderedEmail {
-  const subject = cleanSubject(`${e.subject} · CZC PIM`);
+  const subject = cleanSubject(`${e.subject} · Alvik PIM`);
   const shown = (e.list ?? []).slice(0, LIST_LIMIT);
   const total = Math.max(e.listTotal ?? 0, e.list?.length ?? 0);
   const more = total - shown.length;
@@ -70,12 +70,12 @@ export function renderNotificationEmail(e: NotificationEmail): RenderedEmail {
   // ---- html
   const rowsHtml = e.rows?.length
     ? `<tr><td style="padding:22px 40px 0 40px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #e6e2d8;border-radius:10px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #dcdcd8;border-radius:10px;">
 ${e.rows
   .map(
     (r, i) => `<tr>
-<td style="padding:10px 14px;font-size:13px;color:#8c8983;width:38%;vertical-align:top;${i > 0 ? "border-top:1px solid #efece5;" : ""}">${escapeHtml(r.label)}</td>
-<td style="padding:10px 14px;font-size:13.5px;color:#1c1a16;font-weight:600;vertical-align:top;${i > 0 ? "border-top:1px solid #efece5;" : ""}">${escapeHtml(r.value)}</td>
+<td style="padding:10px 14px;font-size:13px;color:#62656e;width:38%;vertical-align:top;${i > 0 ? "border-top:1px solid #ececea;" : ""}">${escapeHtml(r.label)}</td>
+<td style="padding:10px 14px;font-size:13.5px;color:#16171b;font-weight:600;vertical-align:top;${i > 0 ? "border-top:1px solid #ececea;" : ""}">${escapeHtml(r.value)}</td>
 </tr>`
   )
   .join("\n")}
@@ -85,15 +85,15 @@ ${e.rows
 
   const listHtml = shown.length
     ? `<tr><td style="padding:18px 40px 0 40px;">
-<ul style="margin:0;padding:0 0 0 18px;font-size:13.5px;line-height:1.7;color:#1c1a16;">
+<ul style="margin:0;padding:0 0 0 18px;font-size:13.5px;line-height:1.7;color:#16171b;">
 ${shown
   .map((i) => {
     const href = i.href ? safeHref(i.href) : null;
     const body = escapeHtml(i.text);
-    return `<li>${href ? `<a href="${escapeHtml(href)}" style="color:#b98728;text-decoration:none;">${body}</a>` : body}</li>`;
+    return `<li>${href ? `<a href="${escapeHtml(href)}" style="color:#4c7a12;text-decoration:none;">${body}</a>` : body}</li>`;
   })
   .join("\n")}
-${more > 0 ? `<li style="color:#8c8983;">and ${more} more</li>` : ""}
+${more > 0 ? `<li style="color:#62656e;">and ${more} more</li>` : ""}
 </ul>
 </td></tr>`
     : "";
@@ -103,8 +103,8 @@ ${more > 0 ? `<li style="color:#8c8983;">and ${more} more</li>` : ""}
     e.action && actionHref
       ? `<tr><td style="padding:26px 40px 0 40px;">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td style="background-color:#b98728;border-radius:8px;">
-<a href="${escapeHtml(actionHref)}" style="display:inline-block;padding:11px 22px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">${escapeHtml(e.action.label)}</a>
+<td style="background-color:#8dca37;border-radius:999px;">
+<a href="${escapeHtml(actionHref)}" style="display:inline-block;padding:11px 22px;font-size:14px;font-weight:700;color:#17202b;text-decoration:none;">${escapeHtml(e.action.label)}</a>
 </td></tr></table>
 </td></tr>`
       : "";
@@ -117,25 +117,25 @@ ${more > 0 ? `<li style="color:#8c8983;">and ${more} more</li>` : ""}
 <meta name="color-scheme" content="light">
 <title>${escapeHtml(e.heading)}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f7f5f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f7f5f1;">
+<body style="margin:0;padding:0;background-color:#f3f3f2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f3f2;">
 <tr><td align="center" style="padding:40px 16px;">
-<table role="presentation" width="520" cellpadding="0" cellspacing="0" border="0" style="width:520px;max-width:100%;background-color:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(28,26,22,0.06),0 8px 28px rgba(28,26,22,0.07);">
-<tr><td style="height:5px;line-height:5px;font-size:0;background-color:#b98728;background-image:linear-gradient(90deg,#b98728 0%,#e9c05c 50%,#b98728 100%);">&nbsp;</td></tr>
-<tr><td style="padding:32px 40px 0 40px;font-family:Georgia,'Times New Roman',serif;font-size:20px;font-weight:700;color:#1c1a16;letter-spacing:0.3px;">CZC <span style="color:#b98728;">PIM</span></td></tr>
+<table role="presentation" width="520" cellpadding="0" cellspacing="0" border="0" style="width:520px;max-width:100%;background-color:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(22,23,27,0.06),0 8px 28px rgba(22,23,27,0.07);">
+<tr><td style="height:5px;line-height:5px;font-size:0;background-color:#8dca37;background-image:linear-gradient(90deg,#6fa821 0%,#a6dc5a 50%,#6fa821 100%);">&nbsp;</td></tr>
+<tr><td style="padding:32px 40px 0 40px;font-family:Urbanist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:20px;font-weight:700;color:#16171b;letter-spacing:0.3px;">Alvik <span style="color:#4c7a12;">PIM</span></td></tr>
 <tr><td style="padding:24px 40px 0 40px;">
-<p style="margin:0;font-size:12.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#b98728;">${escapeHtml(e.eyebrow)}</p>
-<h1 style="margin:8px 0 0 0;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.35;font-weight:700;color:#1c1a16;">${escapeHtml(e.heading)}</h1>
-<p style="margin:12px 0 0 0;font-size:14.5px;line-height:1.6;color:#55524a;">${escapeHtml(e.intro)}</p>
+<p style="margin:0;font-size:12.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#4c7a12;">${escapeHtml(e.eyebrow)}</p>
+<h1 style="margin:8px 0 0 0;font-family:Urbanist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:22px;line-height:1.35;font-weight:700;color:#16171b;">${escapeHtml(e.heading)}</h1>
+<p style="margin:12px 0 0 0;font-size:14.5px;line-height:1.6;color:#3f424a;">${escapeHtml(e.intro)}</p>
 </td></tr>
 ${rowsHtml}
 ${listHtml}
 ${actionHtml}
 <tr><td style="padding:32px 40px 30px 40px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #e6e2d8;">
-<tr><td style="padding-top:18px;font-size:12px;line-height:1.6;color:#8c8983;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #dcdcd8;">
+<tr><td style="padding-top:18px;font-size:12px;line-height:1.6;color:#62656e;">
 ${escapeHtml(e.reason)}<br>
-<a href="${escapeHtml(settings)}" style="color:#8c8983;text-decoration:underline;">Change which emails you get</a> &middot; CZC PIM
+<a href="${escapeHtml(settings)}" style="color:#62656e;text-decoration:underline;">Change which emails you get</a> &middot; Alvik PIM
 </td></tr>
 </table>
 </td></tr>

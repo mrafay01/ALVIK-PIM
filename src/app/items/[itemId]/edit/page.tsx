@@ -32,10 +32,6 @@ export default async function ItemEditPage({
       eyebrow="Edit item"
       title={item.title || item.vendorSku || "Item"}
     >
-      <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Update any detail on this item. Changes save per section; the master-record completion
-        gate recalculates automatically after every save.
-      </p>
       <ItemEditForm
         itemId={itemId}
         initialBulletFeatures={item.bulletFeatures ?? []}

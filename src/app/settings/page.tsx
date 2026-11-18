@@ -22,10 +22,6 @@ export default async function SettingsPage() {
 
   return (
     <AppShell activeHref="/settings" eyebrow="Account" title="Settings">
-      <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Your account details, security, and (for administrators) user &amp; role management. Notification
-        preferences live on their own page.
-      </p>
 
       <Card className="mb-6">
         <div className="flex items-center gap-2 mb-3.5">
@@ -39,12 +35,11 @@ export default async function SettingsPage() {
           <dd className="m-0 font-mono">{user?.email ?? "—"}</dd>
           <dt className="text-ink-faint">Role</dt>
           <dd className="m-0">
-            <Pill tone="brass">{role ? ROLE_LABEL[role] : "—"}</Pill>
+            <Pill tone="brand">{role ? ROLE_LABEL[role] : "—"}</Pill>
           </dd>
         </dl>
         <p className="text-[0.78rem] text-ink-faint mt-3.5 mb-0">
-          Need your name or role changed? Ask an administrator. Email and password are self-service, both below;
-          each requires your current password and a verification code.
+          To change your name or role, ask an administrator.
         </p>
       </Card>
 
@@ -54,10 +49,6 @@ export default async function SettingsPage() {
           <h2 className="text-[0.95rem] m-0">Appearance</h2>
         </div>
         <ThemeToggle />
-        <p className="text-[0.78rem] text-ink-faint mt-3 mb-0">
-          &quot;System&quot; follows your device&apos;s own dark/light setting. Saved to this browser only; a
-          different device keeps its own choice.
-        </p>
       </Card>
 
       <Card className="mb-6">
@@ -65,10 +56,7 @@ export default async function SettingsPage() {
           <Mail size={17} className="text-ink-faint" />
           <h2 className="text-[0.95rem] m-0">Change email</h2>
         </div>
-        <p className="text-[0.8rem] text-ink-faint mb-4">
-          Requires your current password. The verification code is sent to the <em>new</em> address, to confirm you
-          control it before it becomes your sign-in email.
-        </p>
+        <p className="text-[0.8rem] text-ink-faint mb-4">We&apos;ll send a code to the new address.</p>
         <ChangeEmailForm currentEmail={user?.email ?? ""} />
       </Card>
 
@@ -77,10 +65,7 @@ export default async function SettingsPage() {
           <KeyRound size={17} className="text-ink-faint" />
           <h2 className="text-[0.95rem] m-0">Change password</h2>
         </div>
-        <p className="text-[0.8rem] text-ink-faint mb-4">
-          Requires your current password and a verification code sent to your account email. You&apos;ll stay signed
-          in on this device afterward.
-        </p>
+        <p className="text-[0.8rem] text-ink-faint mb-4">We&apos;ll send a code to your email.</p>
         <ChangePasswordForm />
       </Card>
 
@@ -93,15 +78,15 @@ export default async function SettingsPage() {
       </Card>
 
       <Link href="/settings/notifications" className="no-underline block mb-6">
-        <Card className="hover:border-brass transition-colors duration-150">
+        <Card className="hover:border-brand transition-colors duration-150">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className="flex items-center justify-center w-9 h-9 rounded-full bg-brass-bg text-brass shrink-0">
+              <span className="flex items-center justify-center w-9 h-9 rounded-full bg-brand-bg text-brand shrink-0">
                 <BellRing size={16} />
               </span>
               <div>
                 <h2 className="text-[0.95rem] m-0">Notifications</h2>
-                <p className="text-[0.8rem] text-ink-faint m-0 mt-0.5">Choose what you want to be notified about.</p>
+                <p className="text-[0.8rem] text-ink-faint m-0 mt-0.5">Choose your emails.</p>
               </div>
             </div>
             <ArrowRight size={16} className="text-ink-faint shrink-0" />
@@ -111,16 +96,16 @@ export default async function SettingsPage() {
 
       {role === "administrator" && (
         <Link href="/admin/users" className="no-underline block">
-          <Card className="hover:border-brass transition-colors duration-150">
+          <Card className="hover:border-brand transition-colors duration-150">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <span className="flex items-center justify-center w-9 h-9 rounded-full bg-brass-bg text-brass shrink-0">
+                <span className="flex items-center justify-center w-9 h-9 rounded-full bg-brand-bg text-brand shrink-0">
                   <Users size={16} />
                 </span>
                 <div>
                   <h2 className="text-[0.95rem] m-0">Users &amp; Roles</h2>
                   <p className="text-[0.8rem] text-ink-faint m-0 mt-0.5">
-                    Create accounts, change roles, deactivate or reset passwords.
+                    Manage accounts and roles.
                   </p>
                 </div>
               </div>

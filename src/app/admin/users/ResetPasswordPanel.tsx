@@ -81,7 +81,7 @@ export function ResetPasswordPanel({ targetUserId, onClose }: { targetUserId: st
     return (
       <form onSubmit={handleOtpSubmit} className="flex flex-col gap-2 items-end">
         <div className="flex items-center gap-1.5 text-[0.76rem] text-ink-soft">
-          <MailCheck size={13} className="text-brass shrink-0" />
+          <MailCheck size={13} className="text-brand shrink-0" />
           Code sent to your own email
         </div>
         <div className="flex items-center gap-1.5">

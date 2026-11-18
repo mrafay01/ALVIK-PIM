@@ -26,8 +26,8 @@ export function ThemeToggle() {
             onClick={() => setChoice(opt.value)}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-sm border text-[0.85rem] font-semibold cursor-pointer transition-colors duration-150 ${
               active
-                ? "bg-brass-bg text-brass border-[color:var(--brass-glow)]"
-                : "bg-transparent text-ink-soft border-border-strong hover:text-ink hover:border-brass"
+                ? "bg-brand-bg text-brand border-[color:var(--brand-glow)]"
+                : "bg-transparent text-ink-soft border-border-strong hover:text-ink hover:border-brand"
             }`}
           >
             <Icon size={15} />

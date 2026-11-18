@@ -45,15 +45,15 @@ export function ThemeSwitcherButton() {
         title="Theme"
         aria-label="Change theme"
         aria-expanded={open}
-        className="flex items-center justify-center w-8 h-8 rounded-sm border border-border-strong bg-transparent text-ink-faint hover:text-ink hover:border-brass cursor-pointer transition-colors duration-150"
+        className="flex items-center justify-center w-9 h-9 rounded-full border border-border bg-surface-raised shadow-btn-quiet text-ink-soft hover:text-brand cursor-pointer transition-colors duration-150"
       >
-        <CurrentIcon size={15} />
+        <CurrentIcon size={16} />
       </button>
 
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-[calc(100%+6px)] w-[150px] bg-surface-raised border border-border-strong rounded-sm shadow-lg py-1.5 z-20"
+          className="absolute right-0 top-[calc(100%+8px)] w-[160px] bg-surface-raised border border-border rounded-[14px] shadow-lg p-1.5 z-30"
         >
           {OPTIONS.map((opt) => {
             const active = choice === opt.value;
@@ -68,8 +68,8 @@ export function ThemeSwitcherButton() {
                   setChoice(opt.value);
                   setOpen(false);
                 }}
-                className={`flex items-center gap-2.5 w-full text-left bg-transparent border-0 cursor-pointer text-[0.83rem] px-3.5 py-2 whitespace-nowrap ${
-                  active ? "font-semibold text-brass" : "text-ink-soft hover:text-ink hover:bg-surface-overlay"
+                className={`flex items-center gap-2.5 w-full text-left border-0 cursor-pointer text-[0.85rem] px-3 py-2 rounded-[10px] whitespace-nowrap ${
+                  active ? "font-semibold text-brand bg-brand-bg" : "bg-transparent text-ink-soft hover:text-ink hover:bg-surface-overlay"
                 }`}
               >
                 <Icon size={14} className="shrink-0" />

@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import type { Role } from "@/lib/enums";
 import { Sidebar, type NavItem } from "./Sidebar";
 import { ThemeSwitcherButton } from "./ThemeSwitcherButton";
+import { MobileNavButton } from "./MobileNavButton";
 
 // `children` render as a dropdown under their parent in the sidebar. Each
 // entry (parent or child) has its own role list; a child whose parent the
@@ -125,37 +126,40 @@ export async function AppShell({
       <Sidebar nav={visibleNav} activeHref={activeHref} role={role ?? ""} />
 
       <div className="flex-1 min-w-0" suppressHydrationWarning>
-        <header className="flex items-start justify-between gap-6 px-10 py-5 border-b border-border bg-surface sticky top-0 z-10 backdrop-blur-sm">
-          <div className="min-w-0">
-            {backHref && (
-              <Link
-                href={backHref}
-                className="inline-flex items-center gap-1.5 text-[0.8rem] font-semibold text-ink-faint no-underline mb-2.5 hover:text-brass transition-colors duration-150"
-              >
-                <ArrowLeft size={14} strokeWidth={2.25} />
-                {backLabel ?? "Back"}
-              </Link>
-            )}
-            {eyebrow && (
-              <div className="text-xs font-bold text-brass uppercase tracking-wider mb-1">{eyebrow}</div>
-            )}
-            <h1 className="text-2xl">{title}</h1>
+        <header className="flex items-start justify-between gap-3 sm:gap-6 px-4 sm:px-6 lg:px-10 py-3.5 lg:py-5 border-b border-border bg-glass backdrop-blur-md sticky top-0 z-30">
+          <div className="flex items-start gap-3 min-w-0">
+            <MobileNavButton />
+            <div className="min-w-0">
+              {backHref && (
+                <Link
+                  href={backHref}
+                  className="inline-flex items-center gap-1.5 text-[0.82rem] font-semibold text-ink-faint no-underline mb-2 hover:text-brand transition-colors duration-150"
+                >
+                  <ArrowLeft size={14} strokeWidth={2.25} />
+                  {backLabel ?? "Back"}
+                </Link>
+              )}
+              {eyebrow && (
+                <div className="text-[0.75rem] font-bold text-brand uppercase tracking-[0.1em] mb-1">{eyebrow}</div>
+              )}
+              <h1 className="text-[1.3rem] sm:text-[1.6rem] leading-tight tracking-tight break-words">{title}</h1>
+            </div>
           </div>
 
           {/* Right side: the one place the signed-in user's identity and
               the theme switcher live — no separate identity strip above
               this any more, everything else lives in the sidebar's
-              Settings dropdown. */}
-          <div className="flex items-center gap-3.5 shrink-0 pt-0.5" suppressHydrationWarning>
+              Settings dropdown. On phones only the avatar shows. */}
+          <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0 pt-0.5" suppressHydrationWarning>
             <ThemeSwitcherButton />
-            <div className="flex items-center gap-2.5 border-l border-border pl-3.5" suppressHydrationWarning>
+            <div className="flex items-center gap-2.5 sm:border-l sm:border-border sm:pl-3.5" title={name} suppressHydrationWarning>
               <span
-                className="w-7 h-7 rounded-full bg-navy-deep text-surface flex items-center justify-center text-[0.7rem] font-bold font-mono shrink-0"
+                className="w-9 h-9 rounded-full bg-[image:linear-gradient(180deg,var(--brand-fill-hover),var(--brand-fill-deep))] text-on-brand flex items-center justify-center text-[0.75rem] font-bold font-display shrink-0 shadow-btn"
                 suppressHydrationWarning
               >
                 {initials || "?"}
               </span>
-              <div className="text-right leading-tight" suppressHydrationWarning>
+              <div className="hidden sm:block text-right leading-tight" suppressHydrationWarning>
                 <div className="text-[0.8rem] font-semibold text-ink" suppressHydrationWarning>
                   {name}
                 </div>
@@ -167,7 +171,7 @@ export async function AppShell({
           </div>
         </header>
 
-        <main className="px-10 pt-8 pb-16">{children}</main>
+        <main className="px-4 sm:px-6 lg:px-10 pt-5 sm:pt-7 lg:pt-8 pb-16">{children}</main>
       </div>
     </div>
   );

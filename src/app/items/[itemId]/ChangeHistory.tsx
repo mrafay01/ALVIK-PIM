@@ -72,49 +72,51 @@ export function ChangeHistory({ itemId }: { itemId: string }) {
             </p>
           )}
           {rows && rows.length > 0 && (
-            <table className="w-full border-collapse mt-2">
-              <thead>
-                <tr>
-                  {["When", "Field", "From", "To", "Source", "By"].map((h) => (
-                    <th
-                      key={h}
-                      className="text-left text-[0.68rem] font-semibold uppercase tracking-wide text-ink-faint px-2 py-1.5 border-b border-border whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r._id} className="border-b border-border last:border-b-0">
-                    <td className="px-2 py-1.5 text-[0.8rem] text-ink-soft whitespace-nowrap">
-                      {new Date(r.createdAt).toLocaleString()}
-                    </td>
-                    <td className="px-2 py-1.5 text-[0.84rem] font-semibold">{r.fieldLabel}</td>
-                    <td className="px-2 py-1.5 font-mono text-[0.82rem]">{fmt(r.oldValue)}</td>
-                    <td className="px-2 py-1.5 font-mono text-[0.82rem]">{fmt(r.newValue)}</td>
-                    <td className="px-2 py-1.5 text-[0.8rem]">
-                      {r.sourceRef?.quotationId ? (
-                        <Link
-                          href={`/purchase-orders/quotes/${r.sourceRef.quotationId._id}`}
-                          className="text-navy-deep no-underline"
-                        >
-                          {r.sourceRef.quotationId.sourceFileName ??
-                            r.sourceRef.quotationId.poNumber ??
-                            SOURCE_LABEL[r.source]}
-                        </Link>
-                      ) : (
-                        SOURCE_LABEL[r.source]
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5 text-[0.8rem] text-ink-soft">
-                      {r.sourceRef?.userId?.name ?? r.sourceRef?.userId?.email ?? "—"}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] border-collapse mt-2">
+                <thead>
+                  <tr>
+                    {["When", "Field", "From", "To", "Source", "By"].map((h) => (
+                      <th
+                        key={h}
+                        className="text-left text-[0.68rem] font-semibold uppercase tracking-wide text-ink-faint px-2 py-1.5 border-b border-border whitespace-nowrap"
+                      >
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r._id} className="border-b border-border last:border-b-0">
+                      <td className="px-2 py-1.5 text-[0.8rem] text-ink-soft whitespace-nowrap">
+                        {new Date(r.createdAt).toLocaleString()}
+                      </td>
+                      <td className="px-2 py-1.5 text-[0.84rem] font-semibold">{r.fieldLabel}</td>
+                      <td className="px-2 py-1.5 font-mono text-[0.82rem]">{fmt(r.oldValue)}</td>
+                      <td className="px-2 py-1.5 font-mono text-[0.82rem]">{fmt(r.newValue)}</td>
+                      <td className="px-2 py-1.5 text-[0.8rem]">
+                        {r.sourceRef?.quotationId ? (
+                          <Link
+                            href={`/purchase-orders/quotes/${r.sourceRef.quotationId._id}`}
+                            className="text-navy-deep no-underline"
+                          >
+                            {r.sourceRef.quotationId.sourceFileName ??
+                              r.sourceRef.quotationId.poNumber ??
+                              SOURCE_LABEL[r.source]}
+                          </Link>
+                        ) : (
+                          SOURCE_LABEL[r.source]
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 text-[0.8rem] text-ink-soft">
+                        {r.sourceRef?.userId?.name ?? r.sourceRef?.userId?.email ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

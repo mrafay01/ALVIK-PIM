@@ -7,13 +7,14 @@ import Vendor from "@/models/Vendor";
 import PurchaseOrder from "@/models/PurchaseOrder";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
+import { buttonClasses } from "@/components/ui/buttonStyles";
 import { FilePlus2, Upload } from "lucide-react";
 import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
 
-const STATUS_TONE: Record<string, "good" | "warn" | "brass" | "neutral"> = {
+const STATUS_TONE: Record<string, "good" | "warn" | "brand" | "neutral"> = {
   parsing: "neutral",
   needs_review: "warn",
-  reviewed: "brass",
+  reviewed: "brand",
   committed: "good",
 };
 
@@ -58,20 +59,19 @@ export default async function QuotesListPage({
       title="Quotes"
     >
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Every vendor quote intaken here, as an uploaded file or entered by hand. Parsed line
-        items are staged for review; nothing becomes an item until you approve and commit it.
+        Vendor quotes waiting for review or already approved.
       </p>
 
       <div className="flex gap-2.5 mb-7 flex-wrap">
         <Link
           href="/purchase-orders/quotes/new"
-          className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-brass text-on-brass border border-brass shadow-[0_2px_10px_var(--brass-glow)] no-underline hover:bg-brass-hover"
+          className={buttonClasses("primary")}
         >
           <FilePlus2 size={15} /> New quote manually
         </Link>
         <Link
           href="/purchase-orders/quotes/import"
-          className="flex items-center gap-1.5 font-body font-semibold text-[0.87rem] px-4 py-2.5 rounded-sm bg-surface text-ink border border-border-strong no-underline hover:border-brass hover:text-brass"
+          className={buttonClasses("secondary")}
         >
           <Upload size={15} /> Import quote file
         </Link>

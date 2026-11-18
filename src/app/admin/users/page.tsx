@@ -24,9 +24,7 @@ export default async function UsersPage() {
   return (
     <AppShell activeHref="/admin/users" eyebrow="Administration" title="Users & Roles">
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Create accounts and assign the role that controls what each person can see and do across
-        the app. Only administrators can reach this page; everyone else is provisioned here, not
-        by anyone editing their own access.
+        Add people and choose what each role can see.
       </p>
 
       <Card className="mb-8">

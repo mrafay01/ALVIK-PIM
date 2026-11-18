@@ -113,7 +113,7 @@ describe("notification email", () => {
 
   it("subjects carry no line breaks", () => {
     expect(cleanSubject("a\r\nBcc: x@y.z")).toBe("a Bcc: x@y.z");
-    expect(renderNotificationEmail({ ...base, subject: "x\ny" }).subject).toBe("x y · CZC PIM");
+    expect(renderNotificationEmail({ ...base, subject: "x\ny" }).subject).toBe("x y · Alvik PIM");
   });
 
   it("escapeHtml covers quotes", () => {

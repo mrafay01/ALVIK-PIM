@@ -11,10 +11,10 @@ import { UploadForm } from "./UploadForm";
 
 // needs_review: rows still waiting on the review page (the only state that
 // links back) · reviewed: the rest are in Flagged Items · committed: done.
-const BATCH_STATUS: Record<string, { label: string; tone: "good" | "warn" | "brass" | "neutral" }> = {
+const BATCH_STATUS: Record<string, { label: string; tone: "good" | "warn" | "brand" | "neutral" }> = {
   parsing: { label: "reading", tone: "neutral" },
   needs_review: { label: "needs review", tone: "warn" },
-  reviewed: { label: "rest in Flagged Items", tone: "brass" },
+  reviewed: { label: "rest in Flagged Items", tone: "brand" },
   committed: { label: "done", tone: "good" },
 };
 
@@ -23,9 +23,9 @@ const TH_CLASS =
 const TD_CLASS = "px-4 py-3 text-[0.85rem]";
 
 const STEPS = [
-  { icon: Upload, title: "Upload", text: "Drop the Master File export. Every row is read and checked." },
-  { icon: ListChecks, title: "Review", text: "Commit clean rows to the catalog; send flagged rows to Flagged Items." },
-  { icon: ShieldCheck, title: "Fix", text: "On Flagged Items, filter by issue, fix rows (one by one or all at once), then commit." },
+  { icon: Upload, title: "Upload", text: "Add the Master File." },
+  { icon: ListChecks, title: "Review", text: "Save clean rows to the catalog." },
+  { icon: ShieldCheck, title: "Fix", text: "Correct flagged rows, then save." },
 ];
 
 // Master File import, reached from the Catalog page (admin only). Same
@@ -56,7 +56,7 @@ export default async function CatalogImportPage({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-6">
         {STEPS.map((s, i) => (
           <Card key={s.title} className="flex items-start gap-3">
-            <span className="flex items-center justify-center w-9 h-9 rounded-md bg-brass-bg text-brass shrink-0">
+            <span className="flex items-center justify-center w-9 h-9 rounded-md bg-brand-bg text-brand shrink-0">
               <s.icon size={17} />
             </span>
             <div>
@@ -73,7 +73,7 @@ export default async function CatalogImportPage({
           <CheckCircle2 size={18} className="text-good shrink-0" />
           <span className="text-[0.88rem]">
             That file has been fully reviewed. Anything sent to Flagged Items is waiting{" "}
-            <Link href="/catalog/flagged" className="text-brass no-underline font-semibold">
+            <Link href="/catalog/flagged" className="text-brand no-underline font-semibold">
               there
             </Link>
             .
@@ -125,7 +125,7 @@ export default async function CatalogImportPage({
                       {b.status === "needs_review" && (
                         <Link
                           href={`/catalog/import/${b._id}`}
-                          className="inline-flex items-center gap-1 text-[0.8rem] font-semibold text-brass no-underline"
+                          className="inline-flex items-center gap-1 text-[0.8rem] font-semibold text-brand no-underline"
                         >
                           Continue review <ArrowRight size={13} />
                         </Link>

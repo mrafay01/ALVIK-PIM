@@ -188,7 +188,7 @@ export function FlaggedTable({
             <div className="font-semibold text-[0.92rem]">Nothing flagged</div>
             <div className="text-[0.84rem] text-ink-soft">
               Rows land here when you send them from a Master File import&apos;s review.{" "}
-              <Link href="/catalog/import" className="text-brass no-underline">
+              <Link href="/catalog/import" className="text-brand no-underline">
                 Go to imports
               </Link>
             </div>
@@ -229,7 +229,7 @@ export function FlaggedTable({
                   timer.current = setTimeout(() => navigate({ q: v }), 350);
                 }}
                 placeholder="SKU or title…"
-                className="font-body text-[0.88rem] pl-8 pr-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brass"
+                className="font-body text-[0.88rem] pl-8 pr-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brand"
               />
             </span>
           </label>
@@ -272,7 +272,7 @@ export function FlaggedTable({
         )}
         {currentIssue?.field === "itemNumber" && (
           <p className="mt-3 mb-0 text-[0.8rem] text-ink-faint">
-            Each row needs its own SKU, so type it on each row below.
+            Enter a SKU on each row below.
           </p>
         )}
       </Card>
@@ -359,7 +359,7 @@ export function FlaggedTable({
                       aria-label="Select every row on this page"
                       checked={allOnPage}
                       onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r._id)) : new Set())}
-                      className="w-4 h-4 accent-[var(--brass)]"
+                      className="w-4 h-4 accent-[var(--brand-fill)]"
                     />
                   </th>
                   {["SKU", "Title", "From", "Issues (fix and press Enter)"].map((h) => (
@@ -376,7 +376,7 @@ export function FlaggedTable({
                 {rows.map((row) => {
                   const isSel = selected.has(row._id);
                   return (
-                    <tr key={row._id} className={`border-b border-border align-top ${isSel ? "bg-brass-bg" : ""}`}>
+                    <tr key={row._id} className={`border-b border-border align-top ${isSel ? "bg-brand-bg" : ""}`}>
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
@@ -390,7 +390,7 @@ export function FlaggedTable({
                               return next;
                             })
                           }
-                          className="w-4 h-4 accent-[var(--brass)]"
+                          className="w-4 h-4 accent-[var(--brand-fill)]"
                         />
                       </td>
                       <td className="px-4 py-3 font-mono text-[0.82rem] font-semibold whitespace-nowrap">

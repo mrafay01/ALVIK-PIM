@@ -100,8 +100,7 @@ export function ItemActions({
         <Card>
           <SectionTitle>Step 2: Assign sample SKU</SectionTitle>
           <p className="text-[0.83rem] text-ink-soft mb-3">
-            A temporary SKU for the sample stage, kept permanently for audit history even after
-            a real item number is assigned later.
+            A temporary SKU used during sampling.
           </p>
           <div className="flex gap-2.5 items-end">
             <Field label="Sample SKU" width={180}>
@@ -120,7 +119,7 @@ export function ItemActions({
         <Card>
           <SectionTitle>Step 3: Create purchase order</SectionTitle>
           <p className="text-[0.83rem] text-ink-soft mb-3">
-            Opens the PO/PI pipeline for this item, with sample quantity and vendor unit cost, if known.
+            Start a purchase order for this item.
           </p>
           <form onSubmit={createPO} className="flex gap-2.5 items-end flex-wrap">
             <Field label="PO number" width={140}>
@@ -144,8 +143,7 @@ export function ItemActions({
       <Card>
         <SectionTitle>Catalog fields</SectionTitle>
         <p className="text-[0.83rem] text-ink-soft mb-3">
-          Fills the gaps that keep this item off the master DB completion gate. Images come from
-          the SharePoint pipeline (Phase 4), not from here.
+          Fill in what this item still needs.
         </p>
         <div className="flex gap-2.5 flex-wrap items-end">
           <Field label="Permanent item #" width={150}>

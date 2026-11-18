@@ -87,7 +87,7 @@ export function MediaUpload({
           <ImageIcon size={15} /> Images &amp; video
         </h2>
         <p className="text-[0.85rem] text-ink-faint m-0">
-          This item needs a sample SKU or permanent item number before images or videos can be uploaded.
+          Add a SKU first to upload images.
         </p>
       </Card>
     );
@@ -137,17 +137,14 @@ export function MediaUpload({
       <p className="text-[0.78rem] text-ink-faint mb-3">
         {kind === "auto" ? (
           <>
-            Name files <code className="font-mono">{folderKey}.jpg</code> for the main shot,{" "}
-            <code className="font-mono">{folderKey}-S1.jpg</code> for sides,{" "}
-            <code className="font-mono">{folderKey}-M1.jpg</code> for models,{" "}
-            <code className="font-mono">{folderKey}-LS1.jpg</code> for optional lifestyle shots and{" "}
-            <code className="font-mono">{folderKey}-V1.mp4</code> for optional video clips; each goes to its
-            SharePoint folder by the name.
+            Name files <code className="font-mono">{folderKey}.jpg</code>, <code className="font-mono">-S1</code>,{" "}
+            <code className="font-mono">-M1</code>, <code className="font-mono">-LS1</code> or{" "}
+            <code className="font-mono">-V1.mp4</code>.
           </>
         ) : kind === "videos" ? (
-          <>Video clips up to 1 GB (MP4, MOV, WebM…). Any file name works: it&apos;s renamed to the video convention on upload.</>
+          <>Videos up to 1 GB. Any file name works.</>
         ) : (
-          <>Any file name works: it&apos;s renamed to the {MEDIA_KIND_LABEL[kind].toLowerCase()} convention on upload.</>
+          <>Any file name works.</>
         )}
       </p>
 
@@ -209,7 +206,7 @@ export function MediaUpload({
                 href={m.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-[0.83rem] text-brass no-underline py-0.5"
+                className="flex items-center gap-1.5 text-[0.83rem] text-brand no-underline py-0.5"
               >
                 {m.subfolder === "videos" ? <Film size={12} /> : <ExternalLink size={12} />}
                 <span>{MEDIA_KIND_LABEL[m.subfolder] ?? m.subfolder}</span>

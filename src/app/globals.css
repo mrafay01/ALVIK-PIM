@@ -1,28 +1,26 @@
 /* ---------------------------------------------------------------
-   CZC PIM — Design tokens & base styles
-   Palette: brand gold (the logo's ribbon) as the one accent hue, brand
-   grey (the logo's steel ribbon) as the secondary/neutral accent, soft
-   black / soft white as the dark/light grounds — semantic status colors
-   (good/warn/critical) kept as their own distinct hues so a status still
-   reads at a glance instead of blending into the brand palette. Dark is
-   the primary experience; light is available via [data-theme="light"].
+   Alvik PIM — Design tokens & base styles
+   Matches the Alvik brand site (alvikofficial.vercel.app): cool graphite
+   neutrals, one lime-green accent (#8DCA37), soft "tactile" cards and pill
+   buttons, Urbanist type.
 
-   Brand source colors (from the logo), for reference — the tokens below
-   are these, lightly adjusted per theme for contrast/legibility, not a
-   different palette:
-     Dark Golden #B98728 · Golden #D9AC45 · Light Golden #E9C05C
-     Dark Grey   #787878 · Grey   #989898 · Light Grey   #B6B6B6
+   Brand green comes in two roles, like on the Alvik site:
+     --brand        green that's readable as TEXT / icons / borders
+                    (#4C7A12 on light, #A6DC5A on dark)
+     --brand-fill   the logo green #8DCA37 for SOLID fills (primary
+                    buttons, progress bars, toggles, chart bars), always
+                    with dark --on-brand text on top. #8DCA37 as text on
+                    white is only ~2:1 contrast, so never use it for text.
+   Status colours (good / warn / critical) are deliberately different hues
+   from the brand (emerald / amber / rose), so a status still reads at a
+   glance instead of blending into the brand green.
 
-   Type: Montserrat (headings, weight capped at 700) + Quicksand (body/UI
-   text) + JetBrains Mono (data)
+   Type: Urbanist (all UI text) + Geist Mono (codes, SKUs, numbers).
 
-   Tailwind utilities read these tokens via tailwind.config.ts (colors,
-   fonts, radii, shadows all resolve through var(--token)) — this file
-   stays the single source of truth for both the raw CSS below and
-   every Tailwind class used across the app. Component code never spells
-   out a hex value; it only ever reaches these tokens through the `brass`/
-   `navy`/status Tailwind classes below, so this file is the one place a
-   future brand tweak needs to happen.
+   Tailwind utilities read these tokens via tailwind.config.ts. Component
+   code never spells out a hex value; this file is the one place a brand
+   tweak needs to happen. Dark is the default; light via
+   [data-theme="light"] or the OS setting.
 --------------------------------------------------------------- */
 
 @tailwind base;
@@ -30,134 +28,156 @@
 @tailwind utilities;
 
 :root {
-  /* soft black ground + soft white ink — never pure #000/#fff, so nothing
-     ever reads as a stark, unbranded default. */
-  --ink: #f2f0ec;
-  --ink-soft: #c7c4bd;
-  --ink-faint: #8c8983;
+  --ink: #f1f1ef;
+  --ink-soft: #c4c6cc;
+  --ink-faint: #989ba5;
 
-  --surface: #171613;
-  --surface-sunken: #0e0d0b;
-  --surface-raised: #201f1b;
-  --surface-overlay: #29271f;
-  --border: #332f26;
-  --border-strong: #4a4535;
+  --surface: #131418;
+  --surface-sunken: #0c0d10;
+  --surface-raised: #1a1b20;
+  --surface-overlay: #222329;
+  --border: #2a2c33;
+  --border-strong: #3a3c46;
 
-  /* A muted step toward Dark Golden — full Golden (#d9ac45) read as too
-     bright/loud as a solid button fill against the dark surface; this
-     keeps the same hue family but calmer, matching the softer treatment
-     already applied to --brass in light mode. --on-brass stays dark text
-     (Dark Golden reserved for that role) since it still contrasts well
-     (5:1+) against this less saturated gold. */
-  --brass: #b18327;
-  --brass-soft: #4a3a17;
-  --brass-bg: #2b220e;
-  --brass-glow: rgba(177, 131, 39, 0.2);
-  --brass-hover: #c9962f;
-  --on-brass: #241a06;
+  --brand: #a6dc5a;
+  --brand-hover: #bde67f;
+  --brand-soft: #2d3f18;
+  --brand-bg: #1e2912;
+  --brand-glow: rgba(141, 202, 55, 0.24);
+  --brand-fill: #8dca37;
+  --brand-fill-hover: #9bd64a;
+  --brand-fill-deep: #7cb82c;
+  --brand-fill-edge: #5c8f1b;
+  --on-brand: #17202b;
 
-  /* Brand grey — the logo's secondary ribbon color, used as the app's
-     secondary accent (record links/ids, avatar fills) so gold stays
-     reserved for primary emphasis and doesn't get diluted by overuse. */
-  --navy-deep: #b6b6b6;
-  --navy-soft: #989898;
+  /* Secondary neutral accent (record links/ids, avatar fills). */
+  --navy-deep: #c4c6cc;
+  --navy-soft: #989ba5;
 
-  --good: #7fd4a8;
-  --good-bg: #17281f;
-  --warn: #eba572;
-  --warn-bg: #2e2115;
-  --critical: #ef8a8a;
-  --critical-bg: #2e1a1a;
-  --neutral-pill-bg: #262420;
+  --good: #5ee9b5;
+  --good-bg: #0f2a22;
+  --warn: #fcbb00;
+  --warn-bg: #2c2410;
+  --critical: #ff667f;
+  --critical-bg: #2e1419;
+  --neutral-pill-bg: #23242a;
+  --glass: rgba(19, 20, 24, 0.78);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.28);
-  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.45), 0 24px 64px rgba(0, 0, 0, 0.35);
+  --shadow-sm: inset 0 -3px 0 rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 6px 16px rgba(0, 0, 0, 0.28);
+  --shadow-md: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 12px 28px rgba(0, 0, 0, 0.45);
+  --shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 30px 60px -20px rgba(0, 0, 0, 0.7);
+  --shadow-btn: inset 0 -3px 0 var(--brand-fill-edge), inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 2px 3px rgba(0, 0, 0, 0.2), 0 6px 14px -6px rgba(141, 202, 55, 0.45);
+  --shadow-btn-quiet: inset 0 -3px 0 rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 3px rgba(0, 0, 0, 0.25);
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 20px;
+  --radius-sm: 10px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
 
-  --font-display: var(--font-montserrat), ui-sans-serif, "Segoe UI", sans-serif;
-  --font-body: var(--font-quicksand), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-display: var(--font-urbanist), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-body: var(--font-urbanist), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --ink: #1c1a16;
-  --ink-soft: #55524a;
-  --ink-faint: #8c8983;
+  --ink: #16171b;
+  --ink-soft: #3f424a;
+  --ink-faint: #62656e;
 
-  --surface: #ffffff;
-  --surface-sunken: #f7f5f1;
+  --surface: #f9f9f8;
+  --surface-sunken: #ececea;
   --surface-raised: #ffffff;
-  --surface-overlay: #ffffff;
-  --border: #e6e2d8;
-  --border-strong: #d1cbba;
+  --surface-overlay: #f3f3f2;
+  --border: #dcdcd8;
+  --border-strong: #c8c8c3;
 
-  /* A muted step down from Dark Golden — still clearly gold and holds
-     better contrast as both text-on-white and white-on-fill than the
-     brighter #b98728 did (4.01:1 either direction vs. 3.20:1), just less
-     saturated/"loud". --on-brass is white: a solid-gold button (Button.tsx
-     primary) needs to read as gold-with-white-text, not gold-with-
-     near-black-text. */
-  --brass: #a67626;
-  --brass-soft: #f5e6c4;
-  --brass-bg: #fbf3e2;
-  --brass-glow: rgba(166, 118, 38, 0.14);
-  --brass-hover: #8f631c;
-  --on-brass: #ffffff;
+  --brand: #4c7a12;
+  --brand-hover: #3b600d;
+  --brand-soft: #d6eab8;
+  --brand-bg: #eaf4dc;
+  --brand-glow: rgba(141, 202, 55, 0.3);
+  --brand-fill: #8dca37;
+  --brand-fill-hover: #9bd64a;
+  --brand-fill-deep: #7cb82c;
+  --brand-fill-edge: #6fa821;
+  --on-brand: #17202b;
 
-  --navy-deep: #787878;
-  --navy-soft: #5f5f5f;
+  --navy-deep: #3f424a;
+  --navy-soft: #62656e;
 
-  --good: #3f7d5c;
-  --good-bg: #e3efe7;
-  --warn: #b8622f;
-  --warn-bg: #f6e6da;
-  --critical: #af3131;
-  --critical-bg: #f6dfdf;
-  --neutral-pill-bg: #eeece5;
+  --good: #007956;
+  --good-bg: #dcf3ea;
+  --warn: #b75000;
+  --warn-bg: #fdf0dc;
+  --critical: #c20039;
+  --critical-bg: #fde4e8;
+  --neutral-pill-bg: #ececea;
+  --glass: rgba(249, 249, 248, 0.8);
 
-  --shadow-sm: 0 1px 2px rgba(28, 26, 22, 0.06);
-  --shadow-md: 0 2px 8px rgba(28, 26, 22, 0.08), 0 8px 24px rgba(28, 26, 22, 0.05);
-  --shadow-lg: 0 6px 20px rgba(28, 26, 22, 0.1), 0 20px 48px rgba(28, 26, 22, 0.08);
+  --shadow-sm: inset 0 -3px 0 rgba(0, 0, 0, 0.035), 0 1px 2px rgba(22, 23, 27, 0.06),
+    0 6px 16px rgba(22, 23, 27, 0.05);
+  --shadow-md: 0 2px 6px rgba(22, 23, 27, 0.06), 0 12px 28px rgba(22, 23, 27, 0.1);
+  --shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 30px 60px -20px rgba(22, 23, 27, 0.28),
+    0 12px 24px -12px rgba(22, 23, 27, 0.18);
+  --shadow-btn: inset 0 -3px 0 var(--brand-fill-edge), inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 2px 3px rgba(0, 0, 0, 0.1), 0 6px 14px -6px rgba(141, 202, 55, 0.55);
+  --shadow-btn-quiet: inset 0 -3px 0 rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 2px 3px rgba(0, 0, 0, 0.08);
+
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --ink: #1c1a16;
-    --ink-soft: #55524a;
-    --ink-faint: #8c8983;
+    --ink: #16171b;
+    --ink-soft: #3f424a;
+    --ink-faint: #62656e;
 
-    --surface: #ffffff;
-    --surface-sunken: #f7f5f1;
+    --surface: #f9f9f8;
+    --surface-sunken: #ececea;
     --surface-raised: #ffffff;
-    --surface-overlay: #ffffff;
-    --border: #e6e2d8;
-    --border-strong: #d1cbba;
+    --surface-overlay: #f3f3f2;
+    --border: #dcdcd8;
+    --border-strong: #c8c8c3;
 
-    --brass: #a67626;
-    --brass-soft: #f5e6c4;
-    --brass-bg: #fbf3e2;
-    --brass-glow: rgba(166, 118, 38, 0.14);
-    --brass-hover: #8f631c;
-    --on-brass: #ffffff;
+    --brand: #4c7a12;
+    --brand-hover: #3b600d;
+    --brand-soft: #d6eab8;
+    --brand-bg: #eaf4dc;
+    --brand-glow: rgba(141, 202, 55, 0.3);
+    --brand-fill: #8dca37;
+    --brand-fill-hover: #9bd64a;
+    --brand-fill-deep: #7cb82c;
+    --brand-fill-edge: #6fa821;
+    --on-brand: #17202b;
 
-    --navy-deep: #787878;
-    --navy-soft: #5f5f5f;
+    --navy-deep: #3f424a;
+    --navy-soft: #62656e;
 
-    --good: #3f7d5c;
-    --good-bg: #e3efe7;
-    --warn: #b8622f;
-    --warn-bg: #f6e6da;
-    --critical: #af3131;
-    --critical-bg: #f6dfdf;
-    --neutral-pill-bg: #eeece5;
+    --good: #007956;
+    --good-bg: #dcf3ea;
+    --warn: #b75000;
+    --warn-bg: #fdf0dc;
+    --critical: #c20039;
+    --critical-bg: #fde4e8;
+    --neutral-pill-bg: #ececea;
+    --glass: rgba(249, 249, 248, 0.8);
 
-    --shadow-sm: 0 1px 2px rgba(28, 26, 22, 0.06);
-    --shadow-md: 0 2px 8px rgba(28, 26, 22, 0.08), 0 8px 24px rgba(28, 26, 22, 0.05);
-    --shadow-lg: 0 6px 20px rgba(28, 26, 22, 0.1), 0 20px 48px rgba(28, 26, 22, 0.08);
+    --shadow-sm: inset 0 -3px 0 rgba(0, 0, 0, 0.035), 0 1px 2px rgba(22, 23, 27, 0.06),
+      0 6px 16px rgba(22, 23, 27, 0.05);
+    --shadow-md: 0 2px 6px rgba(22, 23, 27, 0.06), 0 12px 28px rgba(22, 23, 27, 0.1);
+    --shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 30px 60px -20px rgba(22, 23, 27, 0.28),
+      0 12px 24px -12px rgba(22, 23, 27, 0.18);
+    --shadow-btn: inset 0 -3px 0 var(--brand-fill-edge), inset 0 1px 0 rgba(255, 255, 255, 0.45),
+      0 2px 3px rgba(0, 0, 0, 0.1), 0 6px 14px -6px rgba(141, 202, 55, 0.55);
+    --shadow-btn-quiet: inset 0 -3px 0 rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.7),
+      0 2px 3px rgba(0, 0, 0, 0.08);
+
+    color-scheme: light;
   }
 }
 
@@ -176,8 +196,11 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 15px;
+  font-weight: 450;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 h1,
@@ -185,15 +208,12 @@ h2,
 h3,
 h4 {
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.015em;
   margin: 0;
   text-wrap: balance;
   color: var(--ink);
 }
-
-/* Montserrat is only loaded up to weight 700 (see layout.tsx) — 700 is the
-   heaviest any heading/display text should ever go (e.g. .font-display
-   paired with Tailwind's font-bold). Never request/apply 800+ on it. */
 
 table {
   font-variant-numeric: tabular-nums;
@@ -204,7 +224,7 @@ a {
 }
 
 ::selection {
-  background: var(--brass-glow);
+  background: var(--brand-glow);
   color: var(--ink);
 }
 
@@ -220,17 +240,60 @@ a {
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ink-faint);
+  background-clip: padding-box;
 }
 
 :focus-visible {
-  outline: 2px solid var(--brass);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
+/* An always-dark graphite panel (like the Alvik site's dark sections), in
+   either theme: re-declares the dark tokens locally, so everything inside
+   still uses the normal token classes. */
+.plate-dark {
+  --ink: #f1f1ef;
+  --ink-soft: #c4c6cc;
+  --ink-faint: #989ba5;
+  --surface: #08090b;
+  --surface-raised: #15161b;
+  --surface-overlay: #1d1e24;
+  --border: #26272e;
+  --border-strong: #3a3c46;
+  --brand: #a6dc5a;
+  --brand-bg: #1e2912;
+  --brand-glow: rgba(141, 202, 55, 0.24);
+  color: var(--ink);
+  background: radial-gradient(120% 90% at 30% 10%, #1b1c22 0%, #121317 60%, #0d0e11 100%);
+}
+
+/* Theme-matched logos: the white-text logo on dark, the dark-text logo on
+   light. Mirrors the token rules above (explicit choice, else the OS). */
+.logo-on-light {
+  display: none;
+}
+:root[data-theme="light"] .logo-on-dark {
+  display: none;
+}
+:root[data-theme="light"] .logo-on-light {
+  display: block;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .logo-on-dark {
+    display: none;
+  }
+  :root:not([data-theme="dark"]) .logo-on-light {
+    display: block;
+  }
+}
+
+/* Table rows that highlight on hover. */
 .czc-row {
   transition: background 0.12s;
 }
@@ -239,12 +302,13 @@ a {
   background: var(--surface-overlay);
 }
 
+/* Cards that are links: lift slightly and pick up a green edge on hover. */
 .czc-card-link {
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 
 .czc-card-link:hover {
-  border-color: var(--brass-glow);
+  border-color: var(--brand-glow);
   box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }

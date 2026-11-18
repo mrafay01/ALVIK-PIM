@@ -93,8 +93,8 @@ export function SupportForm({ name, email }: { name: string; email: string }) {
           rows={6}
           maxLength={5000}
           required
-          placeholder="What were you trying to do, what happened instead, and any error message you saw."
-          className="font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full resize-y focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)]"
+          placeholder="What happened?"
+          className="font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full resize-y focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-glow)]"
         />
       </Field>
       <Field label="Page it happened on (optional)">

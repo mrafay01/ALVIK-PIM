@@ -55,9 +55,9 @@ function fmtDate(d: Date | string | null | undefined): string {
   return new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-const PRIORITY_TONE: Record<string, "neutral" | "warn" | "critical" | "brass"> = {
+const PRIORITY_TONE: Record<string, "neutral" | "warn" | "critical" | "brand"> = {
   low: "neutral",
-  medium: "brass",
+  medium: "brand",
   high: "warn",
   critical: "critical",
 };
@@ -119,9 +119,7 @@ export default async function PurchaseOrdersPage({
   return (
     <AppShell activeHref="/purchase-orders" eyebrow="Vendor pipeline" title="Purchase Orders">
       <p className="text-ink-soft max-w-[72ch] mb-6 text-[0.92rem]">
-        Every purchase order in one list, whether it came from the Monday board or from a vendor quote
-        committed here. Search, filter and sort below; the URL keeps your view, so you can bookmark or
-        share it.
+        All purchase orders in one list.
       </p>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
@@ -129,7 +127,7 @@ export default async function PurchaseOrdersPage({
           label={isFiltered ? `Matching (of ${allCount})` : "Total POs"}
           value={total}
           icon={ClipboardList}
-          tone="brass"
+          tone="brand"
         />
         <StatCard label="Needs attention" value={viewCounts.attention ?? 0} icon={TriangleAlert} tone="warn" />
         <StatCard label="Overdue" value={viewCounts.overdue ?? 0} icon={CalendarClock} tone="warn" />
@@ -314,7 +312,7 @@ function SortHeader({
       <Link
         href={qs ? `/purchase-orders?${qs}` : "/purchase-orders"}
         className={`inline-flex items-center gap-1 no-underline ${
-          active ? "text-brass" : "text-ink-faint hover:text-ink"
+          active ? "text-brand" : "text-ink-faint hover:text-ink"
         }`}
       >
         {label}
@@ -326,7 +324,7 @@ function SortHeader({
 
 function ChecklistMeter({ done }: { done: number }) {
   const pct = Math.round((done / 6) * 100);
-  const tone = done === 6 ? "bg-good" : done >= 3 ? "bg-brass" : "bg-warn";
+  const tone = done === 6 ? "bg-good" : done >= 3 ? "bg-brand-fill" : "bg-warn";
   return (
     <div className="flex items-center gap-2" title={`${done} of 6 back-office checklist items done`}>
       <div className="w-[52px] h-[6px] rounded-full bg-surface-sunken overflow-hidden">

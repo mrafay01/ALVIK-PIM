@@ -49,11 +49,11 @@ export function SubmitToCatalog({
           </h2>
           {missing.length === 0 ? (
             <p className="text-[0.84rem] text-ink-soft m-0">
-              The master record is complete. Submit it, and an administrator approves it from the Catalog.
+              Ready to submit for approval.
             </p>
           ) : (
             <>
-              <p className="text-[0.84rem] text-ink-soft m-0 mb-1.5">Before it can go into the catalog, this item needs:</p>
+              <p className="text-[0.84rem] text-ink-soft m-0 mb-1.5">Still needed:</p>
               <ul className="m-0 pl-5 text-[0.84rem] text-warn">
                 {missing.map((m) => (
                   <li key={m}>{m}</li>
@@ -63,7 +63,7 @@ export function SubmitToCatalog({
           )}
           {!canSubmit && missing.length === 0 && (
             <p className="text-[0.8rem] text-ink-faint mt-1.5 mb-0">
-              A catalog manager or an administrator can submit it.
+              Only catalog managers and admins can submit.
             </p>
           )}
           {error && <p className="text-[0.82rem] text-critical mt-1.5 mb-0">{error}</p>}

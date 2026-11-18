@@ -147,7 +147,7 @@ export function CatalogExportBar({
     <Card className="mb-4">
       <div className="flex items-center gap-3 flex-wrap">
         <span className="flex items-center gap-1.5 font-semibold text-[0.9rem]">
-          <FileDown size={16} className="text-brass" /> Export
+          <FileDown size={16} className="text-brand" /> Export
         </span>
         <span className="text-[0.84rem] text-ink-soft">
           {count > 0 ? `${count.toLocaleString()} selected` : "Tick items to export them, or export everything listed."}
@@ -185,16 +185,16 @@ export function CatalogExportBar({
         </Button>
         <Link
           href="/catalog/export"
-          className="flex items-center gap-1.5 text-[0.84rem] text-brass no-underline font-semibold"
+          className="flex items-center gap-1.5 text-[0.84rem] text-brand no-underline font-semibold"
         >
           <ListPlus size={14} /> Export from a SKU list
         </Link>
       </div>
-      <p className="text-[0.76rem] text-ink-faint mt-2 mb-0">
-        The file has the Master File&apos;s columns, in the same order. The Flagged column says &quot;Yes&quot; (with the
-        issues) for SKUs that also have a row waiting in Flagged Items.
-        {total > MAX_EXPORT_ITEMS && ` One export takes up to ${MAX_EXPORT_ITEMS.toLocaleString()} items; narrow the filters to export all.`}
-      </p>
+      {total > MAX_EXPORT_ITEMS && (
+        <p className="text-[0.76rem] text-ink-faint mt-2 mb-0">
+          Up to {MAX_EXPORT_ITEMS.toLocaleString()} items per export. Narrow the filters to export the rest.
+        </p>
+      )}
       {note && <p className={`text-[0.82rem] mt-1.5 mb-0 ${note.tone === "good" ? "text-good" : "text-critical"}`}>{note.text}</p>}
     </Card>
   );

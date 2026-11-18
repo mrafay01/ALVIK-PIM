@@ -290,7 +290,7 @@ export default async function ItemDetailPage({
             meta={`${siblingVariations.length + 1} in this family`}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              <div className="flex items-center justify-between px-3 py-2.5 rounded-sm bg-brass-bg border border-[color:var(--brass-glow)]">
+              <div className="flex items-center justify-between px-3 py-2.5 rounded-sm bg-brand-bg border border-[color:var(--brand-glow)]">
                 <div className="min-w-0">
                   <span className="font-mono text-[0.82rem] font-semibold text-ink block truncate">
                     {item.itemNumber ?? item.sampleSku ?? "this item"}

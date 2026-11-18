@@ -109,7 +109,7 @@ export function CatalogFilters({
             value={q}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="SKU, title, brand, UPC…"
-            className="font-body text-[0.89rem] pl-8 pr-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)]"
+            className="font-body text-[0.89rem] pl-8 pr-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-glow)]"
           />
         </span>
       </label>
@@ -159,7 +159,7 @@ export function CatalogFilters({
           min="0"
           defaultValue={state.minPrice}
           onBlur={(e) => e.target.value !== state.minPrice && pushWith({ minPrice: e.target.value })}
-          className="font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)]"
+          className="font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-glow)]"
         />
       </label>
       <label className="flex flex-col gap-1.5 w-[100px]">
@@ -171,7 +171,7 @@ export function CatalogFilters({
           min="0"
           defaultValue={state.maxPrice}
           onBlur={(e) => e.target.value !== state.maxPrice && pushWith({ maxPrice: e.target.value })}
-          className="font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)]"
+          className="font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-glow)]"
         />
       </label>
 

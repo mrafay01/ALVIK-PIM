@@ -170,7 +170,7 @@ function KindCell({ media, kind }: { media: ItemMediaEntry[]; kind: Kind }) {
                 href={m.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-[0.78rem] text-brass no-underline py-1"
+                className="flex items-center gap-1.5 text-[0.78rem] text-brand no-underline py-1"
               >
                 <CheckCircle2 size={12} className="shrink-0" />
                 <span className="font-mono truncate">{fileName(m)}</span>
@@ -179,7 +179,7 @@ function KindCell({ media, kind }: { media: ItemMediaEntry[]; kind: Kind }) {
           )}
           {broken > 0 && (
             <p className="text-[0.72rem] text-ink-faint mt-1.5 mb-0">
-              Broken means the file was deleted or moved in SharePoint. Upload it again to fix it.
+              Upload again to fix broken files.
             </p>
           )}
         </div>,
@@ -263,10 +263,8 @@ function UploadPanel({ row, onDone }: { row: ImageRow; onDone: () => void }) {
       </div>
       <p className="text-[0.76rem] text-ink-faint m-0">
         {kind === "auto"
-          ? `Files must already be named ${row.folderKey}.jpg / ${row.folderKey}-S1.jpg / ${row.folderKey}-M1.jpg / ${row.folderKey}-LS1.jpg / ${row.folderKey}-V1.mp4.`
-          : `Saved to SharePoint Images/${row.folderKey}/${kind === "videos" ? "Videos" : MEDIA_KIND_LABEL[kind]} as ${example}${
-              kind === "main" ? " (replaces the current main image)" : kind === "videos" ? ". Videos up to 1 GB" : ""
-            }.`}
+          ? `Name files ${row.folderKey}.jpg, -S1, -M1, -LS1 or -V1.mp4.`
+          : `Saved as ${example}${kind === "main" ? " (replaces the current one)" : ""}.`}
       </p>
       {errors.map((e) => (
         <p key={e} className="text-[0.8rem] text-critical m-0">
@@ -363,7 +361,7 @@ export function ImagesTable({
                 active
                   ? t.value === "broken"
                     ? "font-semibold bg-critical-bg text-critical"
-                    : "font-semibold bg-brass-bg text-brass"
+                    : "font-semibold bg-brand-bg text-brand"
                   : "font-medium bg-transparent text-ink-soft hover:text-ink"
               }`}
             >
@@ -388,7 +386,7 @@ export function ImagesTable({
                   timer.current = setTimeout(() => go({ q: v.trim() }), 350);
                 }}
                 placeholder="SKU or title…"
-                className="font-body text-[0.88rem] pl-8 pr-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brass"
+                className="font-body text-[0.88rem] pl-8 pr-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brand"
               />
             </span>
           </label>

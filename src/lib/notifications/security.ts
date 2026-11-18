@@ -21,14 +21,14 @@ const REASON = "This is an account security email. It's always sent and can't be
 const NOT_YOU = "If this wasn't you or you didn't expect it, contact your administrator straight away.";
 
 export function securityEmail(n: SecurityNotice): Omit<NotificationEmail, "reason"> {
-  const signIn = { label: "Sign in to CZC PIM", href: appUrl("/login") };
+  const signIn = { label: "Sign in to Alvik PIM", href: appUrl("/login") };
   switch (n.kind) {
     case "password_changed":
       return {
         subject: "Your password was changed",
         eyebrow: "Account security",
         heading: "Your password was changed",
-        intro: `The password for your CZC PIM account was just changed, and your other devices were signed out. ${NOT_YOU}`,
+        intro: `The password for your Alvik PIM account was just changed, and your other devices were signed out. ${NOT_YOU}`,
         action: signIn,
       };
     case "password_reset_by_admin":
@@ -36,7 +36,7 @@ export function securityEmail(n: SecurityNotice): Omit<NotificationEmail, "reaso
         subject: "Your password was reset by an administrator",
         eyebrow: "Account security",
         heading: "Your password was reset",
-        intro: `${n.adminName ?? "An administrator"} set a new password for your CZC PIM account and you were signed out everywhere. Ask them for the new password, then change it from Settings. ${NOT_YOU}`,
+        intro: `${n.adminName ?? "An administrator"} set a new password for your Alvik PIM account and you were signed out everywhere. Ask them for the new password, then change it from Settings. ${NOT_YOU}`,
         action: signIn,
       };
     case "email_changed":
@@ -44,13 +44,13 @@ export function securityEmail(n: SecurityNotice): Omit<NotificationEmail, "reaso
         subject: "Your sign-in email was changed",
         eyebrow: "Account security",
         heading: "Your sign-in email was changed",
-        intro: `Your CZC PIM account now signs in with ${n.newEmail}, and emails from the app go there. This address won't get them any more. ${NOT_YOU}`,
+        intro: `Your Alvik PIM account now signs in with ${n.newEmail}, and emails from the app go there. This address won't get them any more. ${NOT_YOU}`,
       };
     case "role_changed":
       return {
         subject: `Your role is now ${ROLE_LABEL[n.to] ?? n.to}`,
         eyebrow: "Account",
-        heading: "Your role in CZC PIM changed",
+        heading: "Your role in Alvik PIM changed",
         intro: `${n.adminName ?? "An administrator"} changed your role, so what you can see and do in the app has changed. You were signed out; sign in again to continue.`,
         rows: [
           { label: "Was", value: ROLE_LABEL[n.from] ?? n.from },
@@ -60,17 +60,17 @@ export function securityEmail(n: SecurityNotice): Omit<NotificationEmail, "reaso
       };
     case "account_deactivated":
       return {
-        subject: "Your CZC PIM account was deactivated",
+        subject: "Your Alvik PIM account was deactivated",
         eyebrow: "Account",
         heading: "Your account was deactivated",
-        intro: `${n.adminName ?? "An administrator"} deactivated your CZC PIM account, so you can't sign in any more. If you think this is a mistake, contact your administrator.`,
+        intro: `${n.adminName ?? "An administrator"} deactivated your Alvik PIM account, so you can't sign in any more. If you think this is a mistake, contact your administrator.`,
       };
     case "account_reactivated":
       return {
-        subject: "Your CZC PIM account is active again",
+        subject: "Your Alvik PIM account is active again",
         eyebrow: "Account",
         heading: "Your account is active again",
-        intro: `${n.adminName ?? "An administrator"} reactivated your CZC PIM account. You can sign in again with your usual password.`,
+        intro: `${n.adminName ?? "An administrator"} reactivated your Alvik PIM account. You can sign in again with your usual password.`,
         action: signIn,
       };
   }

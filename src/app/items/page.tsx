@@ -83,15 +83,11 @@ export default async function UnverifiedItemsPage({
   return (
     <AppShell activeHref="/items" eyebrow="Pre-catalog pipeline" title="Un-Verified Items">
       <p className="text-ink-soft max-w-[72ch] mb-5 text-[0.92rem]">
-        Items that came in via a PO and haven&apos;t been verified into the catalog yet. Monday-pull
-        items appear here once their PO reaches <strong>In Production</strong>; manual-quote items
-        appear as soon as the quote is committed. Once an item is promoted to the catalog, it moves
-        to <Link href="/catalog" className="text-navy-deep no-underline">/catalog</Link> and off
-        this list.
+        New items waiting to be checked and added to the catalog.
       </p>
 
-      <div className="grid grid-cols-3 gap-3.5 mb-5">
-        <StatTile icon={PackageSearch} label="Total un-verified" value={total} tone="brass" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-5">
+        <StatTile icon={PackageSearch} label="Total un-verified" value={total} tone="brand" />
         <StatTile icon={Keyboard} label="From manual entry" value={manualCount} tone="neutral" />
         <StatTile icon={FileSpreadsheet} label="From Monday" value={mondayCount} tone="neutral" />
       </div>
@@ -105,7 +101,7 @@ export default async function UnverifiedItemsPage({
               key={t.value}
               href={href}
               className={`px-3.5 py-1.5 rounded-full text-[0.82rem] no-underline ${
-                active ? "font-semibold bg-brass-bg text-brass" : "font-medium bg-transparent text-ink-soft"
+                active ? "font-semibold bg-brand-bg text-brand" : "font-medium bg-transparent text-ink-soft"
               }`}
             >
               {t.label}
@@ -117,8 +113,7 @@ export default async function UnverifiedItemsPage({
       {total === 0 ? (
         <Card>
           <p className="text-ink-faint m-0 text-[0.88rem]">
-            No un-verified items{filter !== "all" ? " on this filter" : ""}. Manual entries land here on
-            quote commit; Monday pulls land here once a PO reaches &quot;In Production&quot;.
+            No un-verified items{filter !== "all" ? " on this filter" : ""}.
           </p>
         </Card>
       ) : (
@@ -215,11 +210,11 @@ function StatTile({
   icon: typeof PackageSearch;
   label: string;
   value: number;
-  tone: "brass" | "neutral";
+  tone: "brand" | "neutral";
 }) {
   const toneClass =
-    tone === "brass"
-      ? "bg-brass-bg text-brass border-[color:var(--brass-glow)]"
+    tone === "brand"
+      ? "bg-brand-bg text-brand border-[color:var(--brand-glow)]"
       : "bg-surface-sunken text-ink-soft border-border";
   return (
     <Card className="flex items-center gap-3.5">

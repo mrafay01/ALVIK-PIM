@@ -72,7 +72,7 @@ export function UserRow({
       <td className={TD_CLASS}>
         <div className="font-semibold text-ink">{user.name}</div>
         <div className="text-ink-faint text-[0.78rem] font-mono">{user.email}</div>
-        {isSelf && <div className="text-brass text-[0.72rem] font-semibold mt-0.5">You</div>}
+        {isSelf && <div className="text-brand text-[0.72rem] font-semibold mt-0.5">You</div>}
       </td>
       <td className={TD_CLASS}>
         <Select

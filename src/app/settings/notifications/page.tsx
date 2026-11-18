@@ -5,7 +5,6 @@ import User from "@/models/User";
 import { Card } from "@/components/ui/Card";
 import { BellRing, ShieldCheck } from "lucide-react";
 import type { Role } from "@/lib/enums";
-import { ROLE_LABEL } from "@/lib/statusDisplay";
 import { isMailConfigured } from "@/lib/mailer";
 import { NOTIFICATION_EVENTS, eventsForRole, isEnabled, type StoredPrefs } from "@/lib/notifications/events";
 import { NotificationPrefsForm, type NotificationToggle } from "../NotificationPrefsForm";
@@ -39,8 +38,7 @@ export default async function NotificationsSettingsPage() {
       backLabel="Settings"
     >
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Choose which emails you get about what happens in the app. The list shows what&apos;s relevant to your role (
-        {ROLE_LABEL[role] ?? role}). Changes save straight away.
+        Choose which emails you get. Changes save automatically.
       </p>
 
       <Card>
@@ -49,8 +47,7 @@ export default async function NotificationsSettingsPage() {
           <h2 className="text-[0.95rem] m-0">Email notifications</h2>
         </div>
         <p className="text-[0.8rem] text-ink-faint mb-2">
-          Sent to <span className="font-mono text-ink-soft">{user?.email ?? session?.user?.email}</span>. You never get
-          an email about something you did yourself.
+          Sent to <span className="font-mono text-ink-soft">{user?.email ?? session?.user?.email}</span>.
         </p>
         <NotificationPrefsForm toggles={toggles} mailConfigured={isMailConfigured()} />
       </Card>
@@ -61,8 +58,7 @@ export default async function NotificationsSettingsPage() {
           <h2 className="text-[0.95rem] m-0">Account security emails</h2>
         </div>
         <p className="text-[0.82rem] text-ink-soft m-0 max-w-[68ch]">
-          Always sent and can&apos;t be turned off: when your password is changed or reset, your sign-in email changes
-          (sent to the old address), your role changes, or your account is deactivated or reactivated.
+          Always on: password, email, role and account changes.
         </p>
       </Card>
     </AppShell>

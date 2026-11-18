@@ -31,7 +31,7 @@ function inputType(kind: string): string {
 }
 
 const INPUT_CLASS =
-  "font-body text-[0.86rem] px-3 py-2 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)] disabled:opacity-60";
+  "font-body text-[0.86rem] px-3 py-2 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-glow)] disabled:opacity-60";
 
 const MANUAL_VENDOR_OPTION = "__manual__";
 
@@ -192,11 +192,10 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
         <p className="text-[0.8rem] text-ink-soft mt-2 mb-0">
           {formatPoNumber(poNumber) ? (
             <>
-              This will be <strong className="text-ink font-mono">PO-{formatPoNumber(poNumber)}</strong>, and joins
-              the Monday PO with the same number if there is one.
+              Saved as <strong className="text-ink font-mono">PO-{formatPoNumber(poNumber)}</strong>.
             </>
           ) : (
-            "Type the PO number, e.g. 22906 (the same as an uploaded file named 22906.xlsx)."
+            "For example, 22906."
           )}
         </p>
 
@@ -205,15 +204,14 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
             Custom columns
           </span>
           <p className="text-[0.8rem] text-ink-soft mt-1 mb-2.5">
-            Add a column this quote needs that isn&apos;t one of the standard fields. It shows on
-            every item below.
+            Add extra fields for this quote.
           </p>
           {customCols.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2.5">
               {customCols.map((c) => (
                 <span
                   key={c}
-                  className="inline-flex items-center gap-1 text-[0.8rem] bg-brass-bg text-brass px-2.5 py-1 rounded-full"
+                  className="inline-flex items-center gap-1 text-[0.8rem] bg-brand-bg text-brand px-2.5 py-1 rounded-full"
                 >
                   {c}
                   <button
@@ -287,7 +285,7 @@ export function NewQuoteForm({ vendors }: { vendors: { id: string; name: string 
 
             {customCols.length > 0 && (
               <div className="mt-4 pt-3.5 border-t border-border">
-                <span className="text-[0.68rem] font-semibold text-brass uppercase tracking-wide">
+                <span className="text-[0.68rem] font-semibold text-brand uppercase tracking-wide">
                   Custom columns
                 </span>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3 mt-2">

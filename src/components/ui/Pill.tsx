@@ -1,11 +1,11 @@
-type PillTone = "good" | "warn" | "critical" | "neutral" | "brass";
+type PillTone = "good" | "warn" | "critical" | "neutral" | "brand";
 
 const TONE_CLASSES: Record<PillTone, string> = {
   good: "bg-good-bg text-good",
   warn: "bg-warn-bg text-warn",
   critical: "bg-critical-bg text-critical",
   neutral: "bg-neutral-pill text-ink-soft",
-  brass: "bg-brass-bg text-brass",
+  brand: "bg-brand-bg text-brand",
 };
 
 export function Pill({
@@ -19,7 +19,7 @@ export function Pill({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 font-mono text-[0.72rem] font-semibold tracking-wide px-2.5 py-1 rounded-full whitespace-nowrap ${TONE_CLASSES[tone]}`}
+      className={`inline-flex items-center gap-1.5 font-display text-[0.75rem] font-semibold leading-none px-2.5 py-[5px] rounded-full whitespace-nowrap ${TONE_CLASSES[tone]}`}
     >
       {dot && <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />}
       {children}

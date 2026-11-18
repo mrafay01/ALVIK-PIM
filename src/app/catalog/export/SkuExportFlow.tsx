@@ -160,8 +160,7 @@ export function SkuExportFlow() {
           <FileUp size={16} /> 1. Upload your SKU list
         </h2>
         <p className="text-[0.85rem] text-ink-soft m-0 max-w-[70ch]">
-          An Excel or CSV file with one column: the heading <code className="font-mono">SKUs</code> in the first cell
-          (A1), then one SKU per row. You&apos;ll see what was found before anything is exported.
+          One column, headed <code className="font-mono">SKUs</code>, one SKU per row.
         </p>
         <div className="flex items-center gap-3 flex-wrap">
           <Button variant="primary" loading={reading} onClick={() => inputRef.current?.click()}>
@@ -169,7 +168,7 @@ export function SkuExportFlow() {
               {!reading && <FileUp size={15} />} {reading ? "Reading the list…" : "Choose file"}
             </span>
           </Button>
-          <a href={TEMPLATE_HREF} download="sku-list.csv" className="flex items-center gap-1.5 text-[0.84rem] text-brass no-underline font-semibold">
+          <a href={TEMPLATE_HREF} download="sku-list.csv" className="flex items-center gap-1.5 text-[0.84rem] text-brand no-underline font-semibold">
             <Download size={14} /> Blank SKU list
           </a>
           <input
@@ -210,7 +209,7 @@ export function SkuExportFlow() {
           <p className="text-[0.85rem] text-ink-soft m-0">
             <span className="font-mono">{data.fileName}</span>: {counts.all.toLocaleString()} SKU
             {counts.all === 1 ? "" : "s"}. {counts.catalog.toLocaleString()} in the catalog
-            {counts.staged > 0 && `, ${counts.staged.toLocaleString()} only as Master File rows (Flagged Items or waiting on review)`}
+            {counts.staged > 0 && `, ${counts.staged.toLocaleString()} only as import rows`}
             {counts.unverified > 0 && `, ${counts.unverified.toLocaleString()} un-verified`}
             {counts.notFound > 0 && `, ${counts.notFound.toLocaleString()} not found`}.
             {counts.flagged > 0 && ` ${counts.flagged.toLocaleString()} flagged.`}
@@ -234,7 +233,7 @@ export function SkuExportFlow() {
               setPage(1);
             }}
             className={`px-3.5 py-1.5 rounded-full text-[0.82rem] border-0 cursor-pointer ${
-              view === t.value ? "font-semibold bg-brass-bg text-brass" : "font-medium bg-transparent text-ink-soft hover:text-ink"
+              view === t.value ? "font-semibold bg-brand-bg text-brand" : "font-medium bg-transparent text-ink-soft hover:text-ink"
             }`}
           >
             {t.label} <span className="font-mono text-[0.75rem] opacity-75">{t.n.toLocaleString()}</span>

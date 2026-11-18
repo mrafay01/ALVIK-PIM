@@ -34,6 +34,7 @@ import { PO_STATUSES, IMAGE_ONLY_SUBFOLDERS } from "@/lib/enums";
 import { PO_STATUS_LABEL, PO_STATUS_TONE, ITEM_STATUS_LABEL, ITEM_STATUS_TONE } from "@/lib/statusDisplay";
 import { OPEN_PO_CONDITIONS } from "@/lib/purchase-orders/listQuery";
 import { KpiTile, Panel, PipelineFlow, AttentionList, Ring, LegendRow, CoverageBar, ago } from "./parts";
+import { buttonClasses } from "@/components/ui/buttonStyles";
 
 export const dynamic = "force-dynamic";
 
@@ -235,7 +236,7 @@ export default async function DashboardPage() {
       count: pendingApproval,
       href: "/catalog?filter=pending",
       icon: Clock,
-      tone: "brass" as const,
+      tone: "brand" as const,
     },
     {
       label: "Overdue purchase orders",
@@ -297,11 +298,7 @@ export default async function DashboardPage() {
               <Link
                 key={a.href}
                 href={a.href}
-                className={`inline-flex items-center gap-1.5 rounded-sm px-3.5 py-2 text-[0.84rem] font-semibold no-underline transition-colors duration-150 ${
-                  a.primary
-                    ? "bg-brass text-on-brass border border-brass hover:bg-brass-hover"
-                    : "bg-surface text-ink border border-border-strong hover:border-brass hover:text-brass"
-                }`}
+                className={buttonClasses(a.primary ? "primary" : "secondary", "sm")}
               >
                 <a.icon size={15} /> {a.label}
               </Link>
@@ -346,7 +343,7 @@ export default async function DashboardPage() {
           icon={BellRing}
           label="Need attention"
           value={attentionTotal}
-          sub={attentionTotal > 0 ? "Reviews, conflicts, approvals, overdue POs, broken images" : "All clear"}
+          sub={attentionTotal > 0 ? "Waiting on someone" : "All clear"}
           subTone={attentionTotal > 0 ? "warn" : "good"}
           tone={attentionTotal > 0 ? "warn" : "good"}
         />
@@ -356,9 +353,7 @@ export default async function DashboardPage() {
       <div className="mb-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.85fr)_minmax(320px,1fr)]">
         <Panel
           title="Purchase order pipeline"
-          subtitle={`${openPos.toLocaleString()} open POs by stage${
-            sideLane > 0 ? ` · ${sideLane} in a Monday side-lane (Stuck, On hold, …)` : ""
-          }`}
+          subtitle={`${openPos.toLocaleString()} open, by stage${sideLane > 0 ? ` · ${sideLane} on hold` : ""}`}
           href="/purchase-orders?lifecycle=open"
         >
           {openPos === 0 ? (
@@ -369,7 +364,7 @@ export default async function DashboardPage() {
         </Panel>
 
         <div id="attention" className="scroll-mt-24">
-          <Panel title="Needs attention" subtitle="Work waiting on someone" className="h-full">
+          <Panel title="Needs attention" className="h-full">
             <AttentionList items={attention} />
           </Panel>
         </div>
@@ -377,7 +372,7 @@ export default async function DashboardPage() {
 
       {/* Catalog health, images, intake */}
       <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <Panel title="Catalog health" subtitle="Publish-readiness of every catalog item" href="/catalog">
+        <Panel title="Catalog health" subtitle="Ready to publish" href="/catalog">
           {catalog === 0 ? (
             <p className="m-0 text-[0.85rem] text-ink-faint">No catalog items yet.</p>
           ) : (
@@ -385,7 +380,7 @@ export default async function DashboardPage() {
               <Ring value={complete} total={catalog} label="complete" />
               <div className="flex min-w-[150px] flex-1 flex-col gap-0.5">
                 <LegendRow color="var(--good)" label="Complete" value={complete} href="/catalog" />
-                <LegendRow color="var(--brass)" label="Pending approval" value={pendingApproval} href="/catalog?filter=pending" />
+                <LegendRow color="var(--brand-fill)" label="Pending approval" value={pendingApproval} href="/catalog?filter=pending" />
                 <LegendRow color="var(--ink-faint)" label="Missing fields" value={incomplete} href="/catalog?filter=incomplete" />
               </div>
             </div>
@@ -394,7 +389,7 @@ export default async function DashboardPage() {
 
         <Panel
           title="Image coverage"
-          subtitle="Catalog items with each image type in SharePoint"
+          subtitle="Catalog items with photos"
           href="/images"
           linkLabel="Images"
         >
@@ -406,7 +401,7 @@ export default async function DashboardPage() {
               <CoverageBar label="Side images" value={count(it.catSides)} total={catalog} />
               <CoverageBar label="Model images" value={count(it.catModels)} total={catalog} />
               <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-[0.78rem]">
-                <Link href="/images?scope=catalog&status=none" className="text-ink-soft no-underline hover:text-brass">
+                <Link href="/images?scope=catalog&status=none" className="text-ink-soft no-underline hover:text-brand">
                   {catNoImages.toLocaleString()} with no images
                 </Link>
                 {broken > 0 && (
@@ -434,7 +429,7 @@ export default async function DashboardPage() {
               {recentPos.map((p) => (
                 <li key={String(p._id)}>
                   <Link href={`/purchase-orders/${p._id}`} className="group flex items-center gap-3 py-2.5 no-underline">
-                    <span className="w-[72px] shrink-0 font-mono text-[0.84rem] font-semibold text-ink group-hover:text-brass">
+                    <span className="w-[72px] shrink-0 font-mono text-[0.84rem] font-semibold text-ink group-hover:text-brand">
                       {p.poNumber}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-[0.82rem] text-ink-soft">
@@ -465,7 +460,7 @@ export default async function DashboardPage() {
               {recentItems.map((i) => (
                 <li key={String(i._id)}>
                   <Link href={`/items/${i._id}`} className="group flex items-center gap-3 py-2.5 no-underline">
-                    <span className="w-[96px] shrink-0 truncate font-mono text-[0.84rem] font-semibold text-ink group-hover:text-brass">
+                    <span className="w-[96px] shrink-0 truncate font-mono text-[0.84rem] font-semibold text-ink group-hover:text-brand">
                       {i.itemNumber ?? i.sampleSku ?? "—"}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-[0.82rem] text-ink-soft">{i.title ?? "Untitled"}</span>

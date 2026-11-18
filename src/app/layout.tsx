@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Montserrat, Quicksand, JetBrains_Mono } from "next/font/google";
+import { Urbanist, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
@@ -7,8 +7,8 @@ import "./globals.css";
 // next/font self-hosts these at build time (no runtime request to Google
 // Fonts, no render-blocking <link> tags) and exposes each as a CSS variable
 // that globals.css's --font-display/--font-body/--font-mono tokens read from.
-// Montserrat (headings) is capped at 700 — the app never requests or uses a
-// heavier weight (800/900) than that for display text, by design.
+// Urbanist (the Alvik brand font) is loaded as a variable font, so every
+// weight is available (body text uses 450). Geist Mono is for codes/numbers.
 //
 // `adjustFontFallback: false` opts out of Next.js's size-matching trick that
 // generates a per-font fallback metric table at build. That generator is the
@@ -18,35 +18,31 @@ import "./globals.css";
 // is what the browser uses while the real font loads (and if the download
 // fails entirely). Every value here is an inline literal because Next.js's
 // SWC font-loader plugin refuses symbol references.
-const montserrat = Montserrat({
+const urbanist = Urbanist({
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  variable: "--font-montserrat",
+  variable: "--font-urbanist",
   display: "swap",
   fallback: ["system-ui", "-apple-system", "Segoe UI", "sans-serif"],
   adjustFontFallback: false,
 });
-const quicksand = Quicksand({
+const geistMono = Geist_Mono({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-quicksand",
-  display: "swap",
-  fallback: ["system-ui", "-apple-system", "Segoe UI", "sans-serif"],
-  adjustFontFallback: false,
-});
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-jetbrains-mono",
+  variable: "--font-geist-mono",
   display: "swap",
   fallback: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
   adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
-  title: "CZC PIM",
+  title: "Alvik PIM",
   description: "Product & purchase order management",
-  icons: { icon: "/logos/Alvik FavIcon White.png" },
+  // Light/dark browser tabs each get the mark that's visible on them.
+  icons: {
+    icon: [
+      { url: "/logos/Alvik FavIcon Black.png", media: "(prefers-color-scheme: light)" },
+      { url: "/logos/Alvik FavIcon White.png", media: "(prefers-color-scheme: dark)" },
+    ],
+  },
 };
 
 // Sets data-theme on <html> before first paint, so there's no flash of the
@@ -74,7 +70,7 @@ export default function RootLayout({
     // one attribute only, not a real content difference.
     <html
       lang="en"
-      className={`${montserrat.variable} ${quicksand.variable} ${jetbrainsMono.variable}`}
+      className={`${urbanist.variable} ${geistMono.variable}`}
       suppressHydrationWarning
     >
       <head>

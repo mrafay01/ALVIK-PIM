@@ -146,7 +146,7 @@ const DATE_FORMAT = "m/d/yyyy";
 
 export async function buildMasterFileWorkbook(rows: ExportRow[], opts: { flaggedColumn: boolean }): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "CZC PIM";
+  wb.creator = "Alvik PIM";
   const ws = wb.addWorksheet("Master File", { views: [{ state: "frozen", ySplit: 1 }] });
 
   const headers = MASTER_FILE_COLUMNS.map((c) => c.header);

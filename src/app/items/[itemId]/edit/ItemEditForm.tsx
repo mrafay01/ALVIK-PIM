@@ -55,7 +55,7 @@ export type ItemEditValues = {
 };
 
 const textareaClass =
-  "font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none transition-[border-color,box-shadow] duration-150 focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)] resize-y";
+  "font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none transition-[border-color,box-shadow] duration-150 focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-glow)] resize-y";
 
 function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} className={`${textareaClass} ${props.className ?? ""}`} />;
@@ -64,7 +64,7 @@ function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
 function SectionHeader({ icon, title, hint }: { icon: React.ReactNode; title: string; hint?: string }) {
   return (
     <div className="flex items-center gap-2 mb-4">
-      <span className="text-brass shrink-0 flex items-center">{icon}</span>
+      <span className="text-brand shrink-0 flex items-center">{icon}</span>
       <h2 className="text-[0.92rem] font-semibold m-0">{title}</h2>
       {hint && <span className="text-[0.78rem] text-ink-faint">({hint})</span>}
     </div>

@@ -19,12 +19,11 @@ export default async function CatalogExportPage() {
       backHref="/catalog"
     >
       <p className="text-ink-soft max-w-[72ch] mb-5 text-[0.92rem]">
-        Download items as an Excel file with the Master File&apos;s columns, in the same order, ready to compare with
-        or paste into the Master File. Upload a list of SKUs below, or{" "}
-        <Link href="/catalog" className="text-brass font-semibold no-underline">
-          tick items on the Catalog
-        </Link>{" "}
-        and export those. SKUs that are still in Flagged Items are exported too.
+        Upload a SKU list, or{" "}
+        <Link href="/catalog" className="text-brand font-semibold no-underline">
+          pick items in the Catalog
+        </Link>
+        .
       </p>
       <Card>
         <SkuExportFlow />

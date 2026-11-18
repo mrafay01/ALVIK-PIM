@@ -17,10 +17,7 @@ export default async function QuoteImportPage() {
       title="Import Quote File"
     >
       <p className="text-ink-soft max-w-[68ch] mb-6 text-[0.92rem]">
-        Upload a vendor quote as <strong>.xlsx</strong>, legacy <strong>.xls</strong>, or{" "}
-        <strong>.csv</strong>. Every line item is parsed and staged for review; nothing writes to
-        the product database until you approve it. The column headers are matched by name (found
-        anywhere in the first few rows), so the sheet can be in the vendor&apos;s own layout.
+        Upload an Excel or CSV quote. You&apos;ll review every line before it&apos;s saved.
       </p>
 
       <Card className="max-w-[560px]">

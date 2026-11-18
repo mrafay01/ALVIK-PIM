@@ -90,7 +90,7 @@ export function ChangeEmailForm({ currentEmail }: { currentEmail: string }) {
     return (
       <form onSubmit={handleOtpSubmit} className="flex flex-col gap-4 max-w-[360px]">
         <div className="flex items-center gap-2 text-[0.83rem] text-ink-soft">
-          <MailCheck size={15} className="text-brass shrink-0" />
+          <MailCheck size={15} className="text-brand shrink-0" />
           We sent a 6-digit code to <span className="font-semibold text-ink">{newEmail}</span>; enter it to prove
           you own that inbox. It expires in 10 minutes.
         </div>

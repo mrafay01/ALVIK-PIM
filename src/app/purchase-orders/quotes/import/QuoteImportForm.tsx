@@ -184,7 +184,7 @@ export function QuoteImportForm({ vendors }: { vendors: { id: string; name: stri
         </Field>
       )}
 
-      <Field label="PO file (.xlsx, .xls, or .csv — up to 30 MB, saved to the PO's SharePoint folder)">
+      <Field label="Quote file (Excel or CSV, up to 30 MB)">
         <input
           type="file"
           name="file"
@@ -257,7 +257,7 @@ function SheetPickerPanel({
               key={c.name}
               className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer ${
                 active
-                  ? "border-brass bg-brass-bg"
+                  ? "border-brand bg-brand-bg"
                   : "border-border bg-surface hover:border-border-strong"
               } ${!parseable ? "opacity-70" : ""}`}
             >

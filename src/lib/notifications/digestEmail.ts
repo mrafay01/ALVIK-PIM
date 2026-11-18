@@ -92,7 +92,7 @@ export function digestEmail(role: Role, c: DigestCounts): NotifyInput["email"] {
         ? `Weekly summary: ${todo.length} ${todo.length === 1 ? "thing needs" : "things need"} attention`
         : "Weekly summary",
     eyebrow: "Weekly summary",
-    heading: "Your week in CZC PIM",
+    heading: "Your week in Alvik PIM",
     intro:
       todo.length > 0
         ? "Here's where things stand. The items in the list below are waiting on someone; each one opens the right page."

@@ -319,7 +319,7 @@ export function QuoteReviewTable({
             {customColumns.map((label) => (
               <span
                 key={label}
-                className="inline-flex items-center gap-1.5 bg-brass-bg text-brass text-[0.78rem] px-2 py-1 rounded-full"
+                className="inline-flex items-center gap-1.5 bg-brand-bg text-brand text-[0.78rem] px-2 py-1 rounded-full"
               >
                 {label}
                 <button
@@ -588,7 +588,7 @@ function RowDetail({
         </div>
       ) : (
         <p className="text-[0.82rem] text-ink-faint italic">
-          This row didn&apos;t carry any of the standard columns. Add one below if the vendor missed it.
+          No standard fields on this row.
         </p>
       )}
 
@@ -596,14 +596,14 @@ function RowDetail({
       {(customLabels.length > 0 || canEdit) && (
         <div className="mt-4 pt-3.5 border-t border-border">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[0.66rem] font-semibold text-brass uppercase tracking-wide">
+            <span className="text-[0.66rem] font-semibold text-brand uppercase tracking-wide">
               Custom fields
             </span>
             {canEdit && !adding && (
               <button
                 type="button"
                 onClick={onStartAdd}
-                className="text-[0.76rem] text-brass hover:text-brass-hover flex items-center gap-1"
+                className="text-[0.76rem] text-brand hover:text-brand-hover flex items-center gap-1"
               >
                 <Plus size={12} /> Add column to this row
               </button>

@@ -55,13 +55,13 @@ export function PageJump({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={String(page)}
-        className="w-[72px] font-mono text-[0.82rem] px-2 py-1.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brass"
+        className="w-[72px] font-mono text-[0.82rem] px-2 py-1.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none focus:border-brand"
       />
       <span>of {pageCount.toLocaleString()}</span>
       <button
         type="submit"
         disabled={!value.trim()}
-        className="px-2.5 py-1.5 rounded-sm border border-border-strong text-ink-soft bg-transparent cursor-pointer disabled:opacity-40 disabled:cursor-default hover:enabled:border-brass hover:enabled:text-brass"
+        className="px-2.5 py-1.5 rounded-sm border border-border-strong text-ink-soft bg-transparent cursor-pointer disabled:opacity-40 disabled:cursor-default hover:enabled:border-brand hover:enabled:text-brand"
       >
         Go
       </button>

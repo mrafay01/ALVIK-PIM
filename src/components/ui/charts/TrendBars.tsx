@@ -1,5 +1,5 @@
 // Vertical bar chart for a short time series (weekly item/PO volume over
-// the last ~12 weeks). Hand-rolled SVG, single-hue (brass — this app's
+// the last ~12 weeks). Hand-rolled SVG, single-hue (brand — this app's
 // accent) since it's one series, not a categorical breakdown.
 export type TrendDatum = { label: string; value: number };
 
@@ -23,7 +23,7 @@ export function TrendBars({
               className="w-full rounded-t-sm"
               style={{
                 height: barH,
-                background: d.value > 0 ? "var(--brass)" : "var(--border)",
+                background: d.value > 0 ? "var(--brand-fill)" : "var(--border)",
                 minHeight: 2,
               }}
               title={`${d.label}: ${d.value}`}

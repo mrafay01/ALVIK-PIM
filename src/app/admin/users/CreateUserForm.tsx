@@ -44,7 +44,7 @@ export function CreateUserForm({ roles, roleLabel }: { roles: readonly Role[]; r
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <div className="grid grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
         </Field>

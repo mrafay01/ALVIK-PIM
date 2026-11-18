@@ -14,7 +14,7 @@ import {
 
 const LABEL = "text-[0.72rem] font-semibold text-ink-faint uppercase tracking-wide";
 const INPUT =
-  "font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brass focus:shadow-[0_0_0_3px_var(--brass-glow)]";
+  "font-body text-[0.89rem] px-3 py-2.5 rounded-sm border border-border-strong bg-surface-sunken text-ink outline-none w-full focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-glow)]";
 
 const VIEWS: { value: PoView; label: string; hint: string }[] = [
   { value: "all", label: "All", hint: "Every purchase order" },
@@ -141,13 +141,13 @@ export function PurchaseOrderFilters({
               onClick={() => pushWith({ view: v.value })}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[0.82rem] border ${
                 active
-                  ? "font-semibold bg-brass-bg text-brass border-[color:var(--brass-glow)]"
+                  ? "font-semibold bg-brand-bg text-brand border-[color:var(--brand-glow)]"
                   : "font-medium bg-transparent text-ink-soft border-border hover:border-border-strong"
               }`}
             >
               {v.label}
               {count != null && count > 0 && (
-                <span className={`font-mono text-[0.72rem] ${active ? "text-brass" : "text-ink-faint"}`}>
+                <span className={`font-mono text-[0.72rem] ${active ? "text-brand" : "text-ink-faint"}`}>
                   {count}
                 </span>
               )}
@@ -256,7 +256,7 @@ export function PurchaseOrderFilters({
               type="button"
               onClick={() => pushWith({ dir: state.dir === "asc" ? "desc" : "asc" })}
               title={state.dir === "asc" ? "Ascending — click for descending" : "Descending — click for ascending"}
-              className="flex items-center justify-center gap-1 w-[64px] rounded-sm border border-border-strong text-ink-soft hover:border-brass hover:text-brass font-mono text-[0.72rem] shrink-0"
+              className="flex items-center justify-center gap-1 w-[64px] rounded-sm border border-border-strong text-ink-soft hover:border-brand hover:text-brand font-mono text-[0.72rem] shrink-0"
             >
               <ArrowDownUp size={13} />
               {state.dir === "asc" ? "ASC" : "DESC"}
@@ -269,8 +269,8 @@ export function PurchaseOrderFilters({
           onClick={() => setShowAdvanced((v) => !v)}
           className={`flex items-center gap-1.5 px-3 py-2.5 rounded-sm border text-[0.82rem] ${
             showAdvanced || advancedActive
-              ? "border-brass text-brass"
-              : "border-border-strong text-ink-soft hover:border-brass hover:text-brass"
+              ? "border-brand text-brand"
+              : "border-border-strong text-ink-soft hover:border-brand hover:text-brand"
           }`}
         >
           <SlidersHorizontal size={14} /> More filters

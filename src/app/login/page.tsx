@@ -11,18 +11,18 @@ import { Button } from "@/components/ui/Button";
 const HIGHLIGHTS = [
   {
     icon: Gem,
-    title: "One product spine",
-    body: "Every vendor quote, sample SKU, and review decision lives in a single record, no more chasing Excel Master Files.",
+    title: "One product record",
+    body: "Quotes, samples and approvals in one place.",
   },
   {
     icon: ClipboardList,
-    title: "Purchase orders that enforce themselves",
-    body: "A PO can't move to Ready to Ship until the back-office checklist is actually complete; the server checks, not just the eye.",
+    title: "Guided purchase orders",
+    body: "Checklists keep every order on track.",
   },
   {
     icon: Workflow,
-    title: "Monday & SharePoint, connected",
-    body: "Vendor PI files, status updates, and product imagery sync in, without replacing the boards vendors already know.",
+    title: "Connected tools",
+    body: "Files, images and status updates stay in sync.",
   },
 ];
 
@@ -189,106 +189,82 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen grid grid-cols-[1.15fr_1fr] bg-surface-sunken">
-      {/* Left: brand / storytelling panel */}
-      <div
-        className="relative overflow-hidden border-r border-border flex flex-col items-center"
-        style={{
-          background:
-            "radial-gradient(1200px 600px at -10% -10%, rgba(217,176,119,0.14), transparent 60%), radial-gradient(900px 500px at 110% 110%, rgba(183,198,230,0.08), transparent 55%), var(--surface)",
-        }}
-      >
-        {/* Faceted gem-cut line pattern — subtle, jewelry-appropriate texture confined to the margins */}
-        <svg
+    <main className="min-h-[100dvh] grid lg:grid-cols-[1.1fr_1fr] bg-surface-sunken lg:p-3 lg:gap-3">
+      {/* Left: brand / storytelling panel — an always-dark graphite plate
+          with a soft green glow, like the Alvik site's dark sections.
+          Hidden on phones/tablets, where the form shows the logo itself. */}
+      <div className="plate-dark relative overflow-hidden hidden lg:flex flex-col items-center rounded-[28px] shadow-lg">
+        <div
           aria-hidden="true"
-          className="absolute inset-0 w-full h-full pointer-events-none"
-          preserveAspectRatio="xMidYMid slice"
-        >
-          <defs>
-            <pattern id="facet-grid" width="120" height="104" patternUnits="userSpaceOnUse">
-              {/* hexagonal / kite facet lines, like a brilliant-cut table viewed from above */}
-              <path
-                d="
-                  M60 0 L120 26 L120 78 L60 104 L0 78 L0 26 Z
-                  M60 0 L60 104
-                  M0 26 L60 52 L120 26
-                  M0 78 L60 52 L120 78
-                  M60 52 L60 104
-                "
-                fill="none"
-                stroke="var(--brass)"
-                strokeWidth="1"
-              />
-            </pattern>
-            {/* Opaque in the side margins, fading to near-invisible behind the centered text column */}
-            <linearGradient id="facet-mask" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="white" stopOpacity="0.55" />
-              <stop offset="16%" stopColor="white" stopOpacity="0.4" />
-              <stop offset="50%" stopColor="white" stopOpacity="0.2" />
-              <stop offset="84%" stopColor="white" stopOpacity="0.4" />
-              <stop offset="100%" stopColor="white" stopOpacity="0.55" />
-            </linearGradient>
-            <mask id="facet-visibility">
-              <rect width="100%" height="100%" fill="url(#facet-mask)" />
-            </mask>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#facet-grid)" mask="url(#facet-visibility)" />
-        </svg>
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(700px 420px at 0% 0%, var(--brand-glow), transparent 60%), radial-gradient(600px 400px at 100% 100%, var(--brand-bg), transparent 60%)",
+          }}
+        />
 
-        <div className="relative w-full max-w-[460px] px-2 py-16 flex flex-col flex-1">
+        <div className="relative w-full max-w-[480px] px-6 py-14 flex flex-col flex-1">
           <div>
             <Image
-              src="/Alvik Logo v2 - Light.png"
-              alt="CZC PIM"
-              width={1254}
-              height={1254}
+              src="/logos/Alvik Logo v2 - Dark.png"
+              alt="Alvik"
+              width={1244}
+              height={355}
               priority
-              className="h-[72px] w-auto object-contain"
+              className="h-[46px] w-auto"
             />
 
-            <h1 className="mt-14 text-[2.35rem] leading-[1.22] text-ink">
+            <span className="mt-12 inline-flex items-center gap-2 font-display font-semibold text-[0.85rem] text-brand bg-surface-raised border border-border rounded-full px-3.5 py-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-fill" />
+              Alvik PIM
+            </span>
+            <h1 className="mt-5 text-[2.6rem] leading-[1.12] tracking-tight text-ink">
               One system for every product, vendor, and order.
             </h1>
-            <p className="mt-[18px] text-base text-ink-soft leading-[1.7]">
-              CZC PIM replaces scattered Excel Master Files and Monday boards with a single
-              source of truth, from vendor intake to purchase orders to catalog, built for
-              how the wholesale jewelry business actually runs.
+            <p className="mt-5 text-[1.02rem] text-ink-soft leading-[1.7]">
+              Products, vendors and purchase orders in one place.
             </p>
           </div>
 
-          <div className="flex flex-col gap-[22px] mt-12">
+          <div className="flex flex-col gap-3 mt-10">
             {HIGHLIGHTS.map((h) => (
               <div
                 key={h.title}
-                className="flex gap-3.5 items-start rounded-sm px-1.5 py-1"
-                style={{ background: "color-mix(in srgb, var(--surface) 72%, transparent)", backdropFilter: "blur(2px)" }}
+                className="flex gap-3.5 items-start rounded-[18px] p-3.5 bg-surface-raised border border-border"
               >
-                <span className="flex items-center justify-center w-[38px] h-[38px] rounded-sm bg-brass-bg border border-[color:var(--brass-glow)] shrink-0">
-                  <h.icon size={18} color="var(--brass)" strokeWidth={2} />
+                <span className="flex items-center justify-center w-10 h-10 rounded-[12px] bg-brand-bg shrink-0">
+                  <h.icon size={18} color="var(--brand)" strokeWidth={2} />
                 </span>
                 <div>
-                  <div className="text-[0.95rem] font-bold text-ink mb-[3px]">{h.title}</div>
-                  <div className="text-[0.86rem] text-ink-faint leading-[1.55]">{h.body}</div>
+                  <div className="text-[0.97rem] font-bold text-ink mb-[3px]">{h.title}</div>
+                  <div className="text-[0.87rem] text-ink-faint leading-[1.55]">{h.body}</div>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="flex items-center gap-2 text-[0.78rem] text-ink-faint mt-auto pt-6 border-t border-border">
+          <div className="flex items-center gap-2 text-[0.8rem] text-ink-faint mt-auto pt-6 border-t border-border">
             <ShieldCheck size={14} />
-            Role-based access · SharePoint media storage · Monday.com sync
+            Secure, role-based access
           </div>
         </div>
       </div>
 
       {/* Right: sign-in form */}
-      <div className="flex items-center justify-center p-8">
-        <div className="w-full max-w-[360px]">
+      <div className="flex items-center justify-center px-5 py-10 sm:p-8">
+        <div className="w-full max-w-[380px]">
+          {/* Logo above the form where the brand panel is hidden. */}
+          <div className="lg:hidden mb-10 flex justify-center">
+            <span className="block w-[150px]">
+              <Image src="/logos/Alvik Logo v2 - Dark.png" alt="Alvik" width={1244} height={355} priority className="logo-on-dark w-full h-auto" />
+              <Image src="/logos/Alvik Logo v2 - Light.png" alt="Alvik" width={1246} height={359} priority className="logo-on-light w-full h-auto" />
+            </span>
+          </div>
           {step === "password" ? (
             <>
               <div className="mb-8">
-                <h2 className="text-2xl mb-1.5">Welcome back</h2>
-                <p className="text-[0.88rem] text-ink-faint m-0">Sign in with your CZC PIM credentials to continue.</p>
+                <h2 className="text-[1.75rem] tracking-tight mb-1.5">Welcome back</h2>
+                <p className="text-[0.92rem] text-ink-faint m-0">Sign in to continue.</p>
               </div>
 
               <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-4">
@@ -329,7 +305,7 @@ export default function LoginPage() {
           ) : (
             <>
               <div className="mb-8">
-                <span className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-brass-bg text-brass mb-4">
+                <span className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-brand-bg text-brand mb-4">
                   <MailCheck size={20} />
                 </span>
                 <h2 className="text-2xl mb-1.5">Check your email</h2>
@@ -378,7 +354,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={handleResend}
                   disabled={resendCooldown > 0 || submitting}
-                  className="text-[0.82rem] text-brass bg-transparent border-none p-0 disabled:text-ink-faint disabled:cursor-not-allowed cursor-pointer"
+                  className="text-[0.82rem] text-brand bg-transparent border-none p-0 disabled:text-ink-faint disabled:cursor-not-allowed cursor-pointer"
                 >
                   {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
                 </button>

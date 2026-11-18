@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
           subject: "Test email",
           eyebrow: "Notifications",
           heading: "Your notification emails work",
-          intro: `This is a test from CZC PIM. Notifications for your role (${ROLE_LABEL[role] ?? role}) will arrive at this address. If this landed in spam, mark it as not spam so the real ones reach your inbox.`,
+          intro: `This is a test from Alvik PIM. Notifications for your role (${ROLE_LABEL[role] ?? role}) will arrive at this address. If this landed in spam, mark it as not spam so the real ones reach your inbox.`,
           action: { label: "Open notification settings", href: appUrl("/settings/notifications") },
           reason: "You asked for this test email from Settings → Notifications.",
         });
