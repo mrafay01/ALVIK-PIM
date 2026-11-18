@@ -46,7 +46,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "CZC PIM",
   description: "Product & purchase order management",
-  icons: { icon: "/logos/favicon.svg" },
+  icons: { icon: "/logos/Alvik FavIcon White.png" },
 };
 
 // Sets data-theme on <html> before first paint, so there's no flash of the

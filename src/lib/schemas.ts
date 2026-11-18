@@ -260,7 +260,7 @@ export const CatalogItemCreateSchema = z.object({
   // Per-marketplace description overrides, set at creation time the same
   // way the general description is — keyed by DESCRIPTION_PLATFORMS. Only
   // non-empty entries are kept; see POST /api/catalog.
-  marketplaceDescriptions: z.record(z.enum(DESCRIPTION_PLATFORMS), z.string().trim().max(5000)).optional(),
+  marketplaceDescriptions: z.partialRecord(z.enum(DESCRIPTION_PLATFORMS), z.string().trim().max(5000)).optional(),
   variations: z.array(CatalogVariationSchema).max(20).optional(),
 });
 

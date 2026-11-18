@@ -238,7 +238,7 @@ export default function LoginPage() {
         <div className="relative w-full max-w-[460px] px-2 py-16 flex flex-col flex-1">
           <div>
             <Image
-              src="/logos/PIM-transparent.png"
+              src="/Alvik Logo v2 - Light.png"
               alt="CZC PIM"
               width={1254}
               height={1254}
