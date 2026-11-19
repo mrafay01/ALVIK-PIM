@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { UserCreateSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
+import { ONE_DEVELOPER } from "@/lib/enums";
 
 // POST: create a new user with a role and a real, immediately-usable
 // password (unlike the seed script, which deliberately issues unusable
@@ -24,6 +25,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "A user with that email already exists" }, { status: 409 });
   }
 
+  if (role === "developer" && (await User.exists({ role: "developer" }))) {
+    return NextResponse.json({ error: ONE_DEVELOPER }, { status: 409 });
+  }
+
   const passwordHash = await bcrypt.hash(password, 12);
   let user;
   try {
@@ -32,6 +37,7 @@ export async function POST(req: NextRequest) {
     // Two admins adding the same email at once: the unique index catches
     // what the findOne above couldn't.
     if ((err as { code?: number }).code === 11000) {
+      if (role === "developer") return NextResponse.json({ error: ONE_DEVELOPER }, { status: 409 });
       return NextResponse.json({ error: "A user with that email already exists" }, { status: 409 });
     }
     throw err;

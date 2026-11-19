@@ -89,6 +89,8 @@ export const DESCRIPTION_PLATFORM_LABEL: Record<DescriptionPlatform, string> = {
 
 export const ROLE_LABEL: Record<Role, string> = {
   administrator: "Administrator",
+  developer: "Developer",
+  viewer: "Viewer",
   buyer_merchandiser: "Buyer / Merchandiser",
   buying_purchasing: "Buying & Purchasing",
   warehouse_receiving: "Warehouse Receiving",

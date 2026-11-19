@@ -1,3 +1,4 @@
+import { hasFullAccess } from "@/lib/enums";
 import { NextRequest, NextResponse } from "next/server";
 import { Types, Error as MongooseError } from "mongoose";
 import { connectDB } from "@/lib/db";
@@ -67,7 +68,7 @@ export async function PATCH(
 
   const previousStatus = po.status as string;
   if (body.status && body.status !== previousStatus) {
-    const isAdmin = gate.role === "administrator";
+    const isAdmin = hasFullAccess(gate.role);
     const history = po.statusHistory.map((h) => ({ status: h.status }));
     if (!isValidPoTransition(previousStatus, body.status, { allowBack: isAdmin, history })) {
       return NextResponse.json(

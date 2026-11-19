@@ -1,3 +1,4 @@
+import { hasFullAccess } from "@/lib/enums";
 import { notFound, redirect } from "next/navigation";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
@@ -23,7 +24,7 @@ export default async function BatchReviewPage({
 }) {
   const { batchId } = await params;
   if (!isObjectId(batchId)) notFound();
-  if ((await getSessionRole()) !== "administrator") redirect("/unauthorized");
+  if (!hasFullAccess(await getSessionRole())) redirect("/unauthorized");
   const sp = await searchParams;
   const q = (sp.q ?? "").trim().slice(0, 100);
   const page = parsePage(sp.page);

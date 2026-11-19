@@ -1,7 +1,9 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
-import type { Role } from "@/lib/enums";
+import { hasFullAccess, isReadOnlyRole, type Role } from "@/lib/enums";
 import { safeCallbackPath } from "@/lib/safeCallback";
+import { buildCsp, newNonce } from "@/lib/csp";
+import { viewerMayCallApi } from "@/lib/viewerAccess";
 
 // The Edge runtime (where middleware always executes) doesn't support
 // Node's `fs`/`path` modules, which the shared Winston logger (@/lib/logger)
@@ -19,7 +21,9 @@ const logger = {
 const PAGE_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
   // Viewable by everyone who works quotes; changing a PO is gated to
   // buying_purchasing in the API (and its controls hidden for others).
-  ["/purchase-orders", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
+  ["/purchase-orders/quotes/new", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
+  ["/purchase-orders/quotes/import", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
+  ["/purchase-orders", ["buying_purchasing", "buyer_merchandiser", "catalog_manager", "viewer"]],
   ["/receiving", ["warehouse_receiving"]],
   ["/admin", []], // administrator only
   // /catalog itself is read-only for any signed-in user; only the
@@ -46,12 +50,12 @@ const API_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
   ["/api/monday/sync", []],
   ["/api/monday/pull", []],
   // Read-only views on the PO detail page (vendor PI files, conversation).
-  ["/api/monday/files", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
-  ["/api/monday/updates", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
+  ["/api/monday/files", ["buying_purchasing", "buyer_merchandiser", "catalog_manager", "viewer"]],
+  ["/api/monday/updates", ["buying_purchasing", "buyer_merchandiser", "catalog_manager", "viewer"]],
   ["/api/monday", ["buying_purchasing"]],
   ["/api/purchase-orders", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
   ["/api/quotations", ["buying_purchasing", "buyer_merchandiser", "catalog_manager"]],
-  ["/api/items", ["buyer_merchandiser", "buying_purchasing", "catalog_manager", "photography"]],
+  ["/api/items", ["buyer_merchandiser", "buying_purchasing", "catalog_manager", "photography", "viewer"]],
   // Catalog export (ROLE_SETS.catalogExport); listed before /api/catalog,
   // which is narrower, since the first matching prefix wins.
   ["/api/catalog/export", ["buyer_merchandiser", "buying_purchasing", "catalog_manager"]],
@@ -61,6 +65,24 @@ const API_ROUTE_ROLES: [prefix: string, allowed: Role[]][] = [
   // /api/users (self-service notification prefs) deliberately has no entry
   // — any signed-in role passes, same reasoning as /settings above.
 ];
+
+// Pages that need a signed-in user. Every other page (/unauthorized, the 404
+// page, ...) is matched only so it gets the CSP nonce, and passes through.
+const PROTECTED_PAGE_PREFIXES = [
+  "/dashboard",
+  "/items",
+  "/purchase-orders",
+  "/catalog",
+  "/receiving",
+  "/admin",
+  "/settings",
+  "/help",
+  "/images",
+];
+
+function isProtectedPage(path: string): boolean {
+  return path === "/" || PROTECTED_PAGE_PREFIXES.some((p) => path === p || path.startsWith(p + "/"));
+}
 
 function firstMatch(
   path: string,
@@ -133,6 +155,21 @@ export default withAuth(
     const path = req.nextUrl.pathname;
     const isApi = path.startsWith("/api/");
 
+    // CSP: a fresh nonce per request. Next.js reads it from the request's
+    // CSP header to stamp its own scripts; the layout reads x-nonce for the
+    // inline theme script. Any value the client sent is overwritten.
+    const nonce = newNonce();
+    const isHttps = req.nextUrl.protocol === "https:" || req.headers.get("x-forwarded-proto") === "https";
+    const csp = buildCsp(nonce, process.env.NODE_ENV === "production", isHttps);
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-nonce", nonce);
+    requestHeaders.set("Content-Security-Policy", csp);
+    const next = () => {
+      const res = NextResponse.next({ request: { headers: requestHeaders } });
+      res.headers.set("Content-Security-Policy", csp);
+      return res;
+    };
+
     // CSRF: block cross-origin mutating API requests before any handler sees
     // them. NextAuth's /api/auth/* endpoints handle their own origin logic
     // (and must keep accepting the sign-in POST from the login page);
@@ -176,6 +213,9 @@ export default withAuth(
         }
       }
     }
+    // Public pages (see PROTECTED_PAGE_PREFIXES): CSP only.
+    if (!isApi && path !== "/login" && !isProtectedPage(path)) return next();
+
     // Written into the cookie by the jwt callback (auth.ts) once a server-
     // side session check finds the token revoked (sessionVersion bumped or
     // account deactivated). Treated exactly like "no session".
@@ -190,13 +230,13 @@ export default withAuth(
       // Sent here by AppShell after the server found this session revoked.
       // Clear the stale cookie so it can't keep bouncing the user back.
       if (req.nextUrl.searchParams.get("session") === "expired") {
-        const res = NextResponse.next();
+        const res = next();
         for (const name of req.cookies.getAll().map((c) => c.name)) {
           if (name.includes("next-auth.session-token")) res.cookies.delete(name);
         }
         return res;
       }
-      if (!role) return NextResponse.next();
+      if (!role) return next();
       const target = safeCallbackPath(req.nextUrl.searchParams.get("callbackUrl")) ?? "/dashboard";
       return NextResponse.redirect(new URL(target, req.url));
     }
@@ -213,11 +253,20 @@ export default withAuth(
       return NextResponse.redirect(loginUrl);
     }
 
-    if (role === "administrator") {
+    // Viewer: read-only. Every request that is not a plain read is refused
+    // here, before any handler runs, except the person's own account (password,
+    // sign-out, notification choices), sign-in/out and the Help form. Handlers
+    // also refuse a viewer through requireRole; this is the backstop.
+    if (isReadOnlyRole(role) && isApi && !viewerMayCallApi(req.method, path)) {
+      logger.warn("API write refused for viewer", { path, method: req.method, userId });
+      return NextResponse.json({ error: "Your account is read-only" }, { status: 403 });
+    }
+
+    if (hasFullAccess(role)) {
       if (isApi) {
         logger.debug("API request", { path, method: req.method, userId, role });
       }
-      return NextResponse.next();
+      return next();
     }
 
     const allowed = isApi
@@ -235,7 +284,7 @@ export default withAuth(
     if (isApi) {
       logger.debug("API request", { path, method: req.method, userId, role });
     }
-    return NextResponse.next();
+    return next();
   },
   {
     callbacks: {
@@ -247,22 +296,14 @@ export default withAuth(
 );
 
 export const config = {
-  // Every real app screen and every mutating API route requires a session.
-  // /login is matched only so signed-in users get bounced past it (the
-  // handler always lets signed-out visitors through). /unauthorized and the
-  // NextAuth endpoints are excluded; the health check is public on purpose.
+  // Every page except static assets and framework internals runs through
+  // here (CSP nonce); only the protected prefixes then require a session
+  // (isProtectedPage). The API entries are the routes that require a
+  // session or role. /api/auth, /api/health, /api/jobs and
+  // /api/notifications are not matched: NextAuth, the public health check
+  // and the bearer-token endpoints do their own checks.
   matcher: [
-    "/",
-    "/login",
-    "/dashboard/:path*",
-    "/items/:path*",
-    "/purchase-orders/:path*",
-    "/catalog/:path*",
-    "/receiving/:path*",
-    "/admin/:path*",
-    "/settings/:path*",
-    "/help/:path*",
-    "/images/:path*",
+    "/((?!api/|_next/|__sentry_proxy|.*\\..*).*)",
     "/api/items/:path*",
     "/api/catalog/:path*",
     "/api/purchase-orders/:path*",

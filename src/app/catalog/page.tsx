@@ -1,3 +1,4 @@
+import { hasFullAccess } from "@/lib/enums";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/AppShell";
@@ -163,7 +164,7 @@ export default async function CatalogPage({
       .limit(1)
       .lean(),
   ]);
-  const isAdmin = role === "administrator";
+  const isAdmin = hasFullAccess(role);
   const canExport = roleCan(role, ROLE_SETS.catalogExport);
   const openImport = isAdmin ? openImports[0] : undefined;
   const canApprove = isAdmin;
@@ -368,20 +369,22 @@ export default async function CatalogPage({
       ) : (
         <Card padding={0}>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse table-fixed">
+            <table className="w-full min-w-[1360px] border-collapse table-fixed">
               <colgroup>
                 {canExport && <col className="w-[40px]" />}
-                <col className="w-[11%]" />
-                <col className={canExport ? "w-[13%]" : "w-[16%]"} />
-                <col className="w-[9%]" />
-                <col className="w-[8%]" />
-                <col className="w-[9%]" />
+                <col className="w-[10%]" />
+                {/* Title has no width: it takes whatever the other columns leave. */}
+                <col />
                 <col className="w-[8%]" />
                 <col className="w-[7%]" />
-                <col className="w-[7%]" />
-                <col className="w-[12%]" />
-                <col className="w-[7%]" />
+                <col className="w-[8%]" />
+                <col className="w-[8%]" />
                 <col className="w-[6%]" />
+                <col className="w-[6%]" />
+                <col className="w-[10%]" />
+                <col className="w-[7%]" />
+                {/* Fixed width: conflict count + Pending + Approve + warning icon must fit on one line. */}
+                <col className="w-[230px]" />
               </colgroup>
               <thead>
                 <tr>

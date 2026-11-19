@@ -1,7 +1,8 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { connectDB } from "@/lib/db";
-import { rateLimit } from "@/lib/rateLimit";
+import { checkLoginThrottle, recordLoginFailure } from "@/lib/loginThrottle";
+import { maskEmail } from "@/lib/logMask";
 import { redeemSessionTicket } from "@/lib/otp";
 import { verifyCredentials, normalizeEmail } from "@/lib/credentials";
 import { clientIp } from "@/lib/clientIp";
@@ -58,11 +59,11 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
-          logger.warn("Login attempt with missing credentials", { email: credentials?.email });
+          logger.warn("Login attempt with missing credentials", { email: maskEmail(credentials?.email) });
           return null;
         }
         if (OTP_2FA_ENABLED && !credentials?.sessionTicket) {
-          logger.warn("Login attempt with missing OTP ticket", { email: credentials.email });
+          logger.warn("Login attempt with missing OTP ticket", { email: maskEmail(credentials.email) });
           return null;
         }
 
@@ -71,20 +72,20 @@ export const authOptions: NextAuthOptions = {
         // autofill) passed the OTP step and then failed here.
         const email = normalizeEmail(credentials.email);
 
-        // Throttle credential-stuffing: cap attempts per email and per client IP.
+        // Throttle brute force: failed attempts per (email, IP) and per
+        // email, plus every attempt per client IP. See lib/loginThrottle.ts
+        // for why a good attempt never counts against the account.
         const ip = clientIp(req?.headers as Record<string, string | string[] | undefined> | undefined);
-        const [perEmail, perIp] = await Promise.all([
-          rateLimit(`login:email:${email}`, { limit: 5, windowMs: 60_000 }),
-          rateLimit(`login:ip:${ip}`, { limit: 20, windowMs: 60_000 }),
-        ]);
-        if (!perEmail.allowed || !perIp.allowed) {
-          logger.warn("Login rate limit exceeded", { email, ip });
+        const throttle = await checkLoginThrottle(email, ip);
+        if (throttle.blocked) {
+          logger.warn("Login rate limit exceeded", { email: maskEmail(email), ip });
           throw new Error(RATE_LIMIT_MESSAGE);
         }
 
         const user = await verifyCredentials(email, credentials.password);
         if (!user) {
-          logger.warn("Login failed: invalid credentials", { email, ip });
+          await recordLoginFailure(email, ip);
+          logger.warn("Login failed: invalid credentials", { email: maskEmail(email), ip });
           return null;
         }
 
@@ -97,12 +98,13 @@ export const authOptions: NextAuthOptions = {
         if (OTP_2FA_ENABLED) {
           const ticketOk = await redeemSessionTicket(user._id, credentials.sessionTicket!);
           if (!ticketOk) {
-            logger.warn("Login failed: invalid OTP ticket", { email, ip });
+            await recordLoginFailure(email, ip);
+            logger.warn("Login failed: invalid OTP ticket", { email: maskEmail(email), ip });
             return null;
           }
         }
 
-        logger.info("Login successful", { email, userId: user._id.toString(), role: user.role });
+        logger.info("Login successful", { email: maskEmail(email), userId: user._id.toString(), role: user.role });
         return {
           id: user._id.toString(),
           name: user.name,

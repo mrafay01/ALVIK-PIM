@@ -1,3 +1,4 @@
+import { hasFullAccess } from "@/lib/enums";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/AppShell";
@@ -35,7 +36,7 @@ export default async function CatalogImportPage({
 }: {
   searchParams: Promise<{ done?: string }>;
 }) {
-  if ((await getSessionRole()) !== "administrator") redirect("/unauthorized");
+  if (!hasFullAccess(await getSessionRole())) redirect("/unauthorized");
   const justFinished = (await searchParams).done === "1";
   await connectDB();
 

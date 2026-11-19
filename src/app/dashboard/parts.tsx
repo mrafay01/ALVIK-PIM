@@ -100,7 +100,7 @@ export function PipelineFlow({
 }) {
   const max = Math.max(1, ...stages.map((s) => s.count));
   return (
-    <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-4 xl:grid-cols-8">
+    <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(110px,1fr))]">
       {stages.map((s, i) => (
         <Link
           key={s.key}

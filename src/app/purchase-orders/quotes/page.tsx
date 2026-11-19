@@ -10,6 +10,8 @@ import { Pill } from "@/components/ui/Pill";
 import { buttonClasses } from "@/components/ui/buttonStyles";
 import { FilePlus2, Upload } from "lucide-react";
 import { Pagination, PAGE_SIZE, parsePage } from "@/components/app/Pagination";
+import { getSessionRole } from "@/lib/authz";
+import { isReadOnlyRole } from "@/lib/enums";
 
 const STATUS_TONE: Record<string, "good" | "warn" | "brand" | "neutral"> = {
   parsing: "neutral",
@@ -44,6 +46,8 @@ export default async function QuotesListPage({
     Quotation.countDocuments({}),
   ]);
 
+  const readOnly = isReadOnlyRole(await getSessionRole());
+
   // A page past the end: go to the last one instead of "No quotes yet".
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
   if (page > lastPage && total > 0) {
@@ -62,6 +66,7 @@ export default async function QuotesListPage({
         Vendor quotes waiting for review or already approved.
       </p>
 
+      {!readOnly && (
       <div className="flex gap-2.5 mb-7 flex-wrap">
         <Link
           href="/purchase-orders/quotes/new"
@@ -76,6 +81,7 @@ export default async function QuotesListPage({
           <Upload size={15} /> Import quote file
         </Link>
       </div>
+      )}
 
       {quotations.length === 0 ? (
         <Card>

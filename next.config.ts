@@ -4,53 +4,10 @@ import { withSentryConfig } from "@sentry/nextjs/config";
 
 const isProd = process.env.NODE_ENV === "production";
 
-// Content-Security-Policy.
-// - script-src: 'unsafe-inline' in every environment. The App Router
-//   streams each page's data to the browser in inline <script> tags
-//   (self.__next_f.push(...)) whose contents change on every request, so
-//   they can't be allow-listed by hash; a hash-only policy (what this used
-//   to ship in production) blocks them and every page renders blank. The
-//   stricter alternative is a per-request nonce set in middleware, which
-//   would require middleware to run on every page; until then this is the
-//   configuration Next.js documents for apps without nonces. Dev also
-//   needs 'unsafe-eval' for HMR / React Refresh.
-// - style-src: 'unsafe-inline' remains because the Tailwind runtime and some
-//   inline React styles rely on it. Fonts come from Google's CDN.
-// - connect-src: 'self' in prod. In dev, websockets to localhost (ws:) and
-//   same-origin (http:) are added for Next.js HMR; without those, HMR stays
-//   broken and the dashboard flashes blank on every save.
-// - Graph and Monday are called server-side (only file uploads go from the
-//   browser to SharePoint, see connectSrc); Sentry uses
-//   tunnelRoute so its traffic is same-origin either way.
-const scriptSrc = isProd
-  ? "script-src 'self' 'unsafe-inline'"
-  : "script-src 'self' 'unsafe-eval' 'unsafe-inline'";
-
-// SharePoint: quote/PI files upload from the browser straight to the
-// site's pre-authenticated upload URL ({tenant}.sharepoint.com).
-const connectSrc = isProd
-  ? "connect-src 'self' https://*.sharepoint.com"
-  : "connect-src 'self' https://*.sharepoint.com ws: wss: http://localhost:* http://127.0.0.1:*";
-
-const csp = [
-  "default-src 'self'",
-  scriptSrc,
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com",
-  "img-src 'self' data: blob: https:",
-  connectSrc,
-  "frame-ancestors 'none'",
-  "frame-src 'none'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "worker-src 'self' blob:",
-  "manifest-src 'self'",
-  ...(isProd ? ["upgrade-insecure-requests"] : []),
-].join("; ");
+// The Content-Security-Policy is NOT set here: it carries a per-request
+// nonce, so src/middleware.ts builds it (src/lib/csp.ts) for every page.
 
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: csp },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -67,9 +24,8 @@ const securityHeaders = [
     value: isProd ? "same-origin" : "same-origin-allow-popups",
   },
   { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
-  // No powerful cross-origin isolation (COEP) — enabling it would block
-  // Google Fonts, which the UI depends on. Can revisit if fonts move
-  // self-hosted later; for now the COOP+CORP pair is the real win.
+  // No cross-origin embedder policy (COEP): item photos load from other
+  // origins (SharePoint), which it would block. COOP+CORP are the real win.
   ...(isProd
     ? [
         {

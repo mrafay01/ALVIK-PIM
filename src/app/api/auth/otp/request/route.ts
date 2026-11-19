@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { rateLimit } from "@/lib/rateLimit";
+import { checkLoginThrottle, recordLoginFailure } from "@/lib/loginThrottle";
+import { maskEmail } from "@/lib/logMask";
 import { issueOtp, OtpDeliveryError, otpDeliveryFailed } from "@/lib/otp";
 import { verifyCredentials } from "@/lib/credentials";
 import { clientIp } from "@/lib/clientIp";
@@ -28,20 +29,18 @@ export async function POST(req: NextRequest) {
   const { email, password } = parsed.data;
 
   const ip = clientIp(req.headers);
-  const [perEmail, perIp] = await Promise.all([
-    rateLimit(`otp-request:email:${email}`, { limit: 5, windowMs: 60_000 }),
-    rateLimit(`otp-request:ip:${ip}`, { limit: 20, windowMs: 60_000 }),
-  ]);
-  if (!perEmail.allowed || !perIp.allowed) {
+  const throttle = await checkLoginThrottle(email, ip);
+  if (throttle.blocked) {
     return NextResponse.json(
       { error: "Too many attempts. Wait a minute and try again." },
-      { status: 429, headers: { "Retry-After": String(Math.max(perEmail.retryAfterSeconds, perIp.retryAfterSeconds)) } }
+      { status: 429, headers: { "Retry-After": String(throttle.retryAfterSeconds) } }
     );
   }
 
   const user = await verifyCredentials(email, password);
   if (!user) {
-    logger.warn("OTP request: invalid credentials", { email, ip });
+    await recordLoginFailure(email, ip);
+    logger.warn("OTP request: invalid credentials", { email: maskEmail(email), ip });
     return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
   }
 
@@ -49,7 +48,7 @@ export async function POST(req: NextRequest) {
     await issueOtp(user._id, user.email);
   } catch (err) {
     if (err instanceof OtpDeliveryError) {
-      logger.error("OTP request: email delivery failed", { email, error: err.message });
+      logger.error("OTP request: email delivery failed", { email: maskEmail(email), error: err.message });
       return otpDeliveryFailed();
     }
     throw err;

@@ -42,7 +42,12 @@ const WEIGHT_UNIT_ALIASES: Record<string, WeightUnit> = {
 // spellings (§18 examples). Does not match multi-value strings like
 // "5 x 4 mm" — that's handled by parseDimensionPair below, and only when
 // the caller has explicitly opted into that interpretation.
-const SINGLE_VALUE_RE = /^\s*(-?\d+(?:\.\d+)?)\s*("|[a-zA-Z. ]+)?\s*$/;
+// Written without overlapping quantifiers (the old form let a cell of a number,
+// many spaces and a stray character stall the server for seconds - ReDoS).
+// Input is trimmed first, and anything over MAX_MEASUREMENT_TEXT is not a
+// measurement.
+const SINGLE_VALUE_RE = /^(-?\d+(?:\.\d+)?)\s*("|[a-zA-Z.](?:[a-zA-Z. ]*[a-zA-Z.])?)?$/;
+const MAX_MEASUREMENT_TEXT = 100;
 
 export interface ParsedMeasurement {
   measurement: Measurement | null;
@@ -66,6 +71,7 @@ export function parseSingleMeasurement(
   if (raw == null) return { measurement: null, unrecognized: false };
   const text = String(raw).trim();
   if (text === "") return { measurement: null, unrecognized: false };
+  if (text.length > MAX_MEASUREMENT_TEXT) return { measurement: null, unrecognized: true };
 
   const match = SINGLE_VALUE_RE.exec(text);
   if (!match) return { measurement: null, unrecognized: true };
@@ -112,6 +118,7 @@ export function parseDimensionPair(
   if (raw == null) return { first: null, second: null, unrecognized: false };
   const text = String(raw).trim();
   if (text === "") return { first: null, second: null, unrecognized: false };
+  if (text.length > MAX_MEASUREMENT_TEXT) return { first: null, second: null, unrecognized: true };
 
   const match = /^\s*(-?\d+(?:\.\d+)?)\s*[x×]\s*(-?\d+(?:\.\d+)?)\s*([a-zA-Z."]+)?\s*$/.exec(text);
   if (!match) return { first: null, second: null, unrecognized: true };

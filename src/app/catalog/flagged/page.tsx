@@ -1,3 +1,4 @@
+import { hasFullAccess } from "@/lib/enums";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
@@ -27,7 +28,7 @@ export default async function FlaggedItemsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  if ((await getSessionRole()) !== "administrator") redirect("/unauthorized");
+  if (!hasFullAccess(await getSessionRole())) redirect("/unauthorized");
   const sp = await searchParams;
   const q = (sp.q ?? "").trim().slice(0, 100);
   const issue = (sp.issue ?? "").trim().slice(0, 100);

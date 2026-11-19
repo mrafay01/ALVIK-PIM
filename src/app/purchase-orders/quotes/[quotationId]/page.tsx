@@ -9,6 +9,8 @@ import { QuoteReviewTable } from "./QuoteReviewTable";
 import { QuoteHeaderActions } from "./QuoteHeaderActions";
 import PurchaseOrder from "@/models/PurchaseOrder";
 import { isObjectId } from "@/lib/ids";
+import { getSessionRole } from "@/lib/authz";
+import { isReadOnlyRole } from "@/lib/enums";
 
 type Filter = "all" | "flagged" | "needs_review";
 
@@ -50,6 +52,7 @@ export default async function QuoteReviewPage({
       : Promise.resolve(null),
   ]);
 
+  const readOnly = isReadOnlyRole(await getSessionRole());
   const vendorName = (quotation.vendorId as unknown as { name?: string } | null)?.name ?? "—";
   const title = quotation.sourceFileName || quotation.poNumber || `Quote ${quotationId.slice(-6)}`;
 
@@ -70,7 +73,7 @@ export default async function QuoteReviewPage({
         quotationId={quotationId}
         purchaseOrderId={linkedPo ? String(linkedPo._id) : null}
         poNumber={linkedPo?.poNumber ?? null}
-        canDelete={committedCount === 0}
+        canDelete={committedCount === 0 && !readOnly}
         fileUrl={quotation.sourceFile?.webUrl ?? null}
         fileName={quotation.sourceFile?.name ?? null}
       />
@@ -83,6 +86,7 @@ export default async function QuoteReviewPage({
         filteredTotal={filteredTotal}
         approvedPendingCount={approvedPending}
         unflaggedPendingCount={unflaggedPending}
+        readOnly={readOnly}
       />
     </AppShell>
   );

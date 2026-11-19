@@ -1,3 +1,4 @@
+import { hasFullAccess } from "@/lib/enums";
 import { getSession } from "@/lib/authz";
 import Link from "next/link";
 import { AppShell } from "@/components/app/AppShell";
@@ -94,7 +95,7 @@ export default async function SettingsPage() {
         </Card>
       </Link>
 
-      {role === "administrator" && (
+      {hasFullAccess(role) && (
         <Link href="/admin/users" className="no-underline block">
           <Card className="hover:border-brand transition-colors duration-150">
             <div className="flex items-center justify-between gap-4">

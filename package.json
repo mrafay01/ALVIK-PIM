@@ -13,6 +13,7 @@
     "test:coverage": "jest --coverage",
     "seed:admin": "tsx --env-file=.env.local src/scripts/seed-admin.ts",
     "seed": "tsx --env-file=.env.local src/scripts/seed.ts",
+    "seed:demo": "tsx --env-file=.env.local src/scripts/seed-demo.ts",
     "migrate": "tsx --env-file=.env.local src/scripts/migrate.ts",
     "sharepoint:check": "tsx --env-file=.env.local src/scripts/sharepoint-check.ts"
   },

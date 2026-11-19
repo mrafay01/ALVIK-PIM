@@ -5,8 +5,26 @@ export const ROLES = [
   "warehouse_receiving",
   "photography",
   "catalog_manager",
+  "developer",
+  "viewer",
 ] as const;
 export type Role = (typeof ROLES)[number];
+
+// Roles that pass every permission check. The developer has everything an
+// administrator has; there can only ever be one developer account (a unique
+// index on the users collection plus checks in the user routes).
+// Can look at everything (except Users & Roles and the admin tools) but change
+// nothing. Enforced for real in middleware.ts (every write is refused) and by
+// requireRole in each API handler; this flag only hides the controls.
+export function isReadOnlyRole(role: string | null | undefined): boolean {
+  return role === "viewer";
+}
+
+export const ONE_DEVELOPER = "There can only be one developer account.";
+
+export function hasFullAccess(role: string | null | undefined): boolean {
+  return role === "administrator" || role === "developer";
+}
 
 export const ITEM_STATUSES = [
   "quoted",

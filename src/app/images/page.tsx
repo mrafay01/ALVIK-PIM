@@ -1,4 +1,4 @@
-import { IMAGE_ONLY_SUBFOLDERS, type ImageSubfolder } from "@/lib/enums";
+import { IMAGE_ONLY_SUBFOLDERS, isReadOnlyRole, type ImageSubfolder } from "@/lib/enums";
 import { AppShell } from "@/components/app/AppShell";
 import { connectDB } from "@/lib/db";
 import { getSessionRole, roleCan, ROLE_SETS } from "@/lib/authz";
@@ -144,6 +144,7 @@ export default async function ImagesPage({
           state={{ scope, status, q, sort }}
           statusCounts={statusCounts}
           canUpload={canUpload}
+          canCheck={!isReadOnlyRole(role)}
           lastCheckedAt={lastChecked[0]?.at ? new Date(lastChecked[0].at).toISOString() : null}
         />
       )}

@@ -4,7 +4,7 @@ import { requireRole, isAuthFail, ROLE_SETS } from "@/lib/authz";
 import { UserPatchSchema, badRequest } from "@/lib/schemas";
 import User from "@/models/User";
 import { isObjectId } from "@/lib/ids";
-import type { Role } from "@/lib/enums";
+import { ONE_DEVELOPER, type Role } from "@/lib/enums";
 import { sendSecurityNoticeAfterResponse, type SecurityNotice } from "@/lib/notifications/security";
 
 // PATCH: change a user's name, role, or active flag. Admin only. An admin
@@ -37,6 +37,10 @@ export async function PATCH(
   const user = await User.findById(userId);
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+  if (body.role === "developer" && user.role !== "developer" && (await User.exists({ role: "developer" }))) {
+    return NextResponse.json({ error: ONE_DEVELOPER }, { status: 409 });
+  }
+
   if (body.name !== undefined) user.name = body.name;
   const notices: SecurityNotice[] = [];
   const adminName = session.user?.name;
@@ -55,7 +59,15 @@ export async function PATCH(
     user.active = body.active;
   }
 
-  await user.save();
+  try {
+    await user.save();
+  } catch (err) {
+    // Two people promoting different users at once: the unique index decides.
+    if ((err as { code?: number }).code === 11000 && body.role === "developer") {
+      return NextResponse.json({ error: ONE_DEVELOPER }, { status: 409 });
+    }
+    throw err;
+  }
   // A deactivated account isn't told about a role change in the same save.
   for (const n of notices) {
     if (user.active === false && n.kind === "role_changed") continue;

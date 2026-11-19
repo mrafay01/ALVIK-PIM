@@ -6,6 +6,7 @@ import { rateLimit } from "@/lib/rateLimit";
 import { sendSupportEmail } from "@/lib/mailer";
 import { SUPPORT_CONTACT, SUPPORT_TOPICS } from "@/lib/support";
 import logger from "@/lib/logger";
+import { maskEmail } from "@/lib/logMask";
 
 const BodySchema = z.object({
   topic: z.enum(SUPPORT_TOPICS.map((t) => t.value) as [string, ...string[]]),
@@ -51,6 +52,6 @@ export async function POST(req: NextRequest) {
       { status: 502 }
     );
   }
-  logger.info("support message sent", { from: user.email, topic: parsed.data.topic });
+  logger.info("support message sent", { from: maskEmail(user.email), topic: parsed.data.topic });
   return NextResponse.json({ sent: true });
 }

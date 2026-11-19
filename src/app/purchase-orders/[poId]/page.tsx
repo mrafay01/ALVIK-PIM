@@ -1,3 +1,4 @@
+import { hasFullAccess } from "@/lib/enums";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app/AppShell";
@@ -399,7 +400,7 @@ export default async function PurchaseOrderDetailPage({
             vendorReplySent={!!po.vendorReplySent}
             joelShipConfirmed={!!po.joelShipConfirmed}
             checklist={checklist}
-            isAdmin={role === "administrator"}
+            isAdmin={hasFullAccess(role)}
             mondayItemId={po.mondayItemId ?? null}
             lastPushedToMondayAt={po.lastPushedToMondayAt ? new Date(po.lastPushedToMondayAt).toISOString() : null}
             history={po.statusHistory.map((h) => ({ status: String(h.status ?? "") }))}

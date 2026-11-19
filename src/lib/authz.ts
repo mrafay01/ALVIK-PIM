@@ -2,7 +2,7 @@ import { cache } from "react";
 import { NextResponse } from "next/server";
 import { getServerSession, type Session } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import type { Role } from "@/lib/enums";
+import { hasFullAccess, type Role } from "@/lib/enums";
 
 // Central authorization for API route handlers.
 //
@@ -24,7 +24,7 @@ export type AuthFail = { response: NextResponse };
 export const getSession = cache(() => getServerSession(authOptions));
 
 function isAdmin(role: Role | undefined): boolean {
-  return role === "administrator";
+  return hasFullAccess(role);
 }
 
 // Require only that the caller is signed in (any role). Use for read
@@ -66,7 +66,7 @@ export async function getSessionRole(): Promise<Role | undefined> {
 }
 
 export function roleCan(role: Role | undefined, allowed: readonly Role[]): boolean {
-  return role === "administrator" || (!!role && allowed.includes(role));
+  return hasFullAccess(role) || (!!role && allowed.includes(role));
 }
 
 // The role matrix, mirroring src/middleware.ts ROUTE_ROLES and the roles

@@ -1,3 +1,4 @@
+import { hasFullAccess } from "@/lib/enums";
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
 import { AppShell } from "@/components/app/AppShell";
@@ -162,7 +163,7 @@ export default async function DashboardPage() {
       .sort({ updatedAt: -1 })
       .limit(6)
       .lean(),
-    role === "administrator" ? ImportBatchRow.countDocuments(ON_FLAGGED_PAGE) : Promise.resolve(0),
+    hasFullAccess(role) ? ImportBatchRow.countDocuments(ON_FLAGGED_PAGE) : Promise.resolve(0),
   ]);
   const { po, it, quotesToReview, pendingConflicts } = counts;
   const statusCount = new Map(
@@ -274,7 +275,7 @@ export default async function DashboardPage() {
     },
     roleCan(role, ["catalog_manager"]) && { href: "/catalog/new", label: "New catalog item", icon: Plus },
     roleCan(role, ROLE_SETS.media) && { href: "/images?status=missing", label: "Upload images", icon: ImagePlus },
-    role === "administrator" && { href: "/admin/monday-pull", label: "Import from Monday", icon: RefreshCw },
+    hasFullAccess(role) && { href: "/admin/monday-pull", label: "Import from Monday", icon: RefreshCw },
   ].filter(Boolean) as { href: string; label: string; icon: typeof Plus; primary?: boolean }[];
 
   return (

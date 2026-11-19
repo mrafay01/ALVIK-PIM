@@ -50,6 +50,7 @@ export function QuoteReviewTable({
   filteredTotal,
   approvedPendingCount,
   unflaggedPendingCount,
+  readOnly = false,
 }: {
   quotationId: string;
   rows: StagedRow[];
@@ -59,6 +60,8 @@ export function QuoteReviewTable({
   filteredTotal: number;
   approvedPendingCount: number;
   unflaggedPendingCount: number;
+  /** A viewer sees the rows but gets no approve / edit / commit controls. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const { refresh, refreshing } = useRefreshAfterSave();
@@ -278,19 +281,23 @@ export function QuoteReviewTable({
               <option value="needs_review">Needs review</option>
             </Select>
           </label>
+          {!readOnly && (
           <Button disabled={unflaggedPendingCount === 0} loading={bulkBusy} onClick={bulkApproveUnflagged}>
             <span className="flex items-center gap-1.5">
               {!bulkBusy && <CheckCheck size={14} />}
               {bulkBusy ? "Approving…" : `Approve all ${unflaggedPendingCount} unflagged`}
             </span>
           </Button>
+          )}
+          {!readOnly && (
           <Button variant="primary" disabled={approvedPendingCount === 0} loading={commitBusy} onClick={commitApproved}>
             <span className="flex items-center gap-1.5">
               {!commitBusy && <Database size={14} />}
               {commitBusy ? "Committing…" : `Commit ${approvedPendingCount} approved row(s)`}
             </span>
           </Button>
-          {adding === "quote" ? (
+          )}
+          {readOnly ? null : adding === "quote" ? (
             <QuoteColumnAdder
               existing={customColumns}
               onCommit={addQuoteColumn}
@@ -322,6 +329,7 @@ export function QuoteReviewTable({
                 className="inline-flex items-center gap-1.5 bg-brand-bg text-brand text-[0.78rem] px-2 py-1 rounded-full"
               >
                 {label}
+                {!readOnly && (
                 <button
                   type="button"
                   onClick={() => removeQuoteColumn(label)}
@@ -330,6 +338,7 @@ export function QuoteReviewTable({
                 >
                   <X size={11} />
                 </button>
+                )}
               </span>
             ))}
           </div>
@@ -427,7 +436,7 @@ export function QuoteReviewTable({
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          {!row.committedItemId && (
+                          {!row.committedItemId && !readOnly && (
                             <div className="flex gap-1.5">
                               <Button
                                 size="sm"
@@ -460,6 +469,7 @@ export function QuoteReviewTable({
                           <td colSpan={6} className="px-4 py-3">
                             <RowDetail
                               row={row}
+                              readOnly={readOnly}
                               customColumns={customColumns}
                               flaggedFields={flaggedFields}
                               onSave={(field, value) => saveEdit(row._id, field, value)}
@@ -502,6 +512,7 @@ export function QuoteReviewTable({
 // The reviewer can still add more via "+ Add column", below.
 function RowDetail({
   row,
+  readOnly,
   customColumns,
   flaggedFields,
   onSave,
@@ -511,6 +522,7 @@ function RowDetail({
   onAddRowColumn,
 }: {
   row: StagedRow;
+  readOnly: boolean;
   customColumns: string[];
   flaggedFields: Set<string>;
   onSave: (field: string, value: string) => void | Promise<void>;
@@ -548,7 +560,7 @@ function RowDetail({
     return [...seen.values()];
   }, [rowCustom, customColumns]);
 
-  const canEdit = !row.committedItemId;
+  const canEdit = !row.committedItemId && !readOnly;
 
   return (
     <div>

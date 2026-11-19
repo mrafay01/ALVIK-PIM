@@ -282,6 +282,7 @@ export function ImagesTable({
   state,
   statusCounts,
   canUpload,
+  canCheck = true,
   lastCheckedAt,
 }: {
   rows: ImageRow[];
@@ -290,6 +291,8 @@ export function ImagesTable({
   state: State;
   statusCounts: Record<string, number>;
   canUpload: boolean;
+  /** Checking links records the result, so a read-only viewer does not get the buttons. */
+  canCheck?: boolean;
   lastCheckedAt: string | null;
 }) {
   const router = useRouter();
@@ -405,6 +408,7 @@ export function ImagesTable({
               <option value="updated">Recently updated</option>
             </Select>
           </label>
+          {canCheck && (
           <div className="flex items-center gap-2 ml-auto">
             <Button
               size="sm"
@@ -428,14 +432,17 @@ export function ImagesTable({
               </Button>
             )}
           </div>
+          )}
         </div>
         <div className="text-[0.78rem] text-ink-faint mt-3">
           {checkNote ? (
             <span className="text-ink-soft">{checkNote}</span>
           ) : lastCheckedAt ? (
-            `Links last checked ${new Date(lastCheckedAt).toLocaleString()}. "Check all" re-checks anything not checked in the last 24 hours.`
-          ) : (
+            `Links last checked ${new Date(lastCheckedAt).toLocaleString()}.${canCheck ? " \"Check all\" re-checks anything not checked in the last 24 hours." : ""}`
+          ) : canCheck ? (
             "Links haven't been checked yet. \"Check all links\" verifies every image and video against SharePoint."
+          ) : (
+            "Links haven't been checked yet."
           )}
           {error && <span className="text-critical ml-2">{error}</span>}
         </div>
@@ -486,7 +493,7 @@ export function ImagesTable({
                       ))}
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
-                          {row.media.length > 0 && (
+                          {canCheck && row.media.length > 0 && (
                             <Button
                               size="sm"
                               variant="ghost"

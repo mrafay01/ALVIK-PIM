@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Urbanist, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
+import { headers } from "next/headers";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -57,11 +58,14 @@ export const metadata: Metadata = {
 // The script body is defined in @/lib/theme. It runs under the CSP's
 // script-src 'unsafe-inline' (see next.config.ts for why that's needed).
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Per-request CSP nonce set by middleware.ts; the inline theme script
+  // below only runs because it carries it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     // suppressHydrationWarning: data-theme is set by the inline script
     // above, synchronously in the browser before React hydrates, which by
@@ -77,7 +81,7 @@ export default function RootLayout({
         {/* Deliberately synchronous and inline (not next/script) — must
             block first paint to avoid a theme flash; see the comment
             above. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
         <Providers>{children}</Providers>

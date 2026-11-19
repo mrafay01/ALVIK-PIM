@@ -67,6 +67,7 @@ function linesFor(role: Role, c: DigestCounts): Line[] {
   ];
   switch (role) {
     case "administrator":
+    case "developer":
       return [...po, ...quotes, ...incoming, ...items, ...catalog, ...approvals, ...images, ...admin];
     case "buying_purchasing":
       return [...po, ...quotes, ...incoming, ...items, ...images];
@@ -78,6 +79,8 @@ function linesFor(role: Role, c: DigestCounts): Line[] {
       return [...images, { label: "New un-verified items this week", value: c.unverifiedThisWeek, href: "/items" }];
     case "catalog_manager":
       return [...items, ...catalog, ...images.slice(0, 2)];
+    case "viewer":
+      return [...po, ...quotes, ...incoming, ...items, ...catalog, ...images];
   }
 }
 

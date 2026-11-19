@@ -24,6 +24,10 @@ const UserSchema = new Schema(
   { timestamps: true }
 );
 
+// At most one developer account: a partial unique index on the role, so the
+// database itself refuses a second one even if two requests race.
+UserSchema.index({ role: 1 }, { unique: true, partialFilterExpression: { role: "developer" } });
+
 export type UserDoc = InferSchemaType<typeof UserSchema>;
 export default (models.User as Model<UserDoc>) ||
   model<UserDoc>("User", UserSchema);

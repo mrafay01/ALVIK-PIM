@@ -1,5 +1,6 @@
 "use client";
 
+import { hasFullAccess } from "@/lib/enums";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -213,7 +214,7 @@ export function Sidebar({
   // desktop-only preference.
   const collapsed = collapsedPref && !mobileOpen;
 
-  const isAdmin = role === "administrator";
+  const isAdmin = hasFullAccess(role);
   const settingsActive = activeHref === "/settings" || activeHref.startsWith("/settings/") || activeHref.startsWith("/admin/users");
 
   // The dropdown starts open when landing directly on one of its own pages

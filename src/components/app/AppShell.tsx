@@ -1,3 +1,4 @@
+import { hasFullAccess } from "@/lib/enums";
 import { getSession } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -24,14 +25,14 @@ const NAV: NavEntry[] = [
     href: "/purchase-orders",
     label: "Purchase Orders",
     icon: "ClipboardList",
-    roles: ["buying_purchasing", "buyer_merchandiser", "catalog_manager"] as Role[],
+    roles: ["buying_purchasing", "buyer_merchandiser", "catalog_manager", "viewer"] as Role[],
     children: [
       // Quotes list; importing a file or entering a quote by hand starts from there.
       {
         href: "/purchase-orders/quotes",
         label: "Quotes",
         icon: "FileSpreadsheet",
-        roles: ["buying_purchasing", "buyer_merchandiser", "catalog_manager"] as Role[],
+        roles: ["buying_purchasing", "buyer_merchandiser", "catalog_manager", "viewer"] as Role[],
       },
       { href: "/items", label: "Un-Verified Items", icon: "PackageSearch", roles: null },
       // Admin only, same as middleware's /admin gate.
@@ -106,7 +107,7 @@ export async function AppShell({
     .join("")
     .toUpperCase();
 
-  const allowed = (roles: Role[] | null) => !roles || role === "administrator" || roles.includes(role);
+  const allowed = (roles: Role[] | null) => !roles || hasFullAccess(role) || roles.includes(role);
   const visibleNav: NavItem[] = NAV.flatMap(({ roles, children, ...item }) => {
     const kids = (children ?? []).filter((c) => allowed(c.roles)).map((c) => ({ href: c.href, label: c.label, icon: c.icon }));
     if (!allowed(roles)) return kids;
